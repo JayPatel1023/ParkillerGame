@@ -38,6 +38,27 @@ describe('generated board data', () => {
       }
     })
 
+    it(`board_${playerCount}p has no large jumps between consecutive track squares (no teleporting pieces)`, () => {
+      // A smooth-curve approximation of the track can silently misorder squares on boards whose
+      // real path loops back on itself (not star-convex around one center) - two indices that
+      // are far apart on the drawn path can end up numerically adjacent. That doesn't fail on
+      // structural checks alone: it shows up as a piece "jumping" when moved a small number of
+      // steps. Catch it directly by requiring consecutive (and wrap-around) waypoints to stay
+      // close, relative to the loop's own average step size.
+      const def = BOARD_DEFINITIONS[playerCount]
+      const pts = def.trackWaypoints
+      const dist = (a: [number, number], b: [number, number]) => Math.hypot(a[0] - b[0], a[1] - b[1])
+
+      const gaps = pts.map((p, i) => dist(p, pts[(i + 1) % pts.length]))
+      const avgGap = gaps.reduce((s, g) => s + g, 0) / gaps.length
+      // 5x tolerates one slightly-oversized square from sampling noise; the actual bug this
+      // guards against (misordered/crossed loop) produced gaps 15-20x the average, not ~4-5x.
+      const maxAllowed = avgGap * 5
+
+      const worstIndex = gaps.indexOf(Math.max(...gaps))
+      expect(gaps[worstIndex], `gap at index ${worstIndex} is ${gaps[worstIndex].toFixed(3)}, avg is ${avgGap.toFixed(3)}`).toBeLessThan(maxAllowed)
+    })
+
     it(`board_${playerCount}p supports a full playthrough of one piece leaving the yard and reaching home`, () => {
       const def = BOARD_DEFINITIONS[playerCount]
       const board = toBoardData(def)

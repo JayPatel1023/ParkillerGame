@@ -70,13 +70,20 @@ Note: the file originally named `tablero_de_Parkiller_4.jpg` was actually the **
 ## Board alignment: playable now, not pixel-perfect
 
 `src/data/generated-boards.json` is auto-generated (`npm run generate-boards`), not hand-traced.
-It gets real yard positions from the art via color detection, and approximates the track as a
-lobed loop shaped to match those positions — good enough that pieces render and move correctly,
-verified by a full simulated playthrough per board (see `tests/generatedBoards.test.ts`). But it
-does **not** hug every hand-drawn curve of the actual track — on the 4/5/6-player boards it's a
-close visual match, on the 2/3-player boards (more irregular, hand-drawn shapes) it's noticeably
-rougher. For final pixel-accurate alignment, use the in-app `#editor` tool to hand-trace a board
-and drop the exported JSON into `src/data/generated-boards.json` for that player count.
+It gets real yard positions from the art via color detection, then traces the actual track pixels
+into an ordered loop using two different methods (a nearest-neighbor walk along the band, and
+real per-angle pixel sampling from the hub) and keeps whichever produces cleaner, more complete
+results per board — logged when you run the generator. This matters for more than looks: an
+earlier, simpler version of this approximated the track as a smooth curve, which on non-circular
+boards silently misordered squares (index *N* and *N+1* weren't actually adjacent on the drawn
+path), so a piece rolling e.g. a 2 or a 5 would visually jump to the wrong square instead of
+stepping along the path. `tests/generatedBoards.test.ts` now asserts consecutive track squares
+stay close together specifically to catch that class of bug again if it recurs.
+
+It's still not pixel-perfect — it won't hug every hand-drawn wiggle of the actual line art, just
+correctly-ordered points close to it. For final pixel-accurate alignment, use the in-app `#editor`
+tool to hand-trace a board and drop the exported JSON into `src/data/generated-boards.json` for
+that player count.
 
 Still needed from Carlos: final logo + exact brand hex colors (placeholders are sampled from the
 board art's parchment/gold palette), piece token art/model, dice art/model.

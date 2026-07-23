@@ -14,9 +14,19 @@ for player_count, definition in definitions.items():
     w, h = img.size
     draw = ImageDraw.Draw(img)
 
-    for x, y in definition["trackWaypoints"]:
+    track = definition["trackWaypoints"]
+    n = len(track)
+    for i, (x, y) in enumerate(track):
         px, py = x * w, y * h
-        draw.ellipse([px - 5, py - 5, px + 5, py + 5], fill="cyan", outline="black")
+        # color gradient along path order: blue (start) -> red (end), so you can see direction/order
+        t = i / max(n - 1, 1)
+        fill = (int(255 * t), 40, int(255 * (1 - t)))
+        draw.ellipse([px - 5, py - 5, px + 5, py + 5], fill=fill, outline="black")
+        nx, ny = track[(i + 1) % n]
+        draw.line([px, py, nx * w, ny * h], fill=fill, width=1)
+    # mark the very first point distinctly
+    sx, sy = track[0][0] * w, track[0][1] * h
+    draw.ellipse([sx - 10, sy - 10, sx + 10, sy + 10], outline="lime", width=3)
 
     for lane in definition["playerLanes"]:
         color = COLOR_HEX[lane["color"]]
