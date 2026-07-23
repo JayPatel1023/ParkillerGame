@@ -1,43 +1,49 @@
-# Parkiller — Parchís (Ludo) app
+# Parkiller — Parchís (Ludo) web app
 
-Milestone 1 build: branded start screen hooks, 5 board variants (2-6 players), local pass-and-play
-on one device. Built in Unity so the same project targets Android, iOS, and Windows.
+Milestone 1 build: branded start screen, 5 board variants (2-6 players), local pass-and-play
+in the browser. Built with **React + Three.js** (via `@react-three/fiber`), deployable as a static
+site (e.g. Vercel).
 
-## Opening the project
+> Note: this replaces an earlier Unity/C# prototype of the same milestone. Unity produced native
+> Android/iOS/Windows builds installable through the app stores, as originally scoped with the
+> client; this React/Three.js version is a browser app. If native store apps are still required,
+> this stack alone won't produce them without an additional wrapper (e.g. Capacitor/Electron).
 
-1. Install Unity **2022.3 LTS** (or any 2021.3+/2022.x LTS — `ProjectSettings/ProjectVersion.txt` is a
-   suggestion, not a hard requirement; Unity Hub will offer to switch versions if needed).
-2. Open this folder as a Unity project. Unity will import the scripts and board art and generate
-   `Library/`, `.meta` files, etc.
-3. For each `Assets/Art/Boards/board_*p.jpg`, select it in the Project window and set
-   **Texture Type → Sprite (2D and UI)** in the Inspector, then Apply.
+## Running it
+
+```
+npm install
+npm run dev       # local dev server
+npm run build     # production build to dist/, what Vercel deploys
+npm test          # Vitest unit tests for the rules engine
+```
 
 ## What's implemented
 
-- `Assets/Scripts/Core/` — engine code, no scene/prefab dependencies beyond MonoBehaviours:
-  - `Board/BoardDefinition.cs` — one ScriptableObject asset per board variant. All positions
-    (track squares, yards, home corridors) are data, not hardcoded, so the same code drives all
-    5 tableros.
-  - `Rules/ParchisRules.cs` — movement, capture, safe squares, exact-count-to-finish.
-  - `GameFlow/TurnManager.cs` — turn order, dice rolls, extra turn on six, third-six-forfeits-turn.
-  - `GameFlow/LocalGameSession.cs` — milestone-1 entry point: hotseat, 2-6 real players, no bots
+- `src/core/` — engine code, framework-independent (no React/Three.js imports):
+  - `board/boardDefinition.ts` — one `BoardDefinition` object per board variant. All positions
+    (track squares, yards, home corridors) are data (normalized `[0..1]` image coordinates), not
+    hardcoded, so the same code drives all 5 tableros.
+  - `rules/parchisRules.ts` — movement, capture, safe squares, exact-count-to-finish. Ported
+    1:1 from the original rules design and covered by `tests/parchisRules.test.ts` (7 tests,
+    passing).
+  - `gameFlow/turnManager.ts` — turn order, dice rolls, extra turn on six, third-six-forfeits-turn.
+  - `gameFlow/localGameSession.ts` — milestone-1 entry point: hotseat, 2-6 real players, no bots
     (bots are an online-only feature per the brief, for filling empty seats in a room).
-- `Assets/Scripts/UI/` — `StartScreenController` (brand color hooks), `PlayerCountSelectorUI`,
-  `BoardRenderer` + `PieceView` (placeholder circle pieces until real token art arrives).
-- `Assets/Editor/` — two tools that do the tedious part of turning custom board art into a working board:
-  - **Parkiller → Setup → Create Board Definitions** menu: one click, creates the 5
-    `BoardDefinition` assets in `Assets/Art/Boards/`, pre-wired to the right board image and lane
-    colors (see table below).
-  - Per-board Inspector tool (on any `BoardDefinition` asset): click buttons to enter "placing"
-    mode, then click directly on the board art in the Scene view to drop track/yard/corridor
-    waypoints in order. This is the manual, per-board alignment step — each tablero has different
-    hand-drawn curves, so it can't be computed from a formula.
-- `Assets/Tests/EditMode/ParchisRulesTests.cs` — unit tests for the rules engine (yard exit,
-  capture, safe squares, exact-count finishing).
+- `src/scene/` — the Three.js layer (`BoardMesh`, `PieceMesh`, `DiceMesh`, `BoardScene`):
+  textured board plane, clickable 3D piece tokens, a rollable dice cube. Reads positions purely
+  from `BoardDefinition` waypoints, so it's generic across all 5 boards.
+- `src/ui/` — `StartScreen` (brand color placeholders), `PlayerCountSelector`, `GameBoardScreen`.
+- `src/tools/WaypointEditor.tsx` — dev tool, open the app with `#editor` in the URL. Click
+  directly on each board image to trace the track/yards/home-corridors, then export the JSON and
+  paste it into `src/data/boards.ts`. This replaces the old Unity Editor waypoint tool — same
+  purpose: each tablero has hand-drawn curves that can't be computed from a formula.
+- `tests/parchisRules.test.ts` — unit tests for the rules engine (yard exit, capture, safe
+  squares, exact-count finishing). Run with `npm test`.
 
 ## Board art received so far
 
-All 5 variants are in, organized into `Assets/Art/Boards/`:
+All 5 variants are in `public/boards/`:
 
 | Players | File | Lane colors (art order) |
 |---|---|---|
@@ -52,15 +58,12 @@ Note: the file originally named `tablero_de_Parkiller_4.jpg` was actually the **
 
 ## Remaining setup work before milestone 1 is playable end-to-end
 
-1. Run **Parkiller → Setup → Create Board Definitions**.
-2. Open each of the 5 `BoardDefinition` assets and trace waypoints over the art using the
-   Inspector tool (track squares in travel order per lane, then each lane's 4 yard slots and home
-   corridor). Set `entryTrackIndex` / `homeEntranceTrackIndex` per lane and `safeTrackIndices`
-   (the squares marked with a star on the art).
-3. Build the two scenes (Start Screen, Board) and wire the MonoBehaviours together in the
-   Inspector — the scripts expose `[SerializeField]` references for exactly this.
-4. Still needed from Carlos: final logo + exact brand hex colors (placeholders are sampled from
-   the board art's parchment/gold palette), piece token art, dice art.
+1. Open the app at `#editor` and trace waypoints on each of the 5 boards (track squares in
+   travel order per lane, each lane's 4 yard slots, each lane's home corridor, entry/home-entrance
+   indices, and the star-marked safe squares). Paste the exported JSON into `src/data/boards.ts` —
+   right now every board's waypoint arrays are empty, so pieces won't render until this is done.
+2. Still needed from Carlos: final logo + exact brand hex colors (placeholders are sampled from
+   the board art's parchment/gold palette), piece token art/model, dice art/model.
 
 ## Rules implemented (Spanish parchís, standard variant)
 
@@ -78,5 +81,5 @@ Note: the file originally named `tablero_de_Parkiller_4.jpg` was actually the **
 
 ## Not in this milestone
 
-Online play (Photon rooms, BOT fill-in for empty seats), store builds/publishing — that's
-milestone 2 per the agreed plan.
+Online play (rooms, BOT fill-in for empty seats), native store builds/publishing — those were
+milestone 2/3 under the original Unity plan and need re-scoping for this stack.
