@@ -5,10 +5,11 @@ import type { BoardDefinition } from '../core/board/boardDefinition'
 import type { PlayerState } from '../core/gameFlow/playerState'
 import type { MoveOption } from '../core/rules/moveOption'
 import type { Piece } from '../core/pieces/piece'
+import type { MoveAnimationRequest } from '../hooks/useTurnManager'
 import { BoardMesh } from './BoardMesh'
 import { PieceMesh } from './PieceMesh'
 import { DiceMesh } from './DiceMesh'
-import { getPieceWaypoint } from './piecePosition'
+import { getHopWaypoints, getPieceWaypoint } from './piecePosition'
 import { toWorldPosition } from './boardGeometry'
 
 interface BoardSceneProps {
@@ -19,9 +20,21 @@ interface BoardSceneProps {
   diceValue: number | null
   rolling: boolean
   onRollDice: () => void
+  moveAnimation: MoveAnimationRequest | null
+  onAnimationComplete: () => void
 }
 
-export function BoardScene({ definition, players, pendingMoves, onSelectPiece, diceValue, rolling, onRollDice }: BoardSceneProps) {
+export function BoardScene({
+  definition,
+  players,
+  pendingMoves,
+  onSelectPiece,
+  diceValue,
+  rolling,
+  onRollDice,
+  moveAnimation,
+  onAnimationComplete,
+}: BoardSceneProps) {
   const selectablePieces = new Set(pendingMoves.map((m) => m.piece))
 
   return (
@@ -36,11 +49,32 @@ export function BoardScene({ definition, players, pendingMoves, onSelectPiece, d
         player.pieces.map((piece) => {
           const waypoint = getPieceWaypoint(piece, definition)
           if (!waypoint) return null
+
+          const isAnimating = moveAnimation?.piece === piece
+          let hopFrom: [number, number, number] | null = null
+          let hops: [number, number, number][] = []
+          if (isAnimating && moveAnimation) {
+            const lane = definition.playerLanes.find((l) => l.color === piece.color)
+            const beforeWaypoint =
+              moveAnimation.before.state === 'InYard'
+                ? lane?.yardWaypoints[piece.pieceIndex]
+                : moveAnimation.before.state === 'OnTrack'
+                  ? definition.trackWaypoints[moveAnimation.before.trackPosition]
+                  : lane?.homeCorridorWaypoints[moveAnimation.before.corridorPosition]
+            if (beforeWaypoint) {
+              hopFrom = toWorldPosition(beforeWaypoint)
+              hops = getHopWaypoints(piece.color, moveAnimation.before, moveAnimation.after, definition).map(toWorldPosition)
+            }
+          }
+
           return (
             <PieceMesh
               key={`${piece.color}-${piece.pieceIndex}`}
               piece={piece}
-              position={toWorldPosition(waypoint)}
+              restPosition={toWorldPosition(waypoint)}
+              hopFrom={hopFrom}
+              hops={hops}
+              onHopsComplete={isAnimating ? onAnimationComplete : undefined}
               selectable={selectablePieces.has(piece)}
               onSelect={onSelectPiece}
             />

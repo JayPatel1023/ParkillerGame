@@ -3,6 +3,13 @@ import type { PlayerState } from '../core/gameFlow/playerState'
 import type { TurnManager } from '../core/gameFlow/turnManager'
 import type { Piece } from '../core/pieces/piece'
 import type { MoveOption } from '../core/rules/moveOption'
+import { snapshotPiece, type PieceSnapshot } from '../scene/piecePosition'
+
+export interface MoveAnimationRequest {
+  piece: Piece
+  before: PieceSnapshot
+  after: PieceSnapshot
+}
 
 export function useTurnManager(turnManager: TurnManager) {
   const [currentPlayer, setCurrentPlayer] = useState<PlayerState>(turnManager.currentPlayer)
@@ -10,6 +17,7 @@ export function useTurnManager(turnManager: TurnManager) {
   const [rolling, setRolling] = useState(false)
   const [pendingMoves, setPendingMoves] = useState<MoveOption[]>([])
   const [winner, setWinner] = useState<PlayerState | null>(null)
+  const [moveAnimation, setMoveAnimation] = useState<MoveAnimationRequest | null>(null)
 
   useEffect(() => {
     const unsubscribers = [
@@ -36,8 +44,15 @@ export function useTurnManager(turnManager: TurnManager) {
   }
 
   function chooseMove(piece: Piece) {
-    turnManager.submitMove(piece)
+    const before = snapshotPiece(piece)
+    turnManager.submitMove(piece) // mutates `piece` synchronously - snapshot after read below is post-move
+    const after = snapshotPiece(piece)
+    setMoveAnimation({ piece, before, after })
   }
 
-  return { currentPlayer, lastRoll, rolling, pendingMoves, winner, rollDice, chooseMove }
+  function clearMoveAnimation() {
+    setMoveAnimation(null)
+  }
+
+  return { currentPlayer, lastRoll, rolling, pendingMoves, winner, moveAnimation, rollDice, chooseMove, clearMoveAnimation }
 }

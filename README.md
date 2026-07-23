@@ -32,7 +32,11 @@ npm test          # Vitest unit tests for the rules engine
     (bots are an online-only feature per the brief, for filling empty seats in a room).
 - `src/scene/` — the Three.js layer (`BoardMesh`, `PieceMesh`, `DiceMesh`, `BoardScene`):
   textured board plane, clickable 3D piece tokens, a rollable dice cube. Reads positions purely
-  from `BoardDefinition` waypoints, so it's generic across all 5 boards.
+  from `BoardDefinition` waypoints, so it's generic across all 5 boards. Pieces are small bouncing
+  balls rather than flat tokens, and animate one visible hop per square moved (`getHopWaypoints` in
+  `piecePosition.ts` reconstructs the exact square-by-square path from before/after piece
+  snapshots) rather than gliding or snapping straight to the destination - so the number of squares
+  moved is countable at a glance instead of just "the piece moved somewhere."
 - `src/ui/` — `StartScreen` (brand color placeholders), `PlayerCountSelector`, `GameBoardScreen`.
 - `src/tools/WaypointEditor.tsx` — dev tool, open the app with `#editor` in the URL. Click
   directly on each board image to trace the track/yards/home-corridors, then export the JSON and
@@ -79,6 +83,13 @@ boards silently misordered squares (index *N* and *N+1* weren't actually adjacen
 path), so a piece rolling e.g. a 2 or a 5 would visually jump to the wrong square instead of
 stepping along the path. `tests/generatedBoards.test.ts` now asserts consecutive track squares
 stay close together specifically to catch that class of bug again if it recurs.
+
+The traced loop is also resampled down to a realistic square count (`SQUARES_PER_ARM = 13` per
+lane) after tracing. Raw tracing needs ~150-300 points to stay accurate, but the art only has
+roughly 50-90 hand-drawn squares - left at the raw density, every dice roll would only cover a
+tiny fraction of one real square, making movement look like it barely happened regardless of how
+pieces are animated. Resampling happens along the already-correctly-ordered path (arc-length
+parameterized), so it doesn't reintroduce the ordering bug above.
 
 It's still not pixel-perfect — it won't hug every hand-drawn wiggle of the actual line art, just
 correctly-ordered points close to it. For final pixel-accurate alignment, use the in-app `#editor`

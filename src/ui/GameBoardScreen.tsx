@@ -8,9 +8,10 @@ import { BoardScene } from '../scene/BoardScene'
 
 export function GameBoardScreen({ definition, colors }: { definition: BoardDefinition; colors: PieceColor[] }) {
   const session = useMemo(() => beginLocalGame(definition, colors), [definition, colors])
-  const { currentPlayer, lastRoll, rolling, pendingMoves, winner, rollDice, chooseMove } = useTurnManager(session.turnManager)
+  const { currentPlayer, lastRoll, rolling, pendingMoves, winner, moveAnimation, rollDice, chooseMove, clearMoveAnimation } =
+    useTurnManager(session.turnManager)
 
-  const canRoll = pendingMoves.length === 0 && !winner && !rolling
+  const canRoll = pendingMoves.length === 0 && !winner && !rolling && !moveAnimation
 
   return (
     <div style={{ height: '100%', position: 'relative' }}>
@@ -22,6 +23,8 @@ export function GameBoardScreen({ definition, colors }: { definition: BoardDefin
         diceValue={lastRoll}
         rolling={rolling}
         onRollDice={() => canRoll && rollDice()}
+        moveAnimation={moveAnimation}
+        onAnimationComplete={clearMoveAnimation}
       />
 
       <div style={hudStyle}>

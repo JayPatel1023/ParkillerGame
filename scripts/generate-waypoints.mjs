@@ -31,6 +31,7 @@ const HUE_RANGES = {
 const SIZE = 320 // analysis resolution
 const MARGIN = 0.08 // fraction of image trimmed on each side to skip the ornate frame
 const ARM_STEPS = 6 // corridor waypoints per lane
+const SQUARES_PER_ARM = 13 // target track squares per lane after resampling (~classic parchís proportions)
 
 function rgbToHsv(r, g, b) {
   r /= 255; g /= 255; b /= 255
@@ -354,6 +355,35 @@ function worstGapRatio(loopPoints) {
   return Math.max(...gaps) / avg
 }
 
+// The traced loop has ~150-300 points (needed for accurate tracing), but the actual art only has
+// roughly 50-90 hand-drawn squares. Left as-is, each game "step" (+1 array index) would only cover
+// a tiny fraction of a real square - motion would be nearly invisible however pieces are rendered.
+// Resample down to a realistic square count along the SAME already-correctly-ordered path (arc
+// length parameterized), so a step visually covers a real square's worth of distance.
+function resampleClosedLoop(points, targetCount) {
+  const n = points.length
+  const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1])
+  const segLengths = points.map((p, i) => dist(p, points[(i + 1) % n]))
+  const total = segLengths.reduce((s, d) => s + d, 0)
+
+  const cumulative = [0]
+  for (const d of segLengths) cumulative.push(cumulative[cumulative.length - 1] + d)
+
+  const resampled = []
+  for (let k = 0; k < targetCount; k++) {
+    const targetDist = (k / targetCount) * total
+    let segIdx = 0
+    while (segIdx < n - 1 && cumulative[segIdx + 1] < targetDist) segIdx++
+    const segStart = cumulative[segIdx]
+    const segLen = segLengths[segIdx] || 1e-9
+    const t = (targetDist - segStart) / segLen
+    const a = points[segIdx]
+    const b = points[(segIdx + 1) % n]
+    resampled.push(point(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t))
+  }
+  return resampled
+}
+
 function buildBoardDefinition(playerCount, laneColors, yardCenters, trackOuterRadius, tracedLoop, log) {
   const cx = yardCenters.reduce((s, p) => s + p.x, 0) / yardCenters.length
   const cy = yardCenters.reduce((s, p) => s + p.y, 0) / yardCenters.length
@@ -495,7 +525,7 @@ async function main() {
       candidate.length === 0 ? Infinity : worstGapRatio(candidate) * Math.max(1, maxLen / candidate.length)
     const walkedScore = effectiveScore(walked)
     const polarScore = effectiveScore(polar)
-    const tracedLoop = walkedScore <= polarScore ? walked : polar
+    let tracedLoop = walkedScore <= polarScore ? walked : polar
 
     console.log(
       `board_${playerCount}p: yards ->`,
@@ -504,6 +534,13 @@ async function main() {
       `walked=${walked.length}pts/${walkedScore.toFixed(2)} polar=${polar.length}pts/${polarScore.toFixed(2)}`,
       `-> using ${walkedScore <= polarScore ? 'walked' : 'polar'}`,
     )
+
+    if (tracedLoop.length >= 8) {
+      const targetCount = playerCount * SQUARES_PER_ARM
+      tracedLoop = resampleClosedLoop(tracedLoop, targetCount)
+      console.log(`  resampled to ${targetCount} squares (${SQUARES_PER_ARM} per arm)`)
+    }
+
     definitions[playerCount] = buildBoardDefinition(playerCount, laneColors, yardCenters, trackOuterRadius, tracedLoop, console.warn)
   }
 
