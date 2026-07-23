@@ -55,9 +55,9 @@ function matchesColor(h, s, v, color) {
   return HUE_RANGES[color].some(([lo, hi]) => h >= lo && h <= hi)
 }
 
-async function loadPixels(imagePath) {
+async function loadPixels(imagePath, size = SIZE) {
   const { data, info } = await sharp(imagePath)
-    .resize(SIZE, SIZE, { fit: 'fill' })
+    .resize(size, size, { fit: 'fill' })
     .raw()
     .toBuffer({ resolveWithObject: true })
   return { data, width: info.width, height: info.height, channels: info.channels }
@@ -104,6 +104,92 @@ function findYardCenter(pixels, color) {
   }
 
   return { x: best.x / width, y: best.y / height, found: best.count > 20 }
+}
+
+// Each yard has 4 pip holes painted inside the colored disc, each outlined with a gold ring (the
+// holes themselves are just a slightly different shade of the yard's own color - the gold ring is
+// the actually-distinctive feature). The yard's own outer boundary is ALSO a gold ring, so the
+// search excludes an outer band near the yard's edge to avoid picking that up as a "hole". Uses a
+// higher-resolution pixel buffer than the rest of the pipeline since these rings are thin enough
+// to wash out at the main analysis resolution.
+function findYardHoles(pixels, yardCenter, yardRadiusNorm) {
+  const { data, width, height, channels } = pixels
+  const searchR = yardRadiusNorm * 1.5 // generous - tolerates yardCenter being an imperfect estimate
+  const innerHoleBand = yardRadiusNorm * 0.82 // exclude the yard's own outer boundary ring
+  const minX = Math.max(0, Math.floor((yardCenter.x - searchR) * width))
+  const maxX = Math.min(width - 1, Math.ceil((yardCenter.x + searchR) * width))
+  const minY = Math.max(0, Math.floor((yardCenter.y - searchR) * height))
+  const maxY = Math.min(height - 1, Math.ceil((yardCenter.y + searchR) * height))
+
+  const candidateSet = new Set()
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
+      const nx = x / width
+      const ny = y / height
+      const dist = Math.hypot(nx - yardCenter.x, ny - yardCenter.y)
+      if (dist > searchR || dist > innerHoleBand) continue
+      const idx = (y * width + x) * channels
+      const [h, s, v] = rgbToHsv(data[idx], data[idx + 1], data[idx + 2])
+      if (matchesColor(h, s, v, 'Gold')) candidateSet.add(`${x},${y}`)
+    }
+  }
+
+  if (candidateSet.size < 8) return [] // not enough signal - caller falls back to a synthetic grid
+
+  const visited = new Set()
+  const blobs = []
+  for (const key of candidateSet) {
+    if (visited.has(key)) continue
+    const [sx, sy] = key.split(',').map(Number)
+    const stack = [[sx, sy]]
+    visited.add(key)
+    const pixelsInBlob = []
+    while (stack.length) {
+      const [x, y] = stack.pop()
+      pixelsInBlob.push([x, y])
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+        [1, 1],
+        [1, -1],
+        [-1, 1],
+        [-1, -1],
+      ]) {
+        const nk = `${x + dx},${y + dy}`
+        if (candidateSet.has(nk) && !visited.has(nk)) {
+          visited.add(nk)
+          stack.push([x + dx, y + dy])
+        }
+      }
+    }
+    blobs.push(pixelsInBlob)
+  }
+
+  // On gold-colored yards, the yard's own fill/border is the same hue as the hole rings, so a
+  // patch of ordinary fill can get picked up as a "blob" too. Distinguish by shape, not just size:
+  // a thin ring has low fill relative to its bounding box (mostly hollow), while a contamination
+  // patch from solid fill is much more filled-in - reject anything too solid to be a ring.
+  const minBlobSize = 3
+  const maxFillRatio = 0.5
+  const candidates = blobs
+    .filter((b) => b.length >= minBlobSize)
+    .filter((b) => {
+      const xs = b.map(([x]) => x)
+      const ys = b.map(([, y]) => y)
+      const boxArea = (Math.max(...xs) - Math.min(...xs) + 1) * (Math.max(...ys) - Math.min(...ys) + 1)
+      return b.length / boxArea <= maxFillRatio
+    })
+    .sort((a, b) => b.length - a.length)
+
+  const holes = candidates.slice(0, 4).map((blob) => {
+    const cx = blob.reduce((s, [x]) => s + x, 0) / blob.length
+    const cy = blob.reduce((s, [, y]) => s + y, 0) / blob.length
+    return point(cx / width, cy / height)
+  })
+
+  return holes
 }
 
 // The track band sits well outside the yards, near the board edges. Measure its real radius by
@@ -310,35 +396,67 @@ function traceRingLoop(pixels, laneColors, yardCenters, cx, cy, trackOuterRadius
 // true for the more regular/symmetric layouts), sample the REAL pixel data at each angle instead
 // of a guessed formula. Ordering by angle guarantees correct adjacency by construction - no walk
 // to get confused at tight pinch points - but it only works where the shape really is star-convex.
+// Sample along rays from the hub at each angle, like before - but instead of averaging every
+// matching pixel found anywhere along the ray (which lets the point snap between unrelated
+// crossings when a ray grazes two features), group matches into contiguous "runs" - each run is
+// one real crossing of the band - and track continuity: prefer whichever run continues nearest to
+// the previous angle's radius. Without this, adjacent angle samples can jump between different
+// crossings independently, producing a zigzag that cuts across empty background instead of
+// following the printed curve, even though no single segment is a large enough outlier to fail
+// the gap-ratio check.
 function polarSampleRingLoop(pixels, laneColors, yardCenters, cx, cy, trackOuterRadius, yardRadiusNorm) {
   const { data, width, height, channels } = pixels
-  const N = 200
+  const N = 360
   const rStart = trackOuterRadius * 0.34
   const rEnd = trackOuterRadius * 1.05
-  const steps = 160
+  const steps = 220
   const points = []
+  let prevRadius = null
 
   for (let k = 0; k < N; k++) {
     const theta = (k / N) * 2 * Math.PI
-    const matches = []
+    const runs = []
+    let current = null
+
     for (let s = 0; s <= steps; s++) {
       const r = rStart + (rEnd - rStart) * (s / steps)
       const nx = cx + Math.cos(theta) * r
       const ny = cy + Math.sin(theta) * r
-      if (nx < 0 || nx >= 1 || ny < 0 || ny >= 1) continue
-      if (yardCenters.some((yc) => Math.hypot(nx - yc.x, ny - yc.y) < yardRadiusNorm * 1.4)) continue
 
-      const x = Math.min(width - 1, Math.max(0, Math.round(nx * width)))
-      const y = Math.min(height - 1, Math.max(0, Math.round(ny * height)))
-      const idx = (y * width + x) * channels
-      const [h, s2, v] = rgbToHsv(data[idx], data[idx + 1], data[idx + 2])
-      if (laneColors.some((color) => matchesColor(h, s2, v, color))) matches.push([nx, ny])
+      let isMatch = false
+      if (nx >= 0 && nx < 1 && ny >= 0 && ny < 1 && !yardCenters.some((yc) => Math.hypot(nx - yc.x, ny - yc.y) < yardRadiusNorm * 1.4)) {
+        const x = Math.min(width - 1, Math.max(0, Math.round(nx * width)))
+        const y = Math.min(height - 1, Math.max(0, Math.round(ny * height)))
+        const idx = (y * width + x) * channels
+        const [h, s2, v] = rgbToHsv(data[idx], data[idx + 1], data[idx + 2])
+        isMatch = laneColors.some((color) => matchesColor(h, s2, v, color))
+      }
+
+      if (isMatch) {
+        if (!current) current = { rSum: 0, xSum: 0, ySum: 0, count: 0 }
+        current.rSum += r
+        current.xSum += nx
+        current.ySum += ny
+        current.count++
+      } else if (current) {
+        runs.push(current)
+        current = null
+      }
     }
-    if (matches.length === 0) continue
-    points.push([
-      matches.reduce((s3, p) => s3 + p[0], 0) / matches.length,
-      matches.reduce((s3, p) => s3 + p[1], 0) / matches.length,
-    ])
+    if (current) runs.push(current)
+    if (runs.length === 0) continue
+
+    const chosen =
+      prevRadius === null
+        ? runs.reduce((best, run) => (run.count > best.count ? run : best))
+        : runs.reduce((best, run) => {
+            const runAvg = run.rSum / run.count
+            const bestAvg = best.rSum / best.count
+            return Math.abs(runAvg - prevRadius) < Math.abs(bestAvg - prevRadius) ? run : best
+          })
+
+    prevRadius = chosen.rSum / chosen.count
+    points.push([chosen.xSum / chosen.count, chosen.ySum / chosen.count])
   }
 
   return points
@@ -456,13 +574,19 @@ function buildBoardDefinition(playerCount, laneColors, yardCenters, trackOuterRa
     const entryTrackIndex = (homeEntranceTrackIndex + 1) % trackLength
     const [ringJunctionX, ringJunctionY] = trackWaypoints[homeEntranceTrackIndex]
 
+    // Prefer the actually-detected pip holes (see findYardHoles) so pieces sit in the real
+    // painted slots; only fall back to a small synthetic grid around the yard center if detection
+    // didn't find all 4 (e.g. low contrast art).
     const yardOffset = 0.028
-    const yardWaypoints = [
-      point(lane.yard.x - yardOffset, lane.yard.y - yardOffset),
-      point(lane.yard.x + yardOffset, lane.yard.y - yardOffset),
-      point(lane.yard.x - yardOffset, lane.yard.y + yardOffset),
-      point(lane.yard.x + yardOffset, lane.yard.y + yardOffset),
-    ]
+    const yardWaypoints =
+      lane.yard.holes && lane.yard.holes.length === 4
+        ? lane.yard.holes
+        : [
+            point(lane.yard.x - yardOffset, lane.yard.y - yardOffset),
+            point(lane.yard.x + yardOffset, lane.yard.y - yardOffset),
+            point(lane.yard.x - yardOffset, lane.yard.y + yardOffset),
+            point(lane.yard.x + yardOffset, lane.yard.y + yardOffset),
+          ]
 
     // Corridor spoke runs from where it actually meets the traced ring, inward to the hub, so
     // there's no visible gap between the last track square and the first corridor square.
@@ -498,6 +622,7 @@ async function main() {
     const playerCount = Number(countStr)
     const imagePath = path.join(ROOT, 'public', 'boards', `board_${playerCount}p.jpg`)
     const pixels = await loadPixels(imagePath)
+    const hiResPixels = await loadPixels(imagePath, 900) // gold hole-ring outlines are too thin to survive downsampling to SIZE
 
     const yardCenters = []
     for (const color of laneColors) {
@@ -505,6 +630,11 @@ async function main() {
       if (!center.found) {
         console.warn(`[board_${playerCount}p] weak/no yard match for ${color} - using fallback position`)
       }
+      const holes = findYardHoles(hiResPixels, center, 0.06)
+      if (holes.length < 4) {
+        console.warn(`  [board_${playerCount}p] ${color} yard: only found ${holes.length}/4 pip holes - using synthetic grid`)
+      }
+      center.holes = holes
       yardCenters.push(center)
     }
 
