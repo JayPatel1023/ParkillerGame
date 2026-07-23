@@ -1,7 +1,6 @@
 // Branding placeholders - replace once Carlos sends the final logo/brand colors.
-const BRAND_PARCHMENT = '#b5cbb8'
 const BRAND_GOLD = '#ccb154'
-const BRAND_INK = '#2a2a2a'
+const BRAND_TEXT = '#f2ede0'
 
 export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
   return (
@@ -13,11 +12,13 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
         alignItems: 'center',
         justifyContent: 'center',
         gap: 24,
-        background: BRAND_PARCHMENT,
-        color: BRAND_INK,
+        color: BRAND_TEXT,
+        backgroundImage: 'url(/backgrounds/start-bg.jpg)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
       }}
     >
-      <h1 style={{ fontSize: 48, margin: 0, letterSpacing: 2 }}>Parkiller</h1>
+      <h1 style={{ fontSize: 48, margin: 0, letterSpacing: 2, textShadow: '0 2px 10px rgba(0,0,0,0.6)' }}>Parkiller</h1>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: 240 }}>
         <button
           onClick={onPlayLocal}

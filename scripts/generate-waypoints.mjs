@@ -31,7 +31,7 @@ const HUE_RANGES = {
 const SIZE = 320 // analysis resolution
 const MARGIN = 0.08 // fraction of image trimmed on each side to skip the ornate frame
 const ARM_STEPS = 6 // corridor waypoints per lane
-const SQUARES_PER_ARM = 13 // target track squares per lane after resampling (~classic parchís proportions)
+const SQUARES_PER_ARM = 21 // target track squares per lane after resampling (counted directly from board_4p.jpg art)
 
 function rgbToHsv(r, g, b) {
   r /= 255; g /= 255; b /= 255

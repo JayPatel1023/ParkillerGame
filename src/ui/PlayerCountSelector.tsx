@@ -8,11 +8,13 @@ export function PlayerCountSelector({ onConfirm }: { onConfirm: (count: number) 
         alignItems: 'center',
         justifyContent: 'center',
         gap: 20,
-        background: '#b5cbb8',
-        color: '#2a2a2a',
+        color: '#f2ede0',
+        backgroundImage: 'url(/backgrounds/start-bg.jpg)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
       }}
     >
-      <h2>¿Cuántos jugadores?</h2>
+      <h2 style={{ textShadow: '0 2px 10px rgba(0,0,0,0.6)' }}>¿Cuántos jugadores?</h2>
       <div style={{ display: 'flex', gap: 12 }}>
         {[2, 3, 4, 5, 6].map((count) => (
           <button
