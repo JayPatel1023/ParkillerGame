@@ -36,10 +36,21 @@ npm test          # Vitest unit tests for the rules engine
 - `src/ui/` — `StartScreen` (brand color placeholders), `PlayerCountSelector`, `GameBoardScreen`.
 - `src/tools/WaypointEditor.tsx` — dev tool, open the app with `#editor` in the URL. Click
   directly on each board image to trace the track/yards/home-corridors, then export the JSON and
-  paste it into `src/data/boards.ts`. This replaces the old Unity Editor waypoint tool — same
-  purpose: each tablero has hand-drawn curves that can't be computed from a formula.
+  drop it into `src/data/generated-boards.json` under that player count. This replaces the old
+  Unity Editor waypoint tool — same purpose: each tablero has hand-drawn curves that can't be
+  computed from a formula.
+- `scripts/generate-waypoints.mjs` — analyzes the board art directly (color/shape detection with
+  `sharp`) to auto-generate a *playable approximation* of all 5 boards' waypoints: real detected
+  yard positions, a track loop shaped and scaled to match them, and game-logic-correct
+  entry/home-entrance indices. Run with `npm run generate-boards`. This is what currently
+  populates `src/data/generated-boards.json` — it gets pieces moving without hand-tracing, but
+  it's not pixel-perfect (see below). `scripts/debug_overlay.py` (needs Pillow: `pip install
+  pillow`) renders the generated waypoints on top of each board image for visual sanity-checking.
 - `tests/parchisRules.test.ts` — unit tests for the rules engine (yard exit, capture, safe
-  squares, exact-count finishing). Run with `npm test`.
+  squares, exact-count finishing).
+- `tests/generatedBoards.test.ts` — validates the generated board data itself: every waypoint is
+  in-bounds, and a full simulated playthrough (yard → track → corridor → finished) succeeds for
+  all 5 boards. Catches broken/malformed generated data, not just rules-engine bugs.
 
 ## Board art received so far
 
@@ -56,14 +67,19 @@ All 5 variants are in `public/boards/`:
 Note: the file originally named `tablero_de_Parkiller_4.jpg` was actually the **3-player** board
 (3 yards visible) — renamed to `board_3p.jpg` accordingly.
 
-## Remaining setup work before milestone 1 is playable end-to-end
+## Board alignment: playable now, not pixel-perfect
 
-1. Open the app at `#editor` and trace waypoints on each of the 5 boards (track squares in
-   travel order per lane, each lane's 4 yard slots, each lane's home corridor, entry/home-entrance
-   indices, and the star-marked safe squares). Paste the exported JSON into `src/data/boards.ts` —
-   right now every board's waypoint arrays are empty, so pieces won't render until this is done.
-2. Still needed from Carlos: final logo + exact brand hex colors (placeholders are sampled from
-   the board art's parchment/gold palette), piece token art/model, dice art/model.
+`src/data/generated-boards.json` is auto-generated (`npm run generate-boards`), not hand-traced.
+It gets real yard positions from the art via color detection, and approximates the track as a
+lobed loop shaped to match those positions — good enough that pieces render and move correctly,
+verified by a full simulated playthrough per board (see `tests/generatedBoards.test.ts`). But it
+does **not** hug every hand-drawn curve of the actual track — on the 4/5/6-player boards it's a
+close visual match, on the 2/3-player boards (more irregular, hand-drawn shapes) it's noticeably
+rougher. For final pixel-accurate alignment, use the in-app `#editor` tool to hand-trace a board
+and drop the exported JSON into `src/data/generated-boards.json` for that player count.
+
+Still needed from Carlos: final logo + exact brand hex colors (placeholders are sampled from the
+board art's parchment/gold palette), piece token art/model, dice art/model.
 
 ## Rules implemented (Spanish parchís, standard variant)
 

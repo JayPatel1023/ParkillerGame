@@ -5,6 +5,9 @@ dist-ssr/
 *.local
 *.tsbuildinfo
 
+# Verification artifacts from scripts/debug_overlay.py
+scripts/debug_*.png
+
 # Editors
 .vs/
 .vscode/
