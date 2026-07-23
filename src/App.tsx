@@ -34,6 +34,7 @@ export default function App() {
         <GameBoardScreen
           definition={BOARD_DEFINITIONS[playerCount]}
           colors={DEFAULT_COLOR_ORDER.slice(0, playerCount)}
+          onExit={() => setScreen('start')}
         />
       )}
     </div>

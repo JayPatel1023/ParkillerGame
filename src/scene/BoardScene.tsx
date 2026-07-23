@@ -14,6 +14,24 @@ import { toWorldPosition } from './boardGeometry'
 
 const INTRO_STAGGER = 0.09 // seconds between each piece's drop-in entrance, for a cascading effect
 
+// When multiple pieces land on the same square, they'd otherwise render fully overlapping and
+// look like a single piece (or like a piece vanished/jumped oddly when one splits off to move).
+// Spread them into a small tight cluster instead, same visual language as the yard's 4 slots.
+const STACK_OFFSETS: [number, number][] = [
+  [0, 0],
+  [-0.11, -0.11],
+  [0.11, -0.11],
+  [-0.11, 0.11],
+  [0.11, 0.11],
+  [0, -0.16],
+]
+
+function stackKeyFor(piece: Piece): string | null {
+  if (piece.state === 'OnTrack') return `track-${piece.trackPosition}`
+  if (piece.state === 'InHomeCorridor') return `corridor-${piece.color}-${piece.corridorPosition}`
+  return null // InYard has its own 4 distinct slots already; Finished pieces don't need separating
+}
+
 interface BoardSceneProps {
   definition: BoardDefinition
   players: PlayerState[]
@@ -40,6 +58,14 @@ export function BoardScene({
   const selectablePieces = new Set(pendingMoves.map((m) => m.piece))
   const allPieces = players.flatMap((player) => player.pieces)
 
+  const stackGroups = new Map<string, Piece[]>()
+  for (const piece of allPieces) {
+    const key = stackKeyFor(piece)
+    if (!key) continue
+    if (!stackGroups.has(key)) stackGroups.set(key, [])
+    stackGroups.get(key)!.push(piece)
+  }
+
   return (
     <Canvas shadows camera={{ position: [0, 7, 5], fov: 40 }}>
       <ambientLight intensity={0.7} />
@@ -51,6 +77,16 @@ export function BoardScene({
       {allPieces.map((piece, index) => {
         const waypoint = getPieceWaypoint(piece, definition)
         if (!waypoint) return null
+
+        const worldPos = toWorldPosition(waypoint)
+        const stackKey = stackKeyFor(piece)
+        const group = stackKey ? stackGroups.get(stackKey) : undefined
+        const restPosition: [number, number, number] = worldPos
+        if (group && group.length > 1) {
+          const [ox, oz] = STACK_OFFSETS[group.indexOf(piece) % STACK_OFFSETS.length]
+          restPosition[0] += ox
+          restPosition[2] += oz
+        }
 
         const isAnimating = moveAnimation?.piece === piece
         let hopFrom: [number, number, number] | null = null
@@ -73,7 +109,7 @@ export function BoardScene({
           <PieceMesh
             key={`${piece.color}-${piece.pieceIndex}`}
             piece={piece}
-            restPosition={toWorldPosition(waypoint)}
+            restPosition={restPosition}
             hopFrom={hopFrom}
             hops={hops}
             onHopsComplete={isAnimating ? onAnimationComplete : undefined}

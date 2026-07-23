@@ -9,7 +9,7 @@ export function PlayerCountSelector({ onConfirm }: { onConfirm: (count: number) 
         justifyContent: 'center',
         gap: 20,
         color: '#f2ede0',
-        backgroundImage: 'url(/backgrounds/start-bg.jpg)',
+        backgroundImage: 'radial-gradient(ellipse at center, rgba(0,0,0,0) 0%, rgba(0,0,0,0.45) 100%), url(/backgrounds/start-bg.jpg)',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
       }}

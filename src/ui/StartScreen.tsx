@@ -13,7 +13,7 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
         justifyContent: 'center',
         gap: 24,
         color: BRAND_TEXT,
-        backgroundImage: 'url(/backgrounds/start-bg.jpg)',
+        backgroundImage: 'radial-gradient(ellipse at center, rgba(0,0,0,0) 0%, rgba(0,0,0,0.45) 100%), url(/backgrounds/start-bg.jpg)',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
       }}
