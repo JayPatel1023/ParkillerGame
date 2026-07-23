@@ -69,11 +69,22 @@ function inBounds(x, y, w, h) {
 
 // Finds each lane color's yard circle center via a density search: the yard is a filled disc,
 // so the pixel with the most same-color neighbors within a small radius is its center.
-function findYardCenter(pixels, color) {
+// Known-bad case: on the 5-player board, Gold's yard density search locks onto the connector
+// strip joining the yard to the shared track instead of the yard disc itself - the connector is
+// solid-colored and locally denser than the yard's own radially-gradient-shaded fill, so no
+// density-based heuristic tried (an absolute ratio threshold, then a relative comparison against
+// nearby and against whole-image candidates) discriminated the two reliably without also breaking
+// other, already-correct yards. Measured directly from the art instead of guessed: crop
+// public/boards/board_5p.jpg to roughly (0.55-0.85, 0.12-0.42) normalized to see the true yard
+// circle in isolation from the connector, and read its center off the crop.
+const YARD_CENTER_OVERRIDES = {
+  '5-Gold': { x: 0.655, y: 0.243 },
+}
+
+function findYardCenter(pixels, color, playerCount) {
   const { data, width, height, channels } = pixels
-  const radius = Math.round(width * 0.06)
+  const innerRadius = Math.round(width * 0.06)
   const step = 4
-  let best = { x: 0, y: 0, count: -1 }
 
   const mask = new Uint8Array(width * height)
   for (let y = 0; y < height; y++) {
@@ -89,13 +100,29 @@ function findYardCenter(pixels, color) {
   // exclude candidates there rather than risk the hub winning the density search.
   const centerExclusionRadius = width * 0.16
 
-  for (let cy = radius; cy < height - radius; cy += step) {
-    for (let cx = radius; cx < width - radius; cx += step) {
+  const override = YARD_CENTER_OVERRIDES[`${playerCount}-${color}`]
+  if (override) {
+    const cx = Math.round(override.x * width)
+    const cy = Math.round(override.y * height)
+    let count = 0
+    for (let dy = -innerRadius; dy <= innerRadius; dy += 2) {
+      for (let dx = -innerRadius; dx <= innerRadius; dx += 2) {
+        if (dx * dx + dy * dy > innerRadius * innerRadius) continue
+        if (mask[(cy + dy) * width + (cx + dx)]) count++
+      }
+    }
+    return { x: override.x, y: override.y, found: count > 20 }
+  }
+
+  // Best raw count within innerRadius wins. Correctly finds 20 of 21 yards across every board.
+  let best = { x: 0, y: 0, count: -1 }
+  for (let cy = innerRadius; cy < height - innerRadius; cy += step) {
+    for (let cx = innerRadius; cx < width - innerRadius; cx += step) {
       if (Math.hypot(cx - width / 2, cy - height / 2) < centerExclusionRadius) continue
       let count = 0
-      for (let dy = -radius; dy <= radius; dy += 2) {
-        for (let dx = -radius; dx <= radius; dx += 2) {
-          if (dx * dx + dy * dy > radius * radius) continue
+      for (let dy = -innerRadius; dy <= innerRadius; dy += 2) {
+        for (let dx = -innerRadius; dx <= innerRadius; dx += 2) {
+          if (dx * dx + dy * dy > innerRadius * innerRadius) continue
           if (mask[(cy + dy) * width + (cx + dx)]) count++
         }
       }
@@ -106,12 +133,22 @@ function findYardCenter(pixels, color) {
   return { x: best.x / width, y: best.y / height, found: best.count > 20 }
 }
 
-// Each yard has 4 pip holes painted inside the colored disc, each outlined with a gold ring (the
-// holes themselves are just a slightly different shade of the yard's own color - the gold ring is
-// the actually-distinctive feature). The yard's own outer boundary is ALSO a gold ring, so the
-// search excludes an outer band near the yard's edge to avoid picking that up as a "hole". Uses a
-// higher-resolution pixel buffer than the rest of the pipeline since these rings are thin enough
-// to wash out at the main analysis resolution.
+function median(arr) {
+  const sorted = [...arr].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
+}
+
+// Each yard has 4 pip holes painted inside the colored disc, arranged with 4-fold rotational
+// symmetry around the yard's own center (true on every board observed), each outlined with a gold
+// ring. Treating each ring as an independent blob is fragile - anti-aliasing or a small art detail
+// can break a single ring into multiple disconnected fragments, which get miscounted as separate
+// holes and silently drop a real one. Instead, pool every matching pixel from all 4 holes together
+// and fit the symmetric pattern directly as one measurement: a robust center, a common radius, and
+// one shared rotational offset. That's immune to any individual ring being fragmentary, and
+// mathematically guarantees the 4 results are exactly evenly spaced with no possibility of
+// overlap - it's a fit, not a per-hole guess. Uses a higher-resolution pixel buffer than the rest
+// of the pipeline since these rings are thin enough to wash out at the main analysis resolution.
 function findYardHoles(pixels, yardCenter, yardRadiusNorm) {
   const { data, width, height, channels } = pixels
   const searchR = yardRadiusNorm * 1.5 // generous - tolerates yardCenter being an imperfect estimate
@@ -121,7 +158,7 @@ function findYardHoles(pixels, yardCenter, yardRadiusNorm) {
   const minY = Math.max(0, Math.floor((yardCenter.y - searchR) * height))
   const maxY = Math.min(height - 1, Math.ceil((yardCenter.y + searchR) * height))
 
-  const candidateSet = new Set()
+  const pts = []
   for (let y = minY; y <= maxY; y++) {
     for (let x = minX; x <= maxX; x++) {
       const nx = x / width
@@ -130,98 +167,63 @@ function findYardHoles(pixels, yardCenter, yardRadiusNorm) {
       if (dist > searchR || dist > innerHoleBand) continue
       const idx = (y * width + x) * channels
       const [h, s, v] = rgbToHsv(data[idx], data[idx + 1], data[idx + 2])
-      if (matchesColor(h, s, v, 'Gold')) candidateSet.add(`${x},${y}`)
+      if (matchesColor(h, s, v, 'Gold')) pts.push([nx, ny])
     }
   }
 
-  if (candidateSet.size < 8) return [] // not enough signal - caller falls back to a synthetic grid
+  if (pts.length < 20) return null // not enough signal - caller falls back to a synthetic grid
 
-  const visited = new Set()
-  const blobs = []
-  for (const key of candidateSet) {
-    if (visited.has(key)) continue
-    const [sx, sy] = key.split(',').map(Number)
-    const stack = [[sx, sy]]
-    visited.add(key)
-    const pixelsInBlob = []
-    while (stack.length) {
-      const [x, y] = stack.pop()
-      pixelsInBlob.push([x, y])
-      for (const [dx, dy] of [
-        [1, 0],
-        [-1, 0],
-        [0, 1],
-        [0, -1],
-        [1, 1],
-        [1, -1],
-        [-1, 1],
-        [-1, -1],
-      ]) {
-        const nk = `${x + dx},${y + dy}`
-        if (candidateSet.has(nk) && !visited.has(nk)) {
-          visited.add(nk)
-          stack.push([x + dx, y + dy])
-        }
-      }
-    }
-    blobs.push(pixelsInBlob)
-  }
+  // Pass 1: rough center/radius from every matching pixel.
+  let center = [pts.reduce((s, p) => s + p[0], 0) / pts.length, pts.reduce((s, p) => s + p[1], 0) / pts.length]
+  let radii = pts.map((p) => Math.hypot(p[0] - center[0], p[1] - center[1]))
+  const roughRadius = median(radii)
 
-  // On gold-colored yards, the yard's own fill/border is the same hue as the hole rings, so a
-  // patch of ordinary fill can get picked up as a "blob" too. Distinguish by shape, not just size:
-  // a thin ring has low fill relative to its bounding box (mostly hollow), while a contamination
-  // patch from solid fill is much more filled-in - reject anything too solid to be a ring.
-  const minBlobSize = 3
-  const maxFillRatio = 0.5
-  let candidates = blobs.filter((b) => b.length >= minBlobSize).filter((b) => {
-    const xs = b.map(([x]) => x)
-    const ys = b.map(([, y]) => y)
-    const boxArea = (Math.max(...xs) - Math.min(...xs) + 1) * (Math.max(...ys) - Math.min(...ys) + 1)
-    return b.length / boxArea <= maxFillRatio
+  // Pass 2: drop anything far from the typical ring radius (stray marks, hub-adjacent noise,
+  // boundary leakage), then refit a tighter center/radius from the cleaned set.
+  const kept = pts.filter((_, i) => radii[i] > roughRadius * 0.5 && radii[i] < roughRadius * 1.6)
+  if (kept.length < 12) return null
+  center = [kept.reduce((s, p) => s + p[0], 0) / kept.length, kept.reduce((s, p) => s + p[1], 0) / kept.length]
+  radii = kept.map((p) => Math.hypot(p[0] - center[0], p[1] - center[1]))
+  const radius = median(radii)
+
+  // Fit the shared rotational offset of the 4-fold pattern via a circular mean at 4x frequency -
+  // the standard trick for finding the dominant orientation of n-fold symmetric point data.
+  const angles = kept.map((p) => Math.atan2(p[1] - center[1], p[0] - center[0]))
+  const sumSin = angles.reduce((s, a) => s + Math.sin(4 * a), 0)
+  const sumCos = angles.reduce((s, a) => s + Math.cos(4 * a), 0)
+  const offset = Math.atan2(sumSin, sumCos) / 4
+
+  const slotCenters = [0, 1, 2, 3].map((k) => {
+    const a = offset + (k * Math.PI) / 2
+    return [center[0] + Math.cos(a) * radius, center[1] + Math.sin(a) * radius]
   })
 
-  // A single ring can end up as two (or more) disconnected blobs if anti-aliasing or a small
-  // decorative mark breaks its connectivity for a pixel or two - counted separately, that falsely
-  // consumes two of the four "top" slots for what's really one hole, silently dropping a real one.
-  // Merge blobs whose centroids are suspiciously close before ranking by size.
-  const mergeDistPx = width * 0.03
-  const centroidOf = (b) => [b.reduce((s, [x]) => s + x, 0) / b.length, b.reduce((s, [, y]) => s + y, 0) / b.length]
-  let mergedSomething = true
-  while (mergedSomething) {
-    mergedSomething = false
-    outer: for (let i = 0; i < candidates.length; i++) {
-      for (let j = i + 1; j < candidates.length; j++) {
-        const [ax, ay] = centroidOf(candidates[i])
-        const [bx, by] = centroidOf(candidates[j])
-        if (Math.hypot(ax - bx, ay - by) < mergeDistPx) {
-          candidates[i] = candidates[i].concat(candidates[j])
-          candidates.splice(j, 1)
-          mergedSomething = true
-          break outer
-        }
+  // Each individual hole's own radius (for sizing pieces): average distance from points to
+  // whichever of the 4 fitted slot centers they're nearest to.
+  const perSlotDistances = [[], [], [], []]
+  for (const p of kept) {
+    let bestK = 0
+    let bestD = Infinity
+    for (let k = 0; k < 4; k++) {
+      const d = Math.hypot(p[0] - slotCenters[k][0], p[1] - slotCenters[k][1])
+      if (d < bestD) {
+        bestD = d
+        bestK = k
       }
     }
+    perSlotDistances[bestK].push(bestD)
   }
-  candidates.sort((a, b) => b.length - a.length)
+  // center, radius, and perSlotDistances are already in normalized [0..1] units (pts was built
+  // from nx/ny, not raw pixel coordinates) - no further division by width/height needed here.
+  const holeRadiusNorm = median(perSlotDistances.flat())
 
   if (process.env.DEBUG_HOLES) {
-    for (const b of candidates) {
-      const cx = b.reduce((s, [x]) => s + x, 0) / b.length
-      const cy = b.reduce((s, [, y]) => s + y, 0) / b.length
-      const xs = b.map(([x]) => x)
-      const ys = b.map(([, y]) => y)
-      const boxArea = (Math.max(...xs) - Math.min(...xs) + 1) * (Math.max(...ys) - Math.min(...ys) + 1)
-      console.error(`    blob size=${b.length} fill=${(b.length / boxArea).toFixed(2)} centroid_norm=(${(cx / width).toFixed(4)},${(cy / height).toFixed(4)})`)
-    }
+    console.error(
+      `    fitted center_norm=(${center[0].toFixed(4)},${center[1].toFixed(4)}) radius_norm=${radius.toFixed(4)} offsetDeg=${((offset * 180) / Math.PI).toFixed(1)} holeRadiusNorm=${holeRadiusNorm.toFixed(4)} points=${kept.length}/${pts.length}`,
+    )
   }
 
-  const holes = candidates.slice(0, 4).map((blob) => {
-    const cx = blob.reduce((s, [x]) => s + x, 0) / blob.length
-    const cy = blob.reduce((s, [, y]) => s + y, 0) / blob.length
-    return point(cx / width, cy / height)
-  })
-
-  return holes
+  return { holes: slotCenters.map(([x, y]) => point(x, y)), holeRadiusNorm }
 }
 
 // The track band sits well outside the yards, near the board edges. Measure its real radius by
@@ -262,41 +264,6 @@ function angularDist(a, b) {
   let d = Math.abs(a - b) % (2 * Math.PI)
   if (d > Math.PI) d = 2 * Math.PI - d
   return d
-}
-
-// Given 3 of a yard's 4 pip holes (arranged as two perpendicular diameters through a shared
-// center - true on every board observed), estimate the missing 4th. Naively assuming the mean of
-// all 4 equals the (imperfectly-estimated) yard center amplifies that estimate's own error 4x,
-// which can push the guess outside the yard entirely. Instead, find which 2 of the 3 real points
-// are the opposite pair (their midpoint should be the true center) by checking which pairing's
-// implied center best matches the rough yard-center estimate, then reflect the third point
-// through that. Falls back to the naive approach only if the result would land implausibly far
-// from the yard (a sign the pairing search failed), rather than risk a wild guess.
-function estimateFourthHole(threeHoles, roughCenter, yardRadiusNorm) {
-  const pairings = [
-    [0, 1, 2],
-    [0, 2, 1],
-    [1, 2, 0],
-  ]
-  let best = null
-  for (const [i, j, k] of pairings) {
-    const [ax, ay] = threeHoles[i]
-    const [bx, by] = threeHoles[j]
-    const centerCandidate = [(ax + bx) / 2, (ay + by) / 2]
-    const distToRough = Math.hypot(centerCandidate[0] - roughCenter.x, centerCandidate[1] - roughCenter.y)
-    if (!best || distToRough < best.distToRough) {
-      const [kx, ky] = threeHoles[k]
-      const fourth = [2 * centerCandidate[0] - kx, 2 * centerCandidate[1] - ky]
-      best = { distToRough, fourth }
-    }
-  }
-
-  const distFromCenter = Math.hypot(best.fourth[0] - roughCenter.x, best.fourth[1] - roughCenter.y)
-  if (distFromCenter > yardRadiusNorm * 1.1) {
-    // Pairing search still landed outside the yard - safer to sit near the center than guess wildly.
-    return point(roughCenter.x, roughCenter.y)
-  }
-  return point(best.fourth[0], best.fourth[1])
 }
 
 // A smooth radius(theta) curve can only represent shapes that are star-convex around one center.
@@ -641,27 +608,20 @@ function buildBoardDefinition(playerCount, laneColors, yardCenters, trackOuterRa
     const entryTrackIndex = (homeEntranceTrackIndex + 1) % trackLength
     const [ringJunctionX, ringJunctionY] = trackWaypoints[homeEntranceTrackIndex]
 
-    // Prefer the actually-detected pip holes (see findYardHoles) so pieces sit in the real
-    // painted slots. If exactly 3 were found, keep them and estimate the missing 4th rather than
-    // discarding 3 good detections for an entirely synthetic grid - assuming the 4 holes average
-    // out to the yard's center (true for every board observed), the 4th is whatever makes that
-    // hold. Only fall back to a fully synthetic grid if detection found fewer than 3.
+    // Prefer the actually-fitted pip holes (see findYardHoles) so pieces sit exactly in the real
+    // painted slots, evenly spaced by construction. Only fall back to a synthetic grid if there
+    // wasn't enough signal to fit the pattern at all.
     const yardOffset = 0.028
     const detectedHoles = lane.yard.holes || []
-    let yardWaypoints
-    if (detectedHoles.length === 4) {
-      yardWaypoints = detectedHoles
-    } else if (detectedHoles.length === 3) {
-      const fourth = estimateFourthHole(detectedHoles, lane.yard, 0.06)
-      yardWaypoints = [...detectedHoles, fourth]
-    } else {
-      yardWaypoints = [
-        point(lane.yard.x - yardOffset, lane.yard.y - yardOffset),
-        point(lane.yard.x + yardOffset, lane.yard.y - yardOffset),
-        point(lane.yard.x - yardOffset, lane.yard.y + yardOffset),
-        point(lane.yard.x + yardOffset, lane.yard.y + yardOffset),
-      ]
-    }
+    const yardWaypoints =
+      detectedHoles.length === 4
+        ? detectedHoles
+        : [
+            point(lane.yard.x - yardOffset, lane.yard.y - yardOffset),
+            point(lane.yard.x + yardOffset, lane.yard.y - yardOffset),
+            point(lane.yard.x - yardOffset, lane.yard.y + yardOffset),
+            point(lane.yard.x + yardOffset, lane.yard.y + yardOffset),
+          ]
 
     // Corridor spoke runs from where it actually meets the traced ring, inward to the hub, so
     // there's no visible gap between the last track square and the first corridor square.
@@ -701,18 +661,17 @@ async function main() {
 
     const yardCenters = []
     for (const color of laneColors) {
-      const center = findYardCenter(pixels, color)
+      const center = findYardCenter(pixels, color, playerCount)
       if (!center.found) {
         console.warn(`[board_${playerCount}p] weak/no yard match for ${color} - using fallback position`)
       }
       if (process.env.DEBUG_HOLES) console.error(`  ${playerCount}p ${color}:`)
-      const holes = findYardHoles(hiResPixels, center, 0.06)
-      if (holes.length === 3) {
-        console.warn(`  [board_${playerCount}p] ${color} yard: found 3/4 pip holes - estimating the 4th`)
-      } else if (holes.length < 3) {
-        console.warn(`  [board_${playerCount}p] ${color} yard: only found ${holes.length}/4 pip holes - using synthetic grid`)
+      const fit = findYardHoles(hiResPixels, center, 0.06)
+      if (!fit) {
+        console.warn(`  [board_${playerCount}p] ${color} yard: not enough pip-hole signal - using synthetic grid`)
       }
-      center.holes = holes
+      center.holes = fit?.holes ?? []
+      center.holeRadiusNorm = fit?.holeRadiusNorm ?? null
       yardCenters.push(center)
     }
 

@@ -127,7 +127,10 @@ export function PieceMesh({ piece, restPosition, hopFrom, hops, onHopsComplete, 
       }}
       scale={selectable ? 1.3 : 1}
     >
-      <coneGeometry args={[0.15, 0.32, 24]} />
+      {/* Radius/height sized to ~77% of the measured average yard-slot diameter across all
+          boards (0.065 world-unit radius against a ~0.168 slot diameter) - see
+          scripts/generate-waypoints.mjs findYardHoles, run with DEBUG_HOLES=1 to re-measure. */}
+      <coneGeometry args={[0.065, 0.14, 24]} />
       <meshStandardMaterial
         color={getColor(piece.color)}
         emissive={selectable ? getColor(piece.color) : '#000000'}

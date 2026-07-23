@@ -87,7 +87,6 @@ export function BoardScene({
           restPosition[0] += ox
           restPosition[2] += oz
         }
-
         const isAnimating = moveAnimation?.piece === piece
         let hopFrom: [number, number, number] | null = null
         let hops: [number, number, number][] = []
