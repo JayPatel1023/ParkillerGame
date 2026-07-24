@@ -6,8 +6,14 @@ import { getColor } from '../core/colorPalette'
 import type { Piece } from '../core/pieces/piece'
 import { BASE_HEIGHT } from './boardGeometry'
 
-const HOP_DURATION = 0.22 // seconds per square hopped
-const BOUNCE_HEIGHT = 0.16 // world units, how high each hop arcs
+const HOP_DURATION = 0.32 // seconds per square hopped - slow enough that each step reads clearly
+const BOUNCE_HEIGHT = 0.24 // world units, how high each hop arcs - a more emphatic, visible bounce
+
+// Caps how much animation time a single frame can advance. Without this, a slow/dropped frame
+// (e.g. CPU contention from screen-recording software) can push `delta` past HOP_DURATION in one
+// tick, completing an entire hop with no interpolated frame ever rendered - visually the piece
+// appears to jump multiple squares at once instead of hopping through them one at a time.
+const MAX_FRAME_DELTA = 1 / 30
 
 const INTRO_DURATION = 0.55
 const INTRO_X_OFFSET = 6 // starts well off-screen to the right
@@ -64,9 +70,10 @@ export function PieceMesh({ piece, restPosition, hopFrom, hops, onHopsComplete, 
     notifiedRef.current = hops.length === 0
   }, [hops])
 
-  useFrame((_, delta) => {
+  useFrame((_, rawDelta) => {
     const mesh = meshRef.current
     if (!mesh) return
+    const delta = Math.min(rawDelta, MAX_FRAME_DELTA)
 
     if (!introRef.current.done) {
       introRef.current.elapsed += delta
