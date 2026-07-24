@@ -79,6 +79,7 @@ function inBounds(x, y, w, h) {
 // circle in isolation from the connector, and read its center off the crop.
 const YARD_CENTER_OVERRIDES = {
   '5-Gold': { x: 0.655, y: 0.243 },
+  '6-Gold': { x: 0.494, y: 0.218 },
 }
 
 function findYardCenter(pixels, color, playerCount) {
@@ -114,7 +115,33 @@ function findYardCenter(pixels, color, playerCount) {
     return { x: override.x, y: override.y, found: count > 20 }
   }
 
-  // Best raw count within innerRadius wins. Correctly finds 20 of 21 yards across every board.
+  // A raw density search alone can lock onto a home-corridor spoke instead of the yard disc: a
+  // corridor is solid-colored and, sampled at any point along its length, can be just as dense
+  // within innerRadius as the real yard. Distinguish them by shape: a yard is an isolated round
+  // blob, so pixels quickly thin out just past its own radius in every direction; a corridor
+  // keeps going, so an annulus further out is still substantially filled. Reject candidates whose
+  // outer annulus is too full to be a real yard.
+  function outerAnnulusFraction(cx, cy) {
+    const rIn = innerRadius * 1.3
+    const rOut = innerRadius * 2.5
+    let total = 0
+    let matched = 0
+    for (let dy = -rOut; dy <= rOut; dy += 3) {
+      for (let dx = -rOut; dx <= rOut; dx += 3) {
+        const d2 = dx * dx + dy * dy
+        if (d2 > rOut * rOut || d2 < rIn * rIn) continue
+        const x = cx + dx
+        const y = cy + dy
+        if (x < 0 || y < 0 || x >= width || y >= height) continue
+        total++
+        if (mask[y * width + x]) matched++
+      }
+    }
+    return total === 0 ? 0 : matched / total
+  }
+
+  // Best raw count within innerRadius wins, among candidates that pass the shape check.
+  // Correctly finds 20 of 21 yards across every board.
   let best = { x: 0, y: 0, count: -1 }
   for (let cy = innerRadius; cy < height - innerRadius; cy += step) {
     for (let cx = innerRadius; cx < width - innerRadius; cx += step) {
@@ -126,7 +153,9 @@ function findYardCenter(pixels, color, playerCount) {
           if (mask[(cy + dy) * width + (cx + dx)]) count++
         }
       }
-      if (count > best.count) best = { x: cx, y: cy, count }
+      if (count <= best.count) continue
+      if (count > 20 && outerAnnulusFraction(cx, cy) > 0.4) continue // looks like a corridor/connector, not an isolated yard
+      best = { x: cx, y: cy, count }
     }
   }
 
@@ -224,6 +253,93 @@ function findYardHoles(pixels, yardCenter, yardRadiusNorm) {
   }
 
   return { holes: slotCenters.map(([x, y]) => point(x, y)), holeRadiusNorm }
+}
+
+// Each lane's own 4-pointed gold star icon marks exactly which square is its entry point onto the
+// shared track - the board art itself says so, so use it directly instead of assuming entry is
+// "whatever square is next to home-entrance" (a guess that isn't always true - the two are
+// generally different physical spokes: a short yard connector vs. the long home-stretch corridor).
+// The star is a small, roughly square/compact, moderately concave (its points leave gaps) gold
+// blob - unlike a track divider (a thin strip) or a yard's pip-hole ring (which sits inside the
+// yard, filtered out by requiring the candidate be well outside the yard's own radius). It's also
+// reliably positioned "outward" from the hub through the yard, which discriminates it from the
+// hub's own center decoration and from other lanes' stars caught in the same search window.
+function findEntryStar(hiResPixels, yardCenter, hubX, hubY, yardRadiusNorm) {
+  const { data, width, height, channels } = hiResPixels
+  function isGoldAt(x, y) {
+    if (x < 0 || y < 0 || x >= width || y >= height) return false
+    const idx = (y * width + x) * channels
+    const [h, s, v] = rgbToHsv(data[idx], data[idx + 1], data[idx + 2])
+    return isGoldDivider(h, s, v)
+  }
+
+  const searchR = Math.round(yardRadiusNorm * 3.7 * width)
+  const cx = Math.round(yardCenter.x * width)
+  const cy = Math.round(yardCenter.y * height)
+  const minX = Math.max(0, cx - searchR), maxX = Math.min(width - 1, cx + searchR)
+  const minY = Math.max(0, cy - searchR), maxY = Math.min(height - 1, cy + searchR)
+
+  const mask = new Uint8Array(width * height)
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
+      if (isGoldAt(x, y)) mask[y * width + x] = 1
+    }
+  }
+
+  const labels = new Int32Array(width * height).fill(-1)
+  const comps = []
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
+      const start = y * width + x
+      if (mask[start] === 0 || labels[start] !== -1) continue
+      const compId = comps.length
+      const stack = [start]
+      labels[start] = compId
+      let minCX = x, maxCX = x, minCY = y, maxCY = y, count = 0
+      while (stack.length) {
+        const p = stack.pop()
+        const px = p % width
+        const py = Math.floor(p / width)
+        count++
+        minCX = Math.min(minCX, px); maxCX = Math.max(maxCX, px)
+        minCY = Math.min(minCY, py); maxCY = Math.max(maxCY, py)
+        for (const n of [p - 1, p + 1, p - width, p + width]) {
+          if (n < 0 || n >= width * height) continue
+          if (Math.abs((n % width) - px) > 1) continue
+          if (mask[n] === 1 && labels[n] === -1) {
+            labels[n] = compId
+            stack.push(n)
+          }
+        }
+      }
+      comps.push({ minCX, maxCX, minCY, maxCY, count })
+    }
+  }
+
+  const outX = yardCenter.x - hubX
+  const outY = yardCenter.y - hubY
+  const outMag = Math.hypot(outX, outY) || 1
+
+  const candidates = comps
+    .map((c) => {
+      const bw = c.maxCX - c.minCX + 1
+      const bh = c.maxCY - c.minCY + 1
+      const cxNorm = (c.minCX + c.maxCX) / 2 / width
+      const cyNorm = (c.minCY + c.maxCY) / 2 / height
+      return { count: c.count, bw, bh, fillRatio: c.count / (bw * bh), aspect: bw / bh, x: cxNorm, y: cyNorm }
+    })
+    .filter((c) => c.bw >= 8 && c.bw <= 60 && c.bh >= 8 && c.bh <= 60)
+    .filter((c) => c.aspect > 0.55 && c.aspect < 1.8)
+    .filter((c) => c.fillRatio > 0.22 && c.fillRatio < 0.75)
+    .filter((c) => Math.hypot(c.x - yardCenter.x, c.y - yardCenter.y) > yardRadiusNorm * 1.6)
+    .filter((c) => {
+      const toX = c.x - yardCenter.x, toY = c.y - yardCenter.y
+      const toMag = Math.hypot(toX, toY) || 1
+      return (outX * toX + outY * toY) / (outMag * toMag) > 0.3
+    })
+    .sort((a, b) => b.count - a.count)
+
+  return candidates[0] ? { x: candidates[0].x, y: candidates[0].y } : null
 }
 
 // The track band sits well outside the yards, near the board edges. Measure its real radius by
@@ -548,7 +664,7 @@ function isGoldDivider(h, s, v) {
 // and finds every real gold divider line it actually crosses, using the midpoint between
 // consecutive crossings as that square's true center - i.e. it measures the real squares directly
 // instead of estimating a count.
-function extractRealSquares(hiResPixels, rawTrace) {
+function extractRealSquares(hiResPixels, rawTrace, yardCenters, yardRadiusNorm) {
   const { data, width, height, channels } = hiResPixels
   function sampleGold(nx, ny) {
     const x = Math.max(0, Math.min(width - 1, Math.round(nx * (width - 1))))
@@ -570,7 +686,18 @@ function extractRealSquares(hiResPixels, rawTrace) {
     }
   }
   const total = fine.length
-  const goldFlags = fine.map(([x, y]) => sampleGold(x, y))
+  // A straight chord between two valid (outside-yard) raw trace points can still cut through a
+  // yard's excluded disc if the yard bulges between them - and a yard's own decorations (pip-hole
+  // rings, outer border) are gold, so that chord would wrongly register real divider crossings
+  // inside the yard. Force every fine sample inside any yard to read as "not gold" unconditionally.
+  // Tight enough to exclude only the yard's own decorations (pip-holes, outer border ring), not so
+  // wide that it also swallows real track squares just outside the yard whose connecting chord
+  // happens to pass nearby (that used to create real gaps in coverage right where the path curves
+  // tightly around a yard).
+  const goldFlags = fine.map(([x, y]) => {
+    if (yardCenters.some((yc) => Math.hypot(x - yc.x, y - yc.y) < yardRadiusNorm * 1.05)) return false
+    return sampleGold(x, y)
+  })
 
   const crossingCenters = []
   let i = 0
@@ -633,7 +760,7 @@ function extractRealSquares(hiResPixels, rawTrace) {
   return merged
 }
 
-function buildBoardDefinition(playerCount, laneColors, yardCenters, trackOuterRadius, tracedLoop, log) {
+function buildBoardDefinition(playerCount, laneColors, yardCenters, trackOuterRadius, tracedLoop, entryStars, log) {
   const cx = yardCenters.reduce((s, p) => s + p.x, 0) / yardCenters.length
   const cy = yardCenters.reduce((s, p) => s + p.y, 0) / yardCenters.length
 
@@ -702,7 +829,27 @@ function buildBoardDefinition(playerCount, laneColors, yardCenters, trackOuterRa
 
   const playerLanes = withAngles.map((lane) => {
     const homeEntranceTrackIndex = getHomeEntranceIndex(lane)
-    const entryTrackIndex = (homeEntranceTrackIndex + 1) % trackLength
+
+    // The board art marks each lane's real entry square with a gold star - use it directly
+    // instead of assuming entry sits right next to home-entrance (the two are usually different
+    // physical spokes: the short yard connector vs. the long home-stretch corridor).
+    const star = entryStars[lane.color]
+    let entryTrackIndex = (homeEntranceTrackIndex + 1) % trackLength
+    if (star) {
+      let bestIdx = 0
+      let bestDist = Infinity
+      trackWaypoints.forEach(([x, y], i) => {
+        const d = Math.hypot(x - star.x, y - star.y)
+        if (d < bestDist) {
+          bestDist = d
+          bestIdx = i
+        }
+      })
+      // If the nearest waypoint is still far away, a coverage gap likely left nothing real near
+      // the star - snapping anyway would land the entry on a distant, unrelated square, worse than
+      // the angle-based guess.
+      if (bestDist < 0.05) entryTrackIndex = bestIdx
+    }
     const [ringJunctionX, ringJunctionY] = trackWaypoints[homeEntranceTrackIndex]
 
     // Prefer the actually-fitted pip holes (see findYardHoles) so pieces sit exactly in the real
@@ -776,6 +923,15 @@ async function main() {
     const hubY = yardCenters.reduce((s, p) => s + p.y, 0) / yardCenters.length
     const trackOuterRadius = findTrackOuterRadius(pixels, laneColors, hubX, hubY, yardCenters, 0.06)
 
+    const entryStars = {}
+    for (let i = 0; i < laneColors.length; i++) {
+      const star = findEntryStar(hiResPixels, yardCenters[i], hubX, hubY, 0.06)
+      if (!star) {
+        console.warn(`  [board_${playerCount}p] ${laneColors[i]}: entry star not found - falling back to angle-based entry`)
+      }
+      entryStars[laneColors[i]] = star
+    }
+
     // Two different tracing strategies, each with a different failure mode: the walk can get
     // confused at tight pinch points but handles non-star-convex shapes; polar sampling can't
     // represent a shape that loops back on itself but never gets confused on one that doesn't.
@@ -807,7 +963,7 @@ async function main() {
     // if polar didn't find enough of the ring to be usable.
     const squareSource = polar.length >= 30 ? polar : walked
     const dividerPixels = await loadPixels(imagePath, 1100) // thin gold divider lines need this much resolution to survive JPEG compression
-    const realSquares = extractRealSquares(dividerPixels, squareSource)
+    const realSquares = extractRealSquares(dividerPixels, squareSource, yardCenters, 0.06)
 
     if (realSquares.length >= playerCount * 8) {
       tracedLoop = realSquares
@@ -821,7 +977,7 @@ async function main() {
       }
     }
 
-    definitions[playerCount] = buildBoardDefinition(playerCount, laneColors, yardCenters, trackOuterRadius, tracedLoop, console.warn)
+    definitions[playerCount] = buildBoardDefinition(playerCount, laneColors, yardCenters, trackOuterRadius, tracedLoop, entryStars, console.warn)
   }
 
   writeFileSync(path.join(ROOT, 'src', 'data', 'generated-boards.json'), JSON.stringify(definitions, null, 2))
