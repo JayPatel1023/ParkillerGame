@@ -536,6 +536,103 @@ function resampleClosedLoop(points, targetCount) {
   return resampled
 }
 
+function isGoldDivider(h, s, v) {
+  return s >= 0.3 && v >= 0.3 && h >= 40 && h <= 64
+}
+
+// The traced loop (walked/polar) is dense enough to trace accurately but doesn't correspond 1:1
+// to real drawn squares - arc-length resampling to a guessed count (the old approach) distributes
+// points evenly along the CURVE, not evenly across real squares, so it undercounts wherever the
+// art draws squares more densely than the curve's average (see generatedBoards.test.ts history).
+// This instead walks the traced loop's own path (a reliable route/shape guide) at fine resolution
+// and finds every real gold divider line it actually crosses, using the midpoint between
+// consecutive crossings as that square's true center - i.e. it measures the real squares directly
+// instead of estimating a count.
+function extractRealSquares(hiResPixels, rawTrace) {
+  const { data, width, height, channels } = hiResPixels
+  function sampleGold(nx, ny) {
+    const x = Math.max(0, Math.min(width - 1, Math.round(nx * (width - 1))))
+    const y = Math.max(0, Math.min(height - 1, Math.round(ny * (height - 1))))
+    const idx = (y * width + x) * channels
+    const [h, s, v] = rgbToHsv(data[idx], data[idx + 1], data[idx + 2])
+    return isGoldDivider(h, s, v)
+  }
+
+  const UPSAMPLE = 10
+  const fine = []
+  const n = rawTrace.length
+  for (let i = 0; i < n; i++) {
+    const a = rawTrace[i]
+    const b = rawTrace[(i + 1) % n]
+    for (let s = 0; s < UPSAMPLE; s++) {
+      const t = s / UPSAMPLE
+      fine.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t])
+    }
+  }
+  const total = fine.length
+  const goldFlags = fine.map(([x, y]) => sampleGold(x, y))
+
+  const crossingCenters = []
+  let i = 0
+  let loops = 0
+  while (i < total && loops < total * 2) {
+    if (goldFlags[i % total]) {
+      let j = i
+      let count = 0
+      while (goldFlags[j % total] && count < total) {
+        j++
+        count++
+      }
+      crossingCenters.push(Math.floor((i + (j - 1)) / 2) % total)
+      i = j
+    } else {
+      i++
+    }
+    loops++
+  }
+
+  const rawSquares = []
+  for (let k = 0; k < crossingCenters.length; k++) {
+    const startIdx = crossingCenters[k]
+    const endIdx = crossingCenters[(k + 1) % crossingCenters.length]
+    const span = endIdx > startIdx ? endIdx - startIdx : total - startIdx + endIdx
+    if (span < 2) continue // adjacent crossings with nothing between - a double-detect, skip
+    const midFineIdx = (startIdx + Math.floor(span / 2)) % total
+    rawSquares.push(fine[midFineIdx])
+  }
+  if (rawSquares.length < 8) return []
+
+  // Sharp corners/junctions can make the sweep graze the same real square from several adjacent
+  // angles, producing a burst of spurious extra crossings very close together. Merge any run of
+  // centroids closer together than a fraction of the typical spacing into one.
+  const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1])
+  const spacings = rawSquares.map((c, idx) => dist(c, rawSquares[(idx + 1) % rawSquares.length]))
+  const sortedSpacings = [...spacings].sort((a, b) => a - b)
+  const medianSpacing = sortedSpacings[Math.floor(sortedSpacings.length / 2)]
+  const mergeThreshold = medianSpacing * 0.6
+
+  const merged = []
+  let bucket = [rawSquares[0]]
+  for (let k = 1; k < rawSquares.length; k++) {
+    const prev = bucket[bucket.length - 1]
+    const cur = rawSquares[k]
+    if (dist(prev, cur) < mergeThreshold) {
+      bucket.push(cur)
+    } else {
+      merged.push([bucket.reduce((s, p) => s + p[0], 0) / bucket.length, bucket.reduce((s, p) => s + p[1], 0) / bucket.length])
+      bucket = [cur]
+    }
+  }
+  merged.push([bucket.reduce((s, p) => s + p[0], 0) / bucket.length, bucket.reduce((s, p) => s + p[1], 0) / bucket.length])
+  if (merged.length > 1 && dist(merged[0], merged[merged.length - 1]) < mergeThreshold) {
+    const a = merged.shift()
+    const b = merged.pop()
+    merged.push([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2])
+  }
+
+  return merged
+}
+
 function buildBoardDefinition(playerCount, laneColors, yardCenters, trackOuterRadius, tracedLoop, log) {
   const cx = yardCenters.reduce((s, p) => s + p.x, 0) / yardCenters.length
   const cy = yardCenters.reduce((s, p) => s + p.y, 0) / yardCenters.length
@@ -702,10 +799,26 @@ async function main() {
       `-> using ${walkedScore <= polarScore ? 'walked' : 'polar'}`,
     )
 
-    if (tracedLoop.length >= 8) {
-      const targetCount = playerCount * SQUARES_PER_ARM
-      tracedLoop = resampleClosedLoop(tracedLoop, targetCount)
-      console.log(`  resampled to ${targetCount} squares (${SQUARES_PER_ARM} per arm)`)
+    // Polar sampling can't self-overlap (angle-ordered by construction), so it's the reliable
+    // source for measuring real squares even on boards where the walk scores better on gap-ratio
+    // alone - the walk's grid-cell collapse can double back over itself on some board shapes
+    // (confirmed on the 2-player board: it revisited the same real squares twice), which gap-ratio
+    // doesn't detect but divider-crossing counting would double-count. Only fall back to the walk
+    // if polar didn't find enough of the ring to be usable.
+    const squareSource = polar.length >= 30 ? polar : walked
+    const dividerPixels = await loadPixels(imagePath, 1100) // thin gold divider lines need this much resolution to survive JPEG compression
+    const realSquares = extractRealSquares(dividerPixels, squareSource)
+
+    if (realSquares.length >= playerCount * 8) {
+      tracedLoop = realSquares
+      console.log(`  measured ${realSquares.length} real squares directly from the board art`)
+    } else {
+      console.warn(`  [board_${playerCount}p] divider extraction found too few squares (${realSquares.length}) - falling back to estimated resampling`)
+      if (tracedLoop.length >= 8) {
+        const targetCount = playerCount * SQUARES_PER_ARM
+        tracedLoop = resampleClosedLoop(tracedLoop, targetCount)
+        console.log(`  resampled to ${targetCount} squares (${SQUARES_PER_ARM} per arm)`)
+      }
     }
 
     definitions[playerCount] = buildBoardDefinition(playerCount, laneColors, yardCenters, trackOuterRadius, tracedLoop, console.warn)
