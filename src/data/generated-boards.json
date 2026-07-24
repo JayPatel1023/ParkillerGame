@@ -100,20 +100,12 @@
         0.808
       ],
       [
-        0.267,
-        0.719
+        0.334,
+        0.62
       ],
       [
-        0.337,
-        0.631
-      ],
-      [
-        0.31,
-        0.587
-      ],
-      [
-        0.198,
-        0.607
+        0.309,
+        0.586
       ],
       [
         0.123,
@@ -265,38 +257,38 @@
       ]
     ],
     "safeTrackIndices": [
-      28,
-      58
+      26,
+      56
     ],
     "playerLanes": [
       {
         "color": "Red",
-        "entryTrackIndex": 28,
-        "homeEntranceTrackIndex": 25,
+        "entryTrackIndex": 26,
+        "homeEntranceTrackIndex": 24,
         "homeCorridorWaypoints": [
           [
-            0.36,
-            0.61
+            0.357,
+            0.601
           ],
           [
-            0.383,
-            0.589
+            0.381,
+            0.581
           ],
           [
-            0.406,
-            0.568
+            0.404,
+            0.562
           ],
           [
-            0.428,
-            0.547
+            0.427,
+            0.543
           ],
           [
-            0.451,
-            0.526
+            0.45,
+            0.523
           ],
           [
             0.474,
-            0.505
+            0.504
           ]
         ],
         "yardWaypoints": [
@@ -320,8 +312,8 @@
       },
       {
         "color": "Blue",
-        "entryTrackIndex": 58,
-        "homeEntranceTrackIndex": 56,
+        "entryTrackIndex": 56,
+        "homeEntranceTrackIndex": 54,
         "homeCorridorWaypoints": [
           [
             0.806,

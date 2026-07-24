@@ -690,12 +690,12 @@ function extractRealSquares(hiResPixels, rawTrace, yardCenters, yardRadiusNorm) 
   // yard's excluded disc if the yard bulges between them - and a yard's own decorations (pip-hole
   // rings, outer border) are gold, so that chord would wrongly register real divider crossings
   // inside the yard. Force every fine sample inside any yard to read as "not gold" unconditionally.
-  // Tight enough to exclude only the yard's own decorations (pip-holes, outer border ring), not so
-  // wide that it also swallows real track squares just outside the yard whose connecting chord
-  // happens to pass nearby (that used to create real gaps in coverage right where the path curves
-  // tightly around a yard).
+  // A tighter radius here was tried (to stop swallowing real squares just outside the yard whose
+  // chord passes nearby) but let the yard's own outer border ring leak through as false crossings
+  // instead - visually worse (pieces landing inside a yard) than the coverage gap it was meant to
+  // fix, so this stays at the wider, fully-verified radius.
   const goldFlags = fine.map(([x, y]) => {
-    if (yardCenters.some((yc) => Math.hypot(x - yc.x, y - yc.y) < yardRadiusNorm * 1.05)) return false
+    if (yardCenters.some((yc) => Math.hypot(x - yc.x, y - yc.y) < yardRadiusNorm * 1.4)) return false
     return sampleGold(x, y)
   })
 
@@ -757,7 +757,10 @@ function extractRealSquares(hiResPixels, rawTrace, yardCenters, yardRadiusNorm) 
     merged.push([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2])
   }
 
-  return merged
+  // Safety net: a single spurious crossing can still occasionally slip through right where a
+  // gap forces a long chord past a yard, landing a "square" inside the yard itself - drop any
+  // survivor like that outright rather than let a piece ever render inside a yard's own disc.
+  return merged.filter((p) => !yardCenters.some((yc) => Math.hypot(p[0] - yc.x, p[1] - yc.y) < yardRadiusNorm * 1.3))
 }
 
 function buildBoardDefinition(playerCount, laneColors, yardCenters, trackOuterRadius, tracedLoop, entryStars, log) {
@@ -961,7 +964,8 @@ async function main() {
     // (confirmed on the 2-player board: it revisited the same real squares twice), which gap-ratio
     // doesn't detect but divider-crossing counting would double-count. Only fall back to the walk
     // if polar didn't find enough of the ring to be usable.
-    const squareSource = polar.length >= 30 ? polar : walked
+    const primaryIsPolar = polar.length >= 30
+    const squareSource = primaryIsPolar ? polar : walked
     const dividerPixels = await loadPixels(imagePath, 1100) // thin gold divider lines need this much resolution to survive JPEG compression
     const realSquares = extractRealSquares(dividerPixels, squareSource, yardCenters, 0.06)
 
