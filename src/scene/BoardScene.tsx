@@ -10,31 +10,21 @@ import { BoardMesh } from './BoardMesh'
 import { PieceMesh } from './PieceMesh'
 import { DiceMesh } from './DiceMesh'
 import { getHopWaypoints, getPieceWaypoint } from './piecePosition'
-import { toWorldPosition, estimateSquareSize } from './boardGeometry'
+import { toWorldPosition } from './boardGeometry'
 
 const INTRO_STAGGER = 0.09 // seconds between each piece's drop-in entrance, for a cascading effect
 
 // When multiple pieces land on the same square, they'd otherwise render fully overlapping and
 // look like a single piece (or like a piece vanished/jumped oddly when one splits off to move).
 // Spread them into a small tight cluster instead, same visual language as the yard's 4 slots.
-// Defined as fractions of the board's own square size (not fixed world units) - a 6-player board
-// packs in noticeably smaller squares than a 2-player one, and a fixed offset that looked right on
-// one spilled pieces into neighboring squares on the other.
-const STACK_OFFSET_FRACTIONS: [number, number][] = [
+const STACK_OFFSETS: [number, number][] = [
   [0, 0],
-  [-0.4, -0.4],
-  [0.4, -0.4],
-  [-0.4, 0.4],
-  [0.4, 0.4],
-  [0, -0.55],
+  [-0.11, -0.11],
+  [0.11, -0.11],
+  [-0.11, 0.11],
+  [0.11, 0.11],
+  [0, -0.16],
 ]
-
-// Two pieces sharing a square (the common "barrier" case) need to both actually fit inside that
-// square rather than just being pushed apart - shrink on boards with smaller squares so they
-// don't visually spill past the square's edges or crowd into each other. 0.15 is deliberately
-// higher than a single piece's own reference size, so a stacked pair shrinks a bit even on the
-// biggest-squared board rather than only kicking in on the denser ones.
-const PIECE_SCALE_REFERENCE_SQUARE = 0.15
 
 function stackKeyFor(piece: Piece): string | null {
   if (piece.state === 'OnTrack') return `track-${piece.trackPosition}`
@@ -67,8 +57,6 @@ export function BoardScene({
 }: BoardSceneProps) {
   const selectablePieces = new Set(pendingMoves.map((m) => m.piece))
   const allPieces = players.flatMap((player) => player.pieces)
-  const squareSize = estimateSquareSize(definition.trackWaypoints)
-  const stackedPieceScale = Math.min(1, squareSize / PIECE_SCALE_REFERENCE_SQUARE)
 
   const stackGroups = new Map<string, Piece[]>()
   for (const piece of allPieces) {
@@ -94,11 +82,10 @@ export function BoardScene({
         const stackKey = stackKeyFor(piece)
         const group = stackKey ? stackGroups.get(stackKey) : undefined
         const restPosition: [number, number, number] = worldPos
-        const isStacked = !!group && group.length > 1
-        if (isStacked) {
-          const [fx, fz] = STACK_OFFSET_FRACTIONS[group!.indexOf(piece) % STACK_OFFSET_FRACTIONS.length]
-          restPosition[0] += fx * squareSize
-          restPosition[2] += fz * squareSize
+        if (group && group.length > 1) {
+          const [ox, oz] = STACK_OFFSETS[group.indexOf(piece) % STACK_OFFSETS.length]
+          restPosition[0] += ox
+          restPosition[2] += oz
         }
         const isAnimating = moveAnimation?.piece === piece
         let hopFrom: [number, number, number] | null = null
@@ -128,7 +115,6 @@ export function BoardScene({
             introDelay={index * INTRO_STAGGER}
             selectable={selectablePieces.has(piece)}
             onSelect={onSelectPiece}
-            scale={isStacked ? stackedPieceScale : 1}
           />
         )
       })}
