@@ -1,10 +1,26 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import type { Mesh } from 'three'
+import type { Group } from 'three'
 import { getColor } from '../core/colorPalette'
 import type { Piece } from '../core/pieces/piece'
 import { BASE_HEIGHT } from './boardGeometry'
+
+// Profile (revolved around the Y axis) for the robe: wide hem at the bottom, narrowing up to the
+// shoulders, matching the reference figurines (a cloaked, hooded figure) instead of a plain cone.
+// Radius/height kept close to the old cone's footprint (0.065 base) so it still sits correctly in
+// a yard slot and a track square - see scripts/generate-waypoints.mjs findYardHoles.
+const ROBE_PROFILE = [
+  new THREE.Vector2(0, 0),
+  new THREE.Vector2(0.065, 0),
+  new THREE.Vector2(0.062, 0.018),
+  new THREE.Vector2(0.05, 0.055),
+  new THREE.Vector2(0.036, 0.09),
+  new THREE.Vector2(0.03, 0.1),
+  new THREE.Vector2(0, 0.1),
+]
+const HOOD_RADIUS = 0.036
+const HOOD_HEIGHT = 0.058
 
 const HOP_DURATION = 0.32 // seconds per square hopped - slow enough that each step reads clearly
 const BOUNCE_HEIGHT = 0.24 // world units, how high each hop arcs - a more emphatic, visible bounce
@@ -52,13 +68,16 @@ interface PieceMeshProps {
   introDelay: number
   selectable: boolean
   onSelect: (piece: Piece) => void
+  /** Shrinks a piece that's sharing a square with another (e.g. a barrier) so both actually fit
+   * inside the square instead of spilling past its edges - see BoardScene's stackedPieceScale. */
+  scale?: number
 }
 
 // Renders as a small bouncing cone (pawn-like) rather than a flat token: at board scale a flat
 // disc barely shows how far it travelled between rolls, but a shape that visibly arcs once per
 // square makes the step count countable at a glance.
-export function PieceMesh({ piece, restPosition, hopFrom, hops, onHopsComplete, introDelay, selectable, onSelect }: PieceMeshProps) {
-  const meshRef = useRef<Mesh>(null)
+export function PieceMesh({ piece, restPosition, hopFrom, hops, onHopsComplete, introDelay, selectable, onSelect, scale = 1 }: PieceMeshProps) {
+  const meshRef = useRef<Group>(null)
   const hopIndexRef = useRef(0)
   const elapsedRef = useRef(0)
   const notifiedRef = useRef(true)
@@ -122,27 +141,33 @@ export function PieceMesh({ piece, restPosition, hopFrom, hops, onHopsComplete, 
     }
   })
 
+  const robeGeometry = useMemo(() => new THREE.LatheGeometry(ROBE_PROFILE, 24), [])
+  const color = getColor(piece.color)
+  const emissive = selectable ? color : '#000000'
+  const emissiveIntensity = selectable ? 0.5 : 0
+
   return (
-    <mesh
+    <group
       ref={meshRef}
       position={restPosition}
-      castShadow
       onClick={(e) => {
         if (!selectable) return
         e.stopPropagation()
         onSelect(piece)
       }}
-      scale={selectable ? 1.3 : 1}
+      scale={(selectable ? 1.3 : 1) * scale}
     >
-      {/* Radius/height sized to ~77% of the measured average yard-slot diameter across all
-          boards (0.065 world-unit radius against a ~0.168 slot diameter) - see
+      {/* A small cloaked, hooded figure (robe + pointed hood) matching the physical figurines,
+          rather than a plain cone. Footprint kept close to the old cone's (0.065 base radius) so
+          it still sits correctly in a yard slot and a track square - see
           scripts/generate-waypoints.mjs findYardHoles, run with DEBUG_HOLES=1 to re-measure. */}
-      <coneGeometry args={[0.065, 0.14, 24]} />
-      <meshStandardMaterial
-        color={getColor(piece.color)}
-        emissive={selectable ? getColor(piece.color) : '#000000'}
-        emissiveIntensity={selectable ? 0.5 : 0}
-      />
-    </mesh>
+      <mesh geometry={robeGeometry} castShadow>
+        <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={emissiveIntensity} />
+      </mesh>
+      <mesh position={[0, 0.1, 0]} castShadow>
+        <coneGeometry args={[HOOD_RADIUS, HOOD_HEIGHT, 20]} />
+        <meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={emissiveIntensity} />
+      </mesh>
+    </group>
   )
 }
