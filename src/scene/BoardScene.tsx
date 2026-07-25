@@ -9,8 +9,10 @@ import type { MoveAnimationRequest } from '../hooks/useTurnManager'
 import { BoardMesh } from './BoardMesh'
 import { PieceMesh } from './PieceMesh'
 import { DiceMesh } from './DiceMesh'
+import { TrackTile } from './TrackTile'
+import { useBoardColorSampler } from './useBoardColorSampler'
 import { getHopWaypoints, getPieceWaypoint } from './piecePosition'
-import { toWorldPosition } from './boardGeometry'
+import { toWorldPosition, estimateSquareSize, computeTileCorners } from './boardGeometry'
 
 const INTRO_STAGGER = 0.09 // seconds between each piece's drop-in entrance, for a cascading effect
 
@@ -57,6 +59,8 @@ export function BoardScene({
 }: BoardSceneProps) {
   const selectablePieces = new Set(pendingMoves.map((m) => m.piece))
   const allPieces = players.flatMap((player) => player.pieces)
+  const sampleColor = useBoardColorSampler(definition.boardImage)
+  const tileSize = estimateSquareSize(definition.trackWaypoints)
 
   const stackGroups = new Map<string, Piece[]>()
   for (const piece of allPieces) {
@@ -72,6 +76,28 @@ export function BoardScene({
       <directionalLight position={[4, 8, 2]} intensity={1.1} castShadow />
       <Suspense fallback={null}>
         <BoardMesh imageUrl={definition.boardImage} />
+      </Suspense>
+
+      {/* Prototype: each track square rendered as its own repeatable tile, cropped directly from a
+          real square on the delivered board art (see public/tiles/), positioned/rotated from the
+          real measured waypoints, and tinted per-square by sampling that exact spot's real pixel
+          color from the board art - rather than relying on the flat background image to show the
+          squares. Overlaid on top of BoardMesh for comparison. */}
+      <Suspense fallback={null}>
+        {sampleColor &&
+          (() => {
+            const worldPoints: [number, number][] = definition.trackWaypoints.map((wp) => {
+              const w = toWorldPosition(wp)
+              return [w[0], w[2]]
+            })
+            return definition.trackWaypoints.map((wp, i) => (
+              <TrackTile
+                key={`tile-${i}`}
+                corners={computeTileCorners(worldPoints, i, tileSize / 2)}
+                color={sampleColor(wp[0], wp[1])}
+              />
+            ))
+          })()}
       </Suspense>
 
       {allPieces.map((piece, index) => {
