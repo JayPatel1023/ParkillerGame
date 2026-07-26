@@ -3,9 +3,10 @@ import { Canvas } from '@react-three/fiber'
 import { OrbitControls, useTexture } from '@react-three/drei'
 
 // Isolated preview of exactly one track-square component, cropped from the square the client
-// marked in red on the 5-player board. Nothing else is rendered - no board, no other tiles, no
-// pieces - so this one piece can be checked and approved on its own before building/placing any
-// more. Reached via #component in the URL (see App.tsx).
+// marked in red on the 3-player board (the red-lane square on the upper-left curve). Nothing
+// else is rendered - no board, no other tiles, no pieces - so this one piece can be checked and
+// approved on its own before building/placing any more. Reached via #component in the URL (see
+// App.tsx).
 interface TileComponentProps {
   /** Degrees - rotates the tile in-plane, for matching it to a spot along the path's curve. */
   angle: number
@@ -14,8 +15,8 @@ interface TileComponentProps {
 }
 
 function TileComponent({ angle, color }: TileComponentProps) {
-  const fillTexture = useTexture('/tiles/component2-fill.png')
-  const borderTexture = useTexture('/tiles/component2-border.png')
+  const fillTexture = useTexture('/tiles/component3-fill.png')
+  const borderTexture = useTexture('/tiles/component3-border.png')
 
   return (
     <group rotation={[-Math.PI / 2, 0, (angle * Math.PI) / 180]}>
@@ -42,7 +43,7 @@ const COLOR_PRESETS: Record<string, string> = {
 
 export default function ComponentPreview() {
   const [angle, setAngle] = useState(0)
-  const [color, setColor] = useState(COLOR_PRESETS.Blue)
+  const [color, setColor] = useState(COLOR_PRESETS.Red)
 
   return (
     <div style={{ height: '100vh', background: '#1a1a1a', position: 'relative' }}>
