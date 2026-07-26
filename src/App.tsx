@@ -5,6 +5,7 @@ import { GameBoardScreen } from './ui/GameBoardScreen'
 import { PlayerCountSelector } from './ui/PlayerCountSelector'
 import { StartScreen } from './ui/StartScreen'
 import WaypointEditor from './tools/WaypointEditor'
+import ComponentPreview from './tools/ComponentPreview'
 
 const DEFAULT_COLOR_ORDER: PieceColor[] = ['Red', 'Blue', 'Gold', 'Green', 'Purple', 'Orange']
 
@@ -17,6 +18,11 @@ export default function App() {
   // Dev-only route: open with #editor to trace board waypoints. See src/tools/WaypointEditor.tsx.
   if (window.location.hash === '#editor') {
     return <WaypointEditor />
+  }
+  // Dev-only route: open with #component to inspect a single track-square component in
+  // isolation, with nothing else rendered. See src/tools/ComponentPreview.tsx.
+  if (window.location.hash === '#component') {
+    return <ComponentPreview />
   }
 
   return (
