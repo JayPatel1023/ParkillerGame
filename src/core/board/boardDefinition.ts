@@ -11,6 +11,8 @@ export interface PlayerLane {
   homeCorridorWaypoints: [number, number][]
   /** The 4 waiting slots inside this color's yard circle. */
   yardWaypoints: [number, number][]
+  /** The yard circle itself (not a waypoint players move through) - measured from the art so it can be drawn without the background image. */
+  yardVisual: { center: [number, number]; radius: number; holeRadius: number }
 }
 
 // One definition per board variant (2p-6p). Waypoints are normalized [0..1] coordinates over the
@@ -24,6 +26,10 @@ export interface BoardDefinition {
   /** Track indices safe from capture - usually each lane's entry square, marked with a star on the art. */
   safeTrackIndices: number[]
   playerLanes: PlayerLane[]
+  /** The center pie-wedge circle (purely decorative, not a waypoint) - measured from the art so it can be drawn without the background image. */
+  hubVisual: { center: [number, number]; radius: number }
+  /** The board's flat background fill color, measured from the art. */
+  backgroundColor: string
 }
 
 export function toBoardData(definition: BoardDefinition): BoardData {
