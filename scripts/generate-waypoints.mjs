@@ -82,6 +82,44 @@ const YARD_CENTER_OVERRIDES = {
   '6-Gold': { x: 0.494, y: 0.218 },
 }
 
+// Measured directly from board_2p.jpg via connected-component labeling on the gold pixel mask
+// (isolates each of the 4 pip-hole rings as its own component, distinct from the much larger
+// outer-boundary-ring and connector-strip components) rather than the general density/circle-fit
+// approach, which - confirmed by comparing its output against these same real pixels - was landing
+// consistently off (0.01-0.03 normalized units) for this board's yards specifically. Component
+// pixel counts for all 4 holes were within 5% of each other (Red: 826-863, Blue: 911-938),
+// confirming clean, unambiguous isolation rather than a partial/contaminated match.
+// holeRadiusNorm is also measured directly, not guessed: half of each component's own bounding-box
+// width/height, averaged across that lane's 4 holes (Red bounding boxes ~0.0321-0.0336, Blue
+// ~0.0336-0.0350).
+const YARD_HOLES_OVERRIDES = {
+  '2-Red': {
+    holes: [
+      [0.2732, 0.6455],
+      [0.3285, 0.6439],
+      [0.2754, 0.6998],
+      [0.3304, 0.6984],
+    ],
+    holeRadiusNorm: 0.0165,
+  },
+  '2-Blue': {
+    holes: [
+      [0.6571, 0.2525],
+      [0.7128, 0.2517],
+      [0.6588, 0.3071],
+      [0.7146, 0.3061],
+    ],
+    holeRadiusNorm: 0.0173,
+  },
+}
+
+// Same measurement pass as YARD_HOLES_OVERRIDES, for the entry star icon - verified by cropping the
+// exact coordinate and visually confirming the 4-point star sits there.
+const ENTRY_STAR_OVERRIDES = {
+  '2-Red': { x: 0.1281, y: 0.6703 },
+  '2-Blue': { x: 0.8591, y: 0.2954 },
+}
+
 function findYardCenter(pixels, color, playerCount) {
   const { data, width, height, channels } = pixels
   const innerRadius = Math.round(width * 0.06)
@@ -240,7 +278,12 @@ function findYardRadius(pixels, center, color) {
 // mathematically guarantees the 4 results are exactly evenly spaced with no possibility of
 // overlap - it's a fit, not a per-hole guess. Uses a higher-resolution pixel buffer than the rest
 // of the pipeline since these rings are thin enough to wash out at the main analysis resolution.
-function findYardHoles(pixels, yardCenter, yardRadiusNorm) {
+function findYardHoles(pixels, yardCenter, yardRadiusNorm, overrideKey) {
+  const override = overrideKey && YARD_HOLES_OVERRIDES[overrideKey]
+  if (override) {
+    return { holes: override.holes.map((p) => point(p[0], p[1])), holeRadiusNorm: override.holeRadiusNorm }
+  }
+
   const { data, width, height, channels } = pixels
   const searchR = yardRadiusNorm * 1.5 // generous - tolerates yardCenter being an imperfect estimate
   const innerHoleBand = yardRadiusNorm * 0.82 // exclude the yard's own outer boundary ring
@@ -352,7 +395,10 @@ function findYardHoles(pixels, yardCenter, yardRadiusNorm) {
 // yard, filtered out by requiring the candidate be well outside the yard's own radius). It's also
 // reliably positioned "outward" from the hub through the yard, which discriminates it from the
 // hub's own center decoration and from other lanes' stars caught in the same search window.
-function findEntryStar(hiResPixels, yardCenter, hubX, hubY, yardRadiusNorm) {
+function findEntryStar(hiResPixels, yardCenter, hubX, hubY, yardRadiusNorm, overrideKey) {
+  const override = overrideKey && ENTRY_STAR_OVERRIDES[overrideKey]
+  if (override) return override
+
   const { data, width, height, channels } = hiResPixels
   function isGoldAt(x, y) {
     if (x < 0 || y < 0 || x >= width || y >= height) return false
@@ -1022,7 +1068,7 @@ async function main() {
       }
       center.radiusNorm = radiusFit?.radiusNorm ?? 0.06
       if (process.env.DEBUG_HOLES) console.error(`  ${playerCount}p ${color}: radiusNorm=${center.radiusNorm.toFixed(4)} recenteredTo=(${center.x.toFixed(4)},${center.y.toFixed(4)})`)
-      const fit = findYardHoles(hiResPixels, center, center.radiusNorm)
+      const fit = findYardHoles(hiResPixels, center, center.radiusNorm, `${playerCount}-${color}`)
       if (!fit) {
         console.warn(`  [board_${playerCount}p] ${color} yard: not enough pip-hole signal - using synthetic grid`)
       }
@@ -1042,7 +1088,7 @@ async function main() {
 
     const entryStars = {}
     for (let i = 0; i < laneColors.length; i++) {
-      const star = findEntryStar(hiResPixels, yardCenters[i], hubX, hubY, yardCenters[i].radiusNorm)
+      const star = findEntryStar(hiResPixels, yardCenters[i], hubX, hubY, yardCenters[i].radiusNorm, `${playerCount}-${laneColors[i]}`)
       if (!star) {
         console.warn(`  [board_${playerCount}p] ${laneColors[i]}: entry star not found - falling back to angle-based entry`)
       }
