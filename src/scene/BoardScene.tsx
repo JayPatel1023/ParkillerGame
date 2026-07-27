@@ -1,6 +1,6 @@
 import { Suspense } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { OrbitControls } from '@react-three/drei'
+import { OrbitControls, OrthographicCamera } from '@react-three/drei'
 import type { BoardDefinition } from '../core/board/boardDefinition'
 import type { PlayerState } from '../core/gameFlow/playerState'
 import type { MoveOption } from '../core/rules/moveOption'
@@ -71,7 +71,18 @@ export function BoardScene({
   }
 
   return (
-    <Canvas shadows camera={{ position: [0, 7, 5], fov: 40 }}>
+    <Canvas shadows>
+      {/* Orthographic, exactly vertically overhead instead of the earlier angled perspective
+          camera: a piece sits at some height above the flat board (BASE_HEIGHT + its own
+          bounce/geometry), and under a perspective camera an elevated object visibly shifts away
+          from its true ground position - confirmed directly, pieces were rendering offset from
+          their own yard holes. An orthographic camera removes that parallax, but only if it's
+          truly vertical - an earlier version nudged position.z off zero to dodge the lookAt
+          up-vector singularity, and that small remaining tilt still shifted elevated pieces
+          slightly (confirmed - the offset shrank but didn't fully disappear). Setting rotation
+          explicitly instead of relying on lookAt sidesteps the singularity without needing any
+          tilt at all, so position can stay exactly [0, 10, 0]. */}
+      <OrthographicCamera makeDefault position={[0, 10, 0]} rotation={[-Math.PI / 2, 0, 0]} zoom={145} near={0.1} far={50} />
       <ambientLight intensity={0.7} />
       <directionalLight position={[4, 8, 2]} intensity={1.1} castShadow />
       <Suspense fallback={null}>

@@ -168,6 +168,68 @@ function median(arr) {
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
 }
 
+// Yard radius varies by board (a 6-player board packs smaller yards than a 2-player one) and by
+// lane on the same board, but every downstream step that needs "how big is this yard" - hole
+// search window, track-tracing's yard-pixel exclusion, entry-star search - used one hardcoded 0.06
+// for all of them. Measuring the real radius directly (walk outward from center along many angles,
+// median distance where the lane color actually stops - median so the one direction the yard
+// connector extends further doesn't skew it) removes that as a shared source of error across all
+// of those steps at once, not just hole detection.
+// Sweeps outward from `fromCenter` along N angles and returns each direction's real edge point
+// (where the lane color actually stops), not just the distance - reused by findYardRadius both to
+// measure the radius and, separately, to re-center on the disc's own true shape.
+function sweepYardEdge(pixels, fromCenter, color) {
+  const { data, width, height, channels } = pixels
+  const cx = fromCenter.x * width
+  const cy = fromCenter.y * height
+  const startR = width * 0.02
+  const maxR = width * 0.16
+  const gapTolerance = Math.max(2, Math.round(width * 0.006))
+  const N = 72
+
+  const edgePoints = []
+  for (let k = 0; k < N; k++) {
+    const theta = (k / N) * 2 * Math.PI
+    let lastMatchR = 0
+    for (let r = startR; r <= maxR; r += 1) {
+      const x = Math.round(cx + Math.cos(theta) * r)
+      const y = Math.round(cy + Math.sin(theta) * r)
+      if (x < 0 || y < 0 || x >= width || y >= height) break
+      const idx = (y * width + x) * channels
+      const [h, s, v] = rgbToHsv(data[idx], data[idx + 1], data[idx + 2])
+      if (matchesColor(h, s, v, color)) {
+        lastMatchR = r
+      } else if (lastMatchR > 0 && r - lastMatchR > gapTolerance) {
+        break
+      }
+    }
+    if (lastMatchR > startR) edgePoints.push([(cx + Math.cos(theta) * lastMatchR) / width, (cy + Math.sin(theta) * lastMatchR) / height])
+  }
+  return edgePoints
+}
+
+// findYardCenter's color-density search can land measurably off the disc's true center - denser
+// internal regions (the pip-hole rings, a connector stub sharing the same lane color) pull a
+// density estimate toward themselves. Confirmed directly against real measured hole positions: a
+// fit built on the density center was off by 0.016-0.028 normalized units on one lane tested. The
+// disc's own OUTER EDGE is a fuller, more symmetric signal than internal density, so re-center on
+// the centroid of the measured edge (two rounds - each round's better center measures a cleaner
+// edge) before reporting the final radius.
+function findYardRadius(pixels, center, color) {
+  let refinedCenter = center
+  let edgePoints = null
+  for (let pass = 0; pass < 2; pass++) {
+    edgePoints = sweepYardEdge(pixels, refinedCenter, color)
+    if (edgePoints.length < 36) return pass === 0 ? null : { radiusNorm: null, center: refinedCenter }
+    refinedCenter = {
+      x: edgePoints.reduce((s, p) => s + p[0], 0) / edgePoints.length,
+      y: edgePoints.reduce((s, p) => s + p[1], 0) / edgePoints.length,
+    }
+  }
+  const radii = edgePoints.map((p) => Math.hypot(p[0] - refinedCenter.x, p[1] - refinedCenter.y))
+  return { radiusNorm: median(radii), center: refinedCenter }
+}
+
 // Each yard has 4 pip holes painted inside the colored disc, arranged with 4-fold rotational
 // symmetry around the yard's own center (true on every board observed), each outlined with a gold
 // ring. Treating each ring as an independent blob is fragile - anti-aliasing or a small art detail
@@ -216,15 +278,41 @@ function findYardHoles(pixels, yardCenter, yardRadiusNorm) {
   const radius = median(radii)
 
   // Fit the shared rotational offset of the 4-fold pattern via a circular mean at 4x frequency -
-  // the standard trick for finding the dominant orientation of n-fold symmetric point data.
+  // the standard trick for finding the dominant orientation of n-fold symmetric point data. Still
+  // used, but only for the rotation - forcing every point onto a perfect circle at one fitted
+  // radius around one fitted center (the original approach) turned out to be too sensitive to that
+  // center being slightly off (confirmed against real measured hole positions: the whole 4-hole
+  // pattern would shift together, off by 0.01-0.03 normalized units, whenever the center was off by
+  // that much - which the search window's own asymmetry around an imperfect yardCenter can cause).
   const angles = kept.map((p) => Math.atan2(p[1] - center[1], p[0] - center[0]))
   const sumSin = angles.reduce((s, a) => s + Math.sin(4 * a), 0)
   const sumCos = angles.reduce((s, a) => s + Math.cos(4 * a), 0)
   const offset = Math.atan2(sumSin, sumCos) / 4
 
-  const slotCenters = [0, 1, 2, 3].map((k) => {
-    const a = offset + (k * Math.PI) / 2
-    return [center[0] + Math.cos(a) * radius, center[1] + Math.sin(a) * radius]
+  // Un-rotate every point by the fitted offset so the 4 holes line up with the x/y axes, then split
+  // into quadrants by the rotated points' own bounding-box midpoint (not the circle-fit center) and
+  // average each quadrant directly - each hole's reported position is then just where its own real
+  // pixels actually are, self-correcting regardless of how far off the initial center estimate was.
+  const cosO = Math.cos(-offset), sinO = Math.sin(-offset)
+  const rotated = kept.map((p) => {
+    const dx = p[0] - center[0], dy = p[1] - center[1]
+    return [dx * cosO - dy * sinO, dx * sinO + dy * cosO]
+  })
+  const rxs = rotated.map((p) => p[0]), rys = rotated.map((p) => p[1])
+  const midX = (Math.min(...rxs) + Math.max(...rxs)) / 2
+  const midY = (Math.min(...rys) + Math.max(...rys)) / 2
+  const quadrants = [[], [], [], []] // ++, -+, --, +- (matches the k*90deg ordering below)
+  rotated.forEach(([rx, ry], i) => {
+    const right = rx >= midX, top = ry >= midY
+    const k = right && top ? 0 : !right && top ? 1 : !right && !top ? 2 : 3
+    quadrants[k].push(kept[i]) // average the ORIGINAL (un-rotated) points for the real answer
+  })
+  const slotCenters = quadrants.map((q, k) => {
+    if (q.length === 0) {
+      const a = offset + (k * Math.PI) / 2
+      return [center[0] + Math.cos(a) * radius, center[1] + Math.sin(a) * radius] // no signal - fall back to the circle fit for just this slot
+    }
+    return [q.reduce((s, p) => s + p[0], 0) / q.length, q.reduce((s, p) => s + p[1], 0) / q.length]
   })
 
   // Each individual hole's own radius (for sizing pieces): average distance from points to
@@ -273,7 +361,13 @@ function findEntryStar(hiResPixels, yardCenter, hubX, hubY, yardRadiusNorm) {
     return isGoldDivider(h, s, v)
   }
 
-  const searchR = Math.round(yardRadiusNorm * 3.7 * width)
+  // Wider than the yard-hole/track-exclusion uses of this radius: the star's real distance from
+  // yard center doesn't scale exactly with yard radius across boards, and the old fixed 0.06 (often
+  // an overestimate for smaller yards) was accidentally generous enough to always reach it. Now
+  // that the radius is measured precisely per lane, widen the multiplier to not lose that margin -
+  // confirmed several lanes' stars went missing at the old 3.7x once the radius shrank to its real,
+  // smaller size.
+  const searchR = Math.round(yardRadiusNorm * 6 * width)
   const cx = Math.round(yardCenter.x * width)
   const cy = Math.round(yardCenter.y * height)
   const minX = Math.max(0, cx - searchR), maxX = Math.min(width - 1, cx + searchR)
@@ -912,8 +1006,23 @@ async function main() {
       if (!center.found) {
         console.warn(`[board_${playerCount}p] weak/no yard match for ${color} - using fallback position`)
       }
-      if (process.env.DEBUG_HOLES) console.error(`  ${playerCount}p ${color}:`)
-      const fit = findYardHoles(hiResPixels, center, 0.06)
+      // Every downstream step (hole search window, entry-star search, track-tracing's yard
+      // exclusion) previously shared one hardcoded 0.06 regardless of this board's or lane's real
+      // yard size - measure it directly instead. Also re-centers on the disc's real shape (see
+      // findYardRadius) rather than trusting findYardCenter's density estimate for the hole search -
+      // confirmed against real pixel measurements this was a real source of error, not just a style
+      // preference: with the old center+0.06, detected pip holes for board_3p Red were off by
+      // 0.01-0.03 normalized units (several pixels) from their true positions in the art.
+      const radiusFit = findYardRadius(hiResPixels, center, color)
+      if (!radiusFit || radiusFit.radiusNorm == null) {
+        console.warn(`  [board_${playerCount}p] ${color} yard: outer radius not measured - falling back to 0.06`)
+      } else {
+        center.x = radiusFit.center.x
+        center.y = radiusFit.center.y
+      }
+      center.radiusNorm = radiusFit?.radiusNorm ?? 0.06
+      if (process.env.DEBUG_HOLES) console.error(`  ${playerCount}p ${color}: radiusNorm=${center.radiusNorm.toFixed(4)} recenteredTo=(${center.x.toFixed(4)},${center.y.toFixed(4)})`)
+      const fit = findYardHoles(hiResPixels, center, center.radiusNorm)
       if (!fit) {
         console.warn(`  [board_${playerCount}p] ${color} yard: not enough pip-hole signal - using synthetic grid`)
       }
@@ -924,11 +1033,16 @@ async function main() {
 
     const hubX = yardCenters.reduce((s, p) => s + p.x, 0) / yardCenters.length
     const hubY = yardCenters.reduce((s, p) => s + p.y, 0) / yardCenters.length
-    const trackOuterRadius = findTrackOuterRadius(pixels, laneColors, hubX, hubY, yardCenters, 0.06)
+    // Functions below exclude a disc of this radius around each yard center to avoid mistaking
+    // yard-disc pixels for track squares. Use the largest of this board's real measured yard radii
+    // (not the old fixed 0.06) so every yard is fully excluded regardless of its own real size -
+    // under-excluding is the worse failure mode here (yard pixels leaking into track detection).
+    const sharedYardRadius = Math.max(...yardCenters.map((yc) => yc.radiusNorm))
+    const trackOuterRadius = findTrackOuterRadius(pixels, laneColors, hubX, hubY, yardCenters, sharedYardRadius)
 
     const entryStars = {}
     for (let i = 0; i < laneColors.length; i++) {
-      const star = findEntryStar(hiResPixels, yardCenters[i], hubX, hubY, 0.06)
+      const star = findEntryStar(hiResPixels, yardCenters[i], hubX, hubY, yardCenters[i].radiusNorm)
       if (!star) {
         console.warn(`  [board_${playerCount}p] ${laneColors[i]}: entry star not found - falling back to angle-based entry`)
       }
@@ -941,8 +1055,8 @@ async function main() {
     // Score both against the same adjacency metric the tests check - but a trace that gives up
     // early (only covers a small arc) can look great on gap-ratio alone while missing most of the
     // board, so also penalize whichever candidate covers noticeably less ground than the other.
-    const walked = traceRingLoop(pixels, laneColors, yardCenters, hubX, hubY, trackOuterRadius, 0.06)
-    const polar = polarSampleRingLoop(pixels, laneColors, yardCenters, hubX, hubY, trackOuterRadius, 0.06)
+    const walked = traceRingLoop(pixels, laneColors, yardCenters, hubX, hubY, trackOuterRadius, sharedYardRadius)
+    const polar = polarSampleRingLoop(pixels, laneColors, yardCenters, hubX, hubY, trackOuterRadius, sharedYardRadius)
     const maxLen = Math.max(walked.length, polar.length, 1)
     const effectiveScore = (candidate) =>
       candidate.length === 0 ? Infinity : worstGapRatio(candidate) * Math.max(1, maxLen / candidate.length)
@@ -967,7 +1081,7 @@ async function main() {
     const primaryIsPolar = polar.length >= 30
     const squareSource = primaryIsPolar ? polar : walked
     const dividerPixels = await loadPixels(imagePath, 1100) // thin gold divider lines need this much resolution to survive JPEG compression
-    const realSquares = extractRealSquares(dividerPixels, squareSource, yardCenters, 0.06)
+    const realSquares = extractRealSquares(dividerPixels, squareSource, yardCenters, sharedYardRadius)
 
     if (realSquares.length >= playerCount * 8) {
       tracedLoop = realSquares
