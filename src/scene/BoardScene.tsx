@@ -1,6 +1,6 @@
 import { Suspense } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { OrbitControls, OrthographicCamera } from '@react-three/drei'
+import { Line, OrbitControls, OrthographicCamera } from '@react-three/drei'
 import type { BoardDefinition } from '../core/board/boardDefinition'
 import type { PlayerState } from '../core/gameFlow/playerState'
 import type { MoveOption } from '../core/rules/moveOption'
@@ -12,7 +12,84 @@ import { DiceMesh } from './DiceMesh'
 import { TrackTile } from './TrackTile'
 import { useBoardColorSampler } from './useBoardColorSampler'
 import { getHopWaypoints, getPieceWaypoint } from './piecePosition'
-import { toWorldPosition, estimateSquareSize, computeTileCorners } from './boardGeometry'
+import { toWorldPosition, estimateSquareSize, computeTileCorners, BASE_HEIGHT } from './boardGeometry'
+import { getColor } from '../core/colorPalette'
+
+// Debug aid: draws a line through every trackWaypoint in array order, plus a dot at each one (larger
+// yellow dot on real safe squares, per safeTrackIndices - so it's directly checkable against the
+// board art's own darker-colored safe squares - small magenta dot otherwise) - any place the line
+// zigzags or crosses itself is a place the underlying data doesn't follow a smooth path, visible
+// directly instead of having to guess from how the tiles render.
+//
+// Dot radius scales down wherever neighboring squares sit close together (some real tight curves -
+// e.g. near idx61-3 on the 2p board - measurably don't have room for each index to get its own full-
+// size dot without visually overlapping its neighbors, even though every position is independently
+// correct). Capping radius at a fraction of the local gap keeps the *positions* exactly as measured
+// while stopping fixed-size dots from reading as a placement error in those spots.
+function TrackDebugPath({
+  trackWaypoints,
+  safeTrackIndices,
+}: {
+  trackWaypoints: [number, number][]
+  safeTrackIndices: readonly number[]
+}) {
+  const debugHeight = BASE_HEIGHT + 0.03 // above the tiles so the line isn't hidden underneath them
+  const safeSet = new Set(safeTrackIndices)
+  const n = trackWaypoints.length
+  const worldPoints = trackWaypoints.map((wp) => toWorldPosition(wp, debugHeight))
+  const linePoints = [...worldPoints, worldPoints[0]] // close the loop back to the start
+
+  return (
+    <>
+      <Line points={linePoints} color="magenta" lineWidth={3} />
+      {trackWaypoints.map((_, i) => {
+        const prev = worldPoints[(i - 1 + n) % n]
+        const next = worldPoints[(i + 1) % n]
+        const cur = worldPoints[i]
+        const gap = Math.min(
+          Math.hypot(cur[0] - prev[0], cur[2] - prev[2]),
+          Math.hypot(cur[0] - next[0], cur[2] - next[2]),
+        )
+        const baseRadius = safeSet.has(i) ? 0.045 : 0.025
+        const radius = Math.min(baseRadius, gap * 0.35)
+        return (
+          <mesh key={i} position={cur}>
+            <sphereGeometry args={[radius, 8, 8]} />
+            <meshBasicMaterial color={safeSet.has(i) ? 'yellow' : 'magenta'} />
+          </mesh>
+        )
+      })}
+    </>
+  )
+}
+
+// Debug aid: same idea as TrackDebugPath but for each lane's home stretch - the entrance square on
+// the main loop plus its corridorLength waypoints leading into the hub (entrance + 6 corridor points
+// = 7 total per lane on every board size, since ARM_STEPS is fixed). Drawn in the lane's own color so
+// it's visually distinct from the magenta main loop and from the other lane's corridor.
+function HomeCorridorDebugPath({ definition }: { definition: BoardDefinition }) {
+  const debugHeight = BASE_HEIGHT + 0.03
+  return (
+    <>
+      {definition.playerLanes.map((lane) => {
+        const entrance = definition.trackWaypoints[lane.homeEntranceTrackIndex]
+        const points = [entrance, ...lane.homeCorridorWaypoints].map((wp) => toWorldPosition(wp, debugHeight))
+        const color = getColor(lane.color)
+        return (
+          <group key={lane.color}>
+            <Line points={points} color={color} lineWidth={3} />
+            {points.map((p, i) => (
+              <mesh key={i} position={p}>
+                <sphereGeometry args={[0.03, 8, 8]} />
+                <meshBasicMaterial color={color} />
+              </mesh>
+            ))}
+          </group>
+        )
+      })}
+    </>
+  )
+}
 
 const INTRO_STAGGER = 0.09 // seconds between each piece's drop-in entrance, for a cascading effect
 
@@ -157,6 +234,8 @@ export function BoardScene({
       })}
 
       <DiceMesh value={diceValue} rolling={rolling} onClick={onRollDice} />
+      <TrackDebugPath trackWaypoints={definition.trackWaypoints} safeTrackIndices={definition.safeTrackIndices} />
+      <HomeCorridorDebugPath definition={definition} />
       <OrbitControls enablePan={false} minPolarAngle={0.2} maxPolarAngle={1.2} />
     </Canvas>
   )
