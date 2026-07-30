@@ -111,6 +111,27 @@ const YARD_HOLES_OVERRIDES = {
     ],
     holeRadiusNorm: 0.0173,
   },
+  // Same failure as 2-Red/2-Blue above, found on later boards during a demo-readiness sweep: the
+  // general density search locked onto Blue's connector stub instead of the yard's own 4 holes (3p),
+  // landing pieces well outside the yard entirely - visually obvious, confirmed via screenshot.
+  '3-Blue': {
+    holes: [
+      [0.6683, 0.3547],
+      [0.7299, 0.3547],
+      [0.6684, 0.4162],
+      [0.7299, 0.4162],
+    ],
+    holeRadiusNorm: 0.014,
+  },
+  '4-Blue': {
+    holes: [
+      [0.6822, 0.6059],
+      [0.7204, 0.6415],
+      [0.6822, 0.6785],
+      [0.6444, 0.642],
+    ],
+    holeRadiusNorm: 0.0106,
+  },
 }
 
 // Same measurement pass as YARD_HOLES_OVERRIDES, for the entry star icon - verified by cropping the
@@ -119,6 +140,118 @@ const ENTRY_STAR_OVERRIDES = {
   '2-Red': { x: 0.1281, y: 0.6703 },
   '2-Blue': { x: 0.8591, y: 0.2954 },
 }
+
+// The hub is drawn as one wedge per lane color, each with its own small circle marking that lane's
+// actual finish square - not one shared circle at the hub's geometric center. The generic formula
+// below aims every lane's home corridor at cx/cy, the *average* of all yards' centers, which isn't
+// any lane's own wedge - confirmed by rendering it: Red's corridor line visibly cut across Blue's
+// wedge before reaching that shared, wrong point, instead of staying inside Red's own wedge the way
+// a real piece moving home should. Measured directly (connected-component centroid, HSV: circle
+// interior reads clearly higher-saturation than the wedge fill around it, not darker as it first
+// looks - s>0.7 vs ~0.55 for the surrounding wedge, at similar brightness): Red's finish circle at
+// (0.4428, 0.5274), Blue's at (0.5447, 0.4256), both well off the shared cx/cy this board computes
+// (~0.494, 0.4755). Only measured for 2p so far; other boards still use the shared-center formula.
+const HUB_FINISH_OVERRIDES = {
+  '2-Red': { x: 0.4428, y: 0.5274 },
+  '2-Blue': { x: 0.5447, y: 0.4256 },
+}
+
+// A straight ring-junction -> finish-circle line (using HUB_FINISH_OVERRIDES above) passes almost
+// directly over the lane's own yard circle - the yard sits nearly on that line geometrically (the
+// yard, its neck, and the wedge's finish circle are roughly radially aligned) - confirmed by
+// measuring the straight line's closest approach to the yard center at only 0.007-0.012 normalized
+// units, well inside the yard's own ~0.10 radius. A first curved attempt (bowing toward the sketch's
+// upper-left direction) made this worse, swinging the midsection straight through the yard's 4 piece
+// holes. The fix that actually clears the holes (verified: min distance from every hole center stays
+// >0.075 for all 6 corridor points) bows the OTHER way - around the yard's outer/lower side, in the
+// direction away from the hole cluster - each control point checked to land on the lane's own wedge
+// fill color, not background or the other lane's wedge.
+const HUB_CORRIDOR_CURVE_OVERRIDES = {
+  '2-Red': { x: 0.1891, y: 0.4963 },
+  '2-Blue': { x: 0.8002, y: 0.4654 },
+}
+
+// 2p board: entirely hand-verified and rebuilt, not patched in place - see git history on this file
+// for the long trail of per-index overrides (idx0-62 individually corrected, two array splices to
+// insert missed squares, a 34%-nudge to squeeze extra room out of one pinch point) that got this
+// board's *63-count* data as close to right as a 63-count structure could get. Across that process,
+// three independent full-loop gold-divider sweeps (different upsampling, different guide paths, one
+// even using a completely fresh screenshot for calibration) all converged on the same number: this
+// board's art only has 58 real squares, not 63. The 63 was never correct - it was what the original
+// auto-trace happened to output, and every "square with 2 points crammed into it" bug reported this
+// session was that same root cause resurfacing in a new spot. Patching individual pinch points can
+// only approximate a 58-square board using 63 indices; it can't fix the actual mismatch. So instead
+// of another patch, trackWaypoints below *is* the measured 58-square sequence directly - each entry
+// the fill-centroid between two real, swept gold-divider crossings on board_2p.jpg, walked in path
+// order starting from the same point the original trace started at. Recomputed with trackLength=58,
+// the gap between every consecutive pair of squares is 0.032-0.049 (average 0.041) - no outliers in
+// either direction, unlike any measurement taken against the old 63-count structure. entryTrackIndex
+// and homeEntranceTrackIndex don't need any manual bookkeeping for the new count: both are resolved
+// below by nearest-real-position search (to the star icon / to the yard's own angle) against
+// whatever trackWaypoints turns out to be, so they land correctly on this shorter array the same way
+// they did on the old one. The two star squares (Red idx23, Blue idx52 in this new numbering) use
+// the star icon's own exactly-measured position (ENTRY_STAR_OVERRIDES) rather than the swept fill-
+// centroid, matching the explicit final call on where a piece should render within the entry square.
+const TRACK_WAYPOINTS_2P = [
+  [0.8063, 0.5235],
+  [0.7974, 0.5608],
+  [0.7842, 0.6005],
+  [0.7717, 0.6355],
+  [0.7498, 0.6702],
+  [0.7273, 0.7006],
+  [0.6945, 0.7334],
+  [0.6555, 0.7596],
+  [0.6183, 0.776],
+  [0.5837, 0.7897],
+  [0.542, 0.796],
+  [0.4964, 0.796],
+  [0.4533, 0.798],
+  [0.4194, 0.8095],
+  [0.3943, 0.8327],
+  [0.3585, 0.847],
+  [0.3157, 0.8447],
+  [0.2722, 0.8384],
+  [0.2391, 0.8259],
+  [0.2135, 0.7938],
+  [0.179, 0.7787],
+  [0.1579, 0.7498],
+  [0.1411, 0.7154],
+  [0.1281, 0.6703],
+  [0.145, 0.6313],
+  [0.1431, 0.5888],
+  [0.1646, 0.5561],
+  [0.177, 0.517],
+  [0.1841, 0.4751],
+  [0.1916, 0.4267],
+  [0.1972, 0.3933],
+  [0.2033, 0.3543],
+  [0.2184, 0.3214],
+  [0.2394, 0.2885],
+  [0.2645, 0.2578],
+  [0.2943, 0.2268],
+  [0.3345, 0.2027],
+  [0.3695, 0.1828],
+  [0.4046, 0.1676],
+  [0.4482, 0.1579],
+  [0.4931, 0.1558],
+  [0.5306, 0.1516],
+  [0.5676, 0.1407],
+  [0.5956, 0.1248],
+  [0.6342, 0.1122],
+  [0.6757, 0.1062],
+  [0.7221, 0.1138],
+  [0.7611, 0.1273],
+  [0.7932, 0.1577],
+  [0.8109, 0.1879],
+  [0.84, 0.2104],
+  [0.8519, 0.2527],
+  [0.8591, 0.2954],
+  [0.8622, 0.3404],
+  [0.8414, 0.374],
+  [0.8231, 0.4068],
+  [0.8154, 0.4386],
+  [0.811, 0.4798],
+]
 
 function findYardCenter(pixels, color, playerCount) {
   const { data, width, height, channels } = pixels
@@ -903,6 +1036,53 @@ function extractRealSquares(hiResPixels, rawTrace, yardCenters, yardRadiusNorm) 
   return merged.filter((p) => !yardCenters.some((yc) => Math.hypot(p[0] - yc.x, p[1] - yc.y) < yardRadiusNorm * 1.3))
 }
 
+// Nudges each already-finalized square center toward the real color centroid of its own immediate
+// neighborhood - unlike an earlier attempt that recomputed crossings/merging from scratch (which
+// changed how many squares got detected board-to-board, an unpredictable and unsafe side effect,
+// confirmed by a failing regression test), this only adjusts a coordinate already decided, so the
+// square count and order from extractRealSquares above can never change. A hard cap on how far any
+// point can move (maxCorrection) means a bad local read - e.g. sampling into a neighboring arm at a
+// pinch point - can only be rejected, never relocate a point across the board.
+function refineToLocalFillCentroid(hiResPixels, points, maxCorrection) {
+  const { data, width, height, channels } = hiResPixels
+  function isFillColor(nx, ny) {
+    const x = Math.max(0, Math.min(width - 1, Math.round(nx * (width - 1))))
+    const y = Math.max(0, Math.min(height - 1, Math.round(ny * (height - 1))))
+    const idx = (y * width + x) * channels
+    const [h, s, v] = rgbToHsv(data[idx], data[idx + 1], data[idx + 2])
+    if (isGoldDivider(h, s, v)) return false
+    return s >= 0.2 && v >= 0.18
+  }
+
+  const n = points.length
+  return points.map((p, i) => {
+    const prev = points[(i - 1 + n) % n]
+    const next = points[(i + 1) % n]
+    const dx = next[0] - prev[0]
+    const dy = next[1] - prev[1]
+    const len = Math.hypot(dx, dy) || 1e-9
+    const dirX = dx / len
+    const dirY = dy / len
+    const perpX = -dirY
+    const perpY = dirX
+
+    const fillPts = []
+    for (let a = -0.012; a <= 0.012; a += 0.004) {
+      for (let b = -0.03; b <= 0.03; b += 0.004) {
+        const sx = p[0] + dirX * a + perpX * b
+        const sy = p[1] + dirY * a + perpY * b
+        if (isFillColor(sx, sy)) fillPts.push([sx, sy])
+      }
+    }
+    if (fillPts.length < 6) return p // not enough real fill signal nearby - leave this point as-is
+
+    const cx = fillPts.reduce((s, q) => s + q[0], 0) / fillPts.length
+    const cy = fillPts.reduce((s, q) => s + q[1], 0) / fillPts.length
+    const correctionDist = Math.hypot(cx - p[0], cy - p[1])
+    return correctionDist > maxCorrection ? p : [cx, cy]
+  })
+}
+
 function buildBoardDefinition(playerCount, laneColors, yardCenters, trackOuterRadius, tracedLoop, entryStars, log) {
   const cx = yardCenters.reduce((s, p) => s + p.x, 0) / yardCenters.length
   const cy = yardCenters.reduce((s, p) => s + p.y, 0) / yardCenters.length
@@ -919,6 +1099,14 @@ function buildBoardDefinition(playerCount, laneColors, yardCenters, trackOuterRa
 
   if (usingTrace) {
     trackWaypoints = tracedLoop.map(([x, y]) => point(x, y))
+
+    // 2p: replace the auto-traced 63-point loop entirely with the hand-verified 58-square sequence
+    // (see TRACK_WAYPOINTS_2P above for why 58 and not 63). No per-index patching needed here since
+    // that array already *is* the final answer, measured directly - not derived from tracedLoop.
+    if (playerCount === 2) {
+      trackWaypoints = TRACK_WAYPOINTS_2P.map(([x, y]) => point(x, y))
+    }
+
     // For each lane, the home entrance is wherever its corridor spike actually meets the traced
     // ring - i.e. the ring point nearest that lane's own yard angle.
     getHomeEntranceIndex = (lane) => {
@@ -1011,11 +1199,26 @@ function buildBoardDefinition(playerCount, laneColors, yardCenters, trackOuterRa
           ]
 
     // Corridor spoke runs from where it actually meets the traced ring, inward to the hub, so
-    // there's no visible gap between the last track square and the first corridor square.
+    // there's no visible gap between the last track square and the first corridor square. Aims at
+    // this lane's own measured finish circle when known (HUB_FINISH_OVERRIDES) - falls back to the
+    // shared hub center otherwise, which is wrong (see comment there) but better than nothing on
+    // boards that haven't been measured yet.
+    const finishOverride = HUB_FINISH_OVERRIDES[`${playerCount}-${lane.color}`]
+    const finishX = finishOverride ? finishOverride.x : cx
+    const finishY = finishOverride ? finishOverride.y : cy
+    // Bows the corridor through this lane's own wedge (HUB_CORRIDOR_CURVE_OVERRIDES) instead of
+    // cutting a straight line across it - falls back to a straight ring-junction->finish line
+    // (control point == midpoint) on boards that haven't been curve-measured yet.
+    const curveOverride = HUB_CORRIDOR_CURVE_OVERRIDES[`${playerCount}-${lane.color}`]
+    const controlX = curveOverride ? curveOverride.x : (ringJunctionX + finishX) / 2
+    const controlY = curveOverride ? curveOverride.y : (ringJunctionY + finishY) / 2
     const homeCorridorWaypoints = []
     for (let i = 1; i <= ARM_STEPS; i++) {
-      const t = i / (ARM_STEPS + 1) // 0 = at the ring junction, 1 = at hub center
-      homeCorridorWaypoints.push(point(ringJunctionX + (cx - ringJunctionX) * t, ringJunctionY + (cy - ringJunctionY) * t))
+      const t = i / (ARM_STEPS + 1) // 0 = at the ring junction, 1 = at the finish square
+      const oneMinusT = 1 - t
+      const bx = oneMinusT * oneMinusT * ringJunctionX + 2 * oneMinusT * t * controlX + t * t * finishX
+      const by = oneMinusT * oneMinusT * ringJunctionY + 2 * oneMinusT * t * controlY + t * t * finishY
+      homeCorridorWaypoints.push(point(bx, by))
     }
 
     return {
@@ -1027,7 +1230,21 @@ function buildBoardDefinition(playerCount, laneColors, yardCenters, trackOuterRa
     }
   })
 
-  const safeTrackIndices = playerLanes.map((l) => l.entryTrackIndex)
+  // Entry squares are always safe by rule, but the rulebook also marks additional squares safe by
+  // drawing them in a darker shade (see plan notes) - this generic pass only knows about entries.
+  // For 2p, the user hand-marked every real safe (dark-colored) square directly on a screenshot of
+  // the rendered board (green dot = safe, white = normal) - measured via color-blob detection
+  // against that screenshot, cross-checked against trackWaypoints by nearest-point distance
+  // (all matches within 0.016 normalized units, well under one square's spacing).
+  // 2p re-matched against the 58-square TRACK_WAYPOINTS_2P sequence (see comment there) - all 8
+  // land within 0.003 normalized units, confirming the same 8 real safe squares independent of the
+  // 58-vs-63 indexing question.
+  const EXTRA_SAFE_INDICES = {
+    2: [6, 11, 16, 28, 35, 40, 45, 57],
+  }
+  const safeTrackIndices = Array.from(
+    new Set([...playerLanes.map((l) => l.entryTrackIndex), ...(EXTRA_SAFE_INDICES[playerCount] ?? [])]),
+  ).sort((a, b) => a - b)
 
   return {
     playerCount,
@@ -1140,6 +1357,11 @@ async function main() {
         console.log(`  resampled to ${targetCount} squares (${SQUARES_PER_ARM} per arm)`)
       }
     }
+
+    const beforeRefine = tracedLoop
+    tracedLoop = refineToLocalFillCentroid(hiResPixels, tracedLoop, 0.02)
+    const refinedCount = tracedLoop.filter((p, i) => p[0] !== beforeRefine[i][0] || p[1] !== beforeRefine[i][1]).length
+    console.log(`  refined ${refinedCount}/${tracedLoop.length} square centers toward local fill centroid`)
 
     definitions[playerCount] = buildBoardDefinition(playerCount, laneColors, yardCenters, trackOuterRadius, tracedLoop, entryStars, console.warn)
   }
