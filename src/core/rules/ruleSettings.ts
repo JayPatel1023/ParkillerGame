@@ -1,15 +1,16 @@
+// Matches the client's official rulebook (2 white dice), not the classic single-die variant this
+// milestone started with - see TurnManager for how the two dice get offered as three usable
+// amounts (die A, die B, their sum) per roll.
 export interface RuleSettings {
-  entryRoll: number
-  grantExtraTurnOnSix: boolean
-  thirdConsecutiveSixForfeitsMove: boolean
+  exitRoll: number
+  thirdConsecutiveDoubleEliminatesLastMoved: boolean
   captureSendsToYard: boolean
 }
 
 export function defaultRuleSettings(): RuleSettings {
   return {
-    entryRoll: 6,
-    grantExtraTurnOnSix: true,
-    thirdConsecutiveSixForfeitsMove: true,
+    exitRoll: 5,
+    thirdConsecutiveDoubleEliminatesLastMoved: true,
     captureSendsToYard: true,
   }
 }

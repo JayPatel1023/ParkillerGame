@@ -156,20 +156,16 @@ const HUB_FINISH_OVERRIDES = {
   '2-Blue': { x: 0.5447, y: 0.4256 },
 }
 
-// A straight ring-junction -> finish-circle line (using HUB_FINISH_OVERRIDES above) passes almost
-// directly over the lane's own yard circle - the yard sits nearly on that line geometrically (the
-// yard, its neck, and the wedge's finish circle are roughly radially aligned) - confirmed by
-// measuring the straight line's closest approach to the yard center at only 0.007-0.012 normalized
-// units, well inside the yard's own ~0.10 radius. A first curved attempt (bowing toward the sketch's
-// upper-left direction) made this worse, swinging the midsection straight through the yard's 4 piece
-// holes. The fix that actually clears the holes (verified: min distance from every hole center stays
-// >0.075 for all 6 corridor points) bows the OTHER way - around the yard's outer/lower side, in the
-// direction away from the hole cluster - each control point checked to land on the lane's own wedge
-// fill color, not background or the other lane's wedge.
-const HUB_CORRIDOR_CURVE_OVERRIDES = {
-  '2-Red': { x: 0.1891, y: 0.4963 },
-  '2-Blue': { x: 0.8002, y: 0.4654 },
-}
+// Tried bowing this into a curve (twice - once away from the yard, once tucked in close) to make it
+// look hand-traced, but the board art has no drawn squares for the home stretch at all (confirmed by
+// running edge detection directly on the source image: only the yard's rings/holes and the main
+// loop's tile dividers produce any edges - the wedge interior is one flat fill with a single
+// finish-circle marker). There's no real path there to curve along, and every curved attempt read as
+// further off the (nonexistent) path than a plain straight line does. Per explicit direction, this
+// stays a direct line from the ring junction to the lane's own finish circle (HUB_FINISH_OVERRIDES) -
+// leaving this override table empty makes buildBoardDefinition's fallback (control point == segment
+// midpoint) degenerate the quadratic bezier into that exact straight line.
+const HUB_CORRIDOR_CURVE_OVERRIDES = {}
 
 // 2p board: entirely hand-verified and rebuilt, not patched in place - see git history on this file
 // for the long trail of per-index overrides (idx0-62 individually corrected, two array splices to
@@ -212,12 +208,12 @@ const TRACK_WAYPOINTS_2P = [
   [0.3157, 0.8447],
   [0.2722, 0.8384],
   [0.2391, 0.8259],
-  [0.2135, 0.7938],
+  [0.2096, 0.7983],
   [0.179, 0.7787],
   [0.1579, 0.7498],
   [0.1411, 0.7154],
   [0.1281, 0.6703],
-  [0.145, 0.6313],
+  [0.1374, 0.6295],
   [0.1431, 0.5888],
   [0.1646, 0.5561],
   [0.177, 0.517],
@@ -242,7 +238,7 @@ const TRACK_WAYPOINTS_2P = [
   [0.7221, 0.1138],
   [0.7611, 0.1273],
   [0.7932, 0.1577],
-  [0.8109, 0.1879],
+  [0.8127, 0.1857],
   [0.84, 0.2104],
   [0.8519, 0.2527],
   [0.8591, 0.2954],

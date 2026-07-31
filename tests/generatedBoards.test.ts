@@ -67,8 +67,8 @@ describe('generated board data', () => {
       const players = colors.map(createPlayerState)
       const mover = players[0]
 
-      // exit the yard
-      let moves = getValidMoves(board, mover, 6, settings)
+      // exit the yard (rulebook: 2 white dice, a 5 on either die exits - not the classic six)
+      let moves = getValidMoves(board, mover, 5, settings)
       const exitMove = moves.find((m) => m.kind === 'ExitYard')
       expect(exitMove).toBeTruthy()
       applyMove(board, exitMove!, players, settings)

@@ -1,9 +1,25 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { extend, useFrame, type BufferGeometryNode } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { Mesh } from 'three'
+import { RoundedBoxGeometry } from 'three-stdlib'
+
+extend({ RoundedBoxGeometry })
+
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      roundedBoxGeometry: BufferGeometryNode<RoundedBoxGeometry, typeof RoundedBoxGeometry>
+    }
+  }
+}
 
 const BOARD_EDGE = 2.5 // in front of the board, within the camera's frustum
+const DIE_SIZE = 0.5
+// The die's own geometry is centered on its local origin, so resting it on the flat board plane
+// (y=0) means lifting that center by half the die's height - was a flat 0.35, well above the
+// die's own 0.25 half-height, leaving a visible gap/shadow between the die and the board.
+const DIE_REST_Y = DIE_SIZE / 2
 
 function pipPositions(value: number): [number, number][] {
   switch (value) {
@@ -49,27 +65,48 @@ function pipPositions(value: number): [number, number][] {
   }
 }
 
+// A real die's pips are small punched-in hemispheres, not flat printed dots - fake that with a
+// tight radial shadow ring around each one so it reads as a dimple even under flat ambient light.
 function createDiceFaceTexture(value: number): THREE.CanvasTexture {
-  const size = 128
+  const size = 256
   const canvas = document.createElement('canvas')
   canvas.width = size
   canvas.height = size
   const ctx = canvas.getContext('2d')!
 
-  ctx.fillStyle = '#f2ede0'
+  // Soft radial vignette instead of a flat fill, closer to glossy injection-molded plastic than a
+  // flat card face.
+  const bg = ctx.createRadialGradient(size * 0.4, size * 0.35, size * 0.1, size * 0.5, size * 0.5, size * 0.75)
+  bg.addColorStop(0, '#ffffff')
+  bg.addColorStop(1, '#e9e7e2')
+  ctx.fillStyle = bg
   ctx.fillRect(0, 0, size, size)
-  ctx.strokeStyle = '#c9c0ab'
-  ctx.lineWidth = 4
-  ctx.strokeRect(3, 3, size - 6, size - 6)
 
-  ctx.fillStyle = '#2a2a2a'
-  const pipRadius = size * 0.09
+  const pipRadius = size * 0.1
   const margin = size * 0.24
   for (const [px, py] of pipPositions(value)) {
     const cx = size / 2 + px * margin
     const cy = size / 2 + py * margin
+
+    const shadow = ctx.createRadialGradient(cx, cy, pipRadius * 0.2, cx, cy, pipRadius * 1.35)
+    shadow.addColorStop(0, 'rgba(0,0,0,0.0)')
+    shadow.addColorStop(0.7, 'rgba(0,0,0,0.0)')
+    shadow.addColorStop(0.85, 'rgba(0,0,0,0.18)')
+    shadow.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = shadow
+    ctx.beginPath()
+    ctx.arc(cx, cy, pipRadius * 1.35, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.fillStyle = '#1c1c1c'
     ctx.beginPath()
     ctx.arc(cx, cy, pipRadius, 0, Math.PI * 2)
+    ctx.fill()
+
+    // Tiny offset highlight so each pip reads as a rounded bead rather than a flat disc.
+    ctx.fillStyle = 'rgba(255,255,255,0.35)'
+    ctx.beginPath()
+    ctx.arc(cx - pipRadius * 0.3, cy - pipRadius * 0.35, pipRadius * 0.3, 0, Math.PI * 2)
     ctx.fill()
   }
 
@@ -78,7 +115,18 @@ function createDiceFaceTexture(value: number): THREE.CanvasTexture {
   return texture
 }
 
-export function DiceMesh({ value, rolling, onClick }: { value: number | null; rolling: boolean; onClick: () => void }) {
+export function DiceMesh({
+  value,
+  rolling,
+  onClick,
+  xOffset = 0,
+}: {
+  value: number | null
+  rolling: boolean
+  onClick: () => void
+  /** Side-by-side placement for the second white die - the rulebook's two dice are rolled together. */
+  xOffset?: number
+}) {
   const meshRef = useRef<Mesh>(null)
   const wasRolling = useRef(rolling)
 
@@ -93,7 +141,18 @@ export function DiceMesh({ value, rolling, onClick }: { value: number | null; ro
     const opposite = 7 - val
     const remaining = [1, 2, 3, 4, 5, 6].filter((n) => n !== val && n !== opposite)
     const order = [remaining[0], remaining[1], val, opposite, remaining[2], remaining[3]]
-    return order.map((n) => new THREE.MeshStandardMaterial({ map: faceTextures[n - 1] }))
+    // Low roughness (not a flat matte card face) + a touch of clearcoat-like sheen from the
+    // scene's directional light reads as the smooth, glossy injection-molded plastic in the
+    // reference photo, instead of the flat cardboard look a fully matte material gives.
+    return order.map(
+      (n) =>
+        new THREE.MeshPhysicalMaterial({
+          map: faceTextures[n - 1],
+          roughness: 0.28,
+          clearcoat: 0.6,
+          clearcoatRoughness: 0.25,
+        }),
+    )
   }, [value, faceTextures])
 
   useFrame((_, delta) => {
@@ -113,9 +172,11 @@ export function DiceMesh({ value, rolling, onClick }: { value: number | null; ro
   }, [rolling])
 
   return (
-    <group position={[0, 0.35, BOARD_EDGE]}>
+    <group position={[xOffset, DIE_REST_Y, BOARD_EDGE]}>
       <mesh ref={meshRef} castShadow onClick={onClick}>
-        <boxGeometry args={[0.5, 0.5, 0.5]} />
+        {/* Rounded corners/edges (not a sharp cardboard cube) to match the reference die photo -
+            RoundedBoxGeometry extends BoxGeometry so it keeps the same 6 face-material groups. */}
+        <roundedBoxGeometry args={[DIE_SIZE, DIE_SIZE, DIE_SIZE, 4, DIE_SIZE * 0.16]} />
         {materials.map((mat, i) => (
           <primitive key={i} object={mat} attach={`material-${i}`} />
         ))}

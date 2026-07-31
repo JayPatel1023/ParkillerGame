@@ -1,18 +1,24 @@
 import type { BoardData } from '../board/boardData'
 import type { PlayerState } from '../gameFlow/playerState'
 import type { Piece } from '../pieces/piece'
-import type { MoveOption, MoveResult } from './moveOption'
+import type { DiceSource, MoveOption, MoveResult } from './moveOption'
 import type { RuleSettings } from './ruleSettings'
 
 function mod(value: number, modulus: number): number {
   return ((value % modulus) + modulus) % modulus
 }
 
+// `amount` is a single usable step count - the caller (TurnManager) decides whether that's one
+// die's face value or the sum of both, and passes `diceSource` along purely so the resulting
+// MoveOption records which of this roll's dice it would spend. This function itself has no
+// concept of "two dice" - it just answers "what can move by this many steps", the same question
+// regardless of where the number came from.
 export function getValidMoves(
   board: BoardData,
   player: PlayerState,
-  roll: number,
+  amount: number,
   settings: RuleSettings,
+  diceSource: DiceSource = 'sum',
 ): MoveOption[] {
   const lane = board.lanes[player.color]
   if (!lane) return []
@@ -23,12 +29,14 @@ export function getValidMoves(
     if (piece.state === 'Finished') continue
 
     if (piece.state === 'InYard') {
-      if (roll === settings.entryRoll) {
+      if (amount === settings.exitRoll) {
         moves.push({
           piece,
           kind: 'ExitYard',
           resultingTrackPosition: lane.entryTrackIndex,
           resultingCorridorPosition: -1,
+          amount,
+          diceSource,
         })
       }
       continue
@@ -38,25 +46,32 @@ export function getValidMoves(
       const distanceToHomeEntrance = mod(lane.homeEntranceTrackIndex - piece.trackPosition, board.trackLength)
       const totalStepsToFinish = distanceToHomeEntrance + lane.corridorLength
 
-      if (roll > totalStepsToFinish) continue // overshoot past home - exact count required
+      if (amount > totalStepsToFinish) continue // overshoot past home - exact count required
 
-      if (roll <= distanceToHomeEntrance) {
-        const newTrackPos = (piece.trackPosition + roll) % board.trackLength
-        moves.push({ piece, kind: 'TrackMove', resultingTrackPosition: newTrackPos, resultingCorridorPosition: -1 })
+      if (amount <= distanceToHomeEntrance) {
+        const newTrackPos = (piece.trackPosition + amount) % board.trackLength
+        moves.push({
+          piece,
+          kind: 'TrackMove',
+          resultingTrackPosition: newTrackPos,
+          resultingCorridorPosition: -1,
+          amount,
+          diceSource,
+        })
       } else {
-        const corridorIndex = roll - distanceToHomeEntrance - 1
+        const corridorIndex = amount - distanceToHomeEntrance - 1
         const kind = corridorIndex === lane.corridorLength - 1 ? 'FinishMove' : 'CorridorMove'
-        moves.push({ piece, kind, resultingTrackPosition: -1, resultingCorridorPosition: corridorIndex })
+        moves.push({ piece, kind, resultingTrackPosition: -1, resultingCorridorPosition: corridorIndex, amount, diceSource })
       }
       continue
     }
 
     if (piece.state === 'InHomeCorridor') {
-      const newCorridorPos = piece.corridorPosition + roll
+      const newCorridorPos = piece.corridorPosition + amount
       if (newCorridorPos > lane.corridorLength - 1) continue // overshoot - exact count required
 
       const kind = newCorridorPos === lane.corridorLength - 1 ? 'FinishMove' : 'CorridorMove'
-      moves.push({ piece, kind, resultingTrackPosition: -1, resultingCorridorPosition: newCorridorPos })
+      moves.push({ piece, kind, resultingTrackPosition: -1, resultingCorridorPosition: newCorridorPos, amount, diceSource })
     }
   }
 

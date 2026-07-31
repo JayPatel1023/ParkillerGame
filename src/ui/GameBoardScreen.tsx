@@ -18,10 +18,22 @@ export function GameBoardScreen({
   onExit: () => void
 }) {
   const session = useMemo(() => beginLocalGame(definition, colors), [definition, colors])
-  const { currentPlayer, lastRoll, rolling, pendingMoves, winner, moveAnimation, rollDice, chooseMove, clearMoveAnimation } =
-    useTurnManager(session.turnManager)
+  const {
+    currentPlayer,
+    lastRoll,
+    rolling,
+    pendingMoves,
+    winner,
+    moveAnimation,
+    eliminatedByDoubles,
+    rollDice,
+    chooseMove,
+    clearMoveAnimation,
+  } = useTurnManager(session.turnManager)
 
   const canRoll = pendingMoves.length === 0 && !winner && !rolling && !moveAnimation
+  const diceValues: [number | null, number | null] = [lastRoll?.dieA ?? null, lastRoll?.dieB ?? null]
+  const isDouble = lastRoll !== null && lastRoll.dieA === lastRoll.dieB
 
   return (
     <div style={{ height: '100%', position: 'relative' }}>
@@ -30,7 +42,7 @@ export function GameBoardScreen({
         players={session.players}
         pendingMoves={pendingMoves}
         onSelectPiece={chooseMove}
-        diceValue={lastRoll}
+        diceValues={diceValues}
         rolling={rolling}
         onRollDice={() => canRoll && rollDice()}
         moveAnimation={moveAnimation}
@@ -42,9 +54,20 @@ export function GameBoardScreen({
           <span style={{ ...turnDotStyle, background: getColor(currentPlayer.color) }} />
           <span style={{ fontWeight: 600, fontSize: 16 }}>Turno: {currentPlayer.color}</span>
         </div>
+        {lastRoll && !rolling && (
+          <div style={hintTextStyle}>
+            Dados: {lastRoll.dieA} y {lastRoll.dieB}
+            {isDouble && ' (dobles)'}
+          </div>
+        )}
+        {eliminatedByDoubles && (
+          <div style={{ ...hintTextStyle, color: '#e8a15c' }}>
+            Tercer dobles seguido: {eliminatedByDoubles.color} pierde una ficha
+          </div>
+        )}
         {pendingMoves.length > 0 && <div style={hintTextStyle}>Elegí una ficha para mover</div>}
         <button onClick={() => canRoll && rollDice()} disabled={!canRoll} style={rollButtonStyle(canRoll)}>
-          {rolling ? 'Rodando...' : 'Tirar dado'}
+          {rolling ? 'Rodando...' : 'Tirar dados'}
         </button>
       </div>
 

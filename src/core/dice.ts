@@ -10,7 +10,13 @@ function mulberry32(seed: number) {
   }
 }
 
-export class Dice {
+// What TurnManager actually depends on - lets tests inject an exact roll sequence instead of a
+// seed (a seed is deterministic but its resulting face values aren't hand-pickable).
+export interface DiceLike {
+  roll(): number
+}
+
+export class Dice implements DiceLike {
   private readonly random: () => number
 
   constructor(seed?: number) {
