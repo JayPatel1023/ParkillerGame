@@ -13,7 +13,6 @@ import { TrackTile } from './TrackTile'
 import { useBoardColorSampler } from './useBoardColorSampler'
 import { getHopWaypoints, getPieceWaypoint } from './piecePosition'
 import { toWorldPosition, estimateSquareSize, computeTileCorners, BASE_HEIGHT } from './boardGeometry'
-import { getColor } from '../core/colorPalette'
 
 // Debug aid: draws a line through every trackWaypoint in array order, plus a dot at each one (larger
 // yellow dot on real safe squares, per safeTrackIndices - so it's directly checkable against the
@@ -63,34 +62,6 @@ function TrackDebugPath({
   )
 }
 
-// Debug aid: same idea as TrackDebugPath but for each lane's home stretch - the entrance square on
-// the main loop plus its corridorLength waypoints leading into the hub (entrance + 6 corridor points
-// = 7 total per lane on every board size, since ARM_STEPS is fixed). Drawn in the lane's own color so
-// it's visually distinct from the magenta main loop and from the other lane's corridor.
-function HomeCorridorDebugPath({ definition }: { definition: BoardDefinition }) {
-  const debugHeight = BASE_HEIGHT + 0.03
-  return (
-    <>
-      {definition.playerLanes.map((lane) => {
-        const entrance = definition.trackWaypoints[lane.homeEntranceTrackIndex]
-        const points = [entrance, ...lane.homeCorridorWaypoints].map((wp) => toWorldPosition(wp, debugHeight))
-        const color = getColor(lane.color)
-        return (
-          <group key={lane.color}>
-            <Line points={points} color={color} lineWidth={3} />
-            {points.map((p, i) => (
-              <mesh key={i} position={p}>
-                <sphereGeometry args={[0.03, 8, 8]} />
-                <meshBasicMaterial color={color} />
-              </mesh>
-            ))}
-          </group>
-        )
-      })}
-    </>
-  )
-}
-
 const INTRO_STAGGER = 0.09 // seconds between each piece's drop-in entrance, for a cascading effect
 
 // When multiple pieces land on the same square, they'd otherwise render fully overlapping and
@@ -116,7 +87,8 @@ interface BoardSceneProps {
   players: PlayerState[]
   pendingMoves: MoveOption[]
   onSelectPiece: (piece: Piece) => void
-  diceValue: number | null
+  /** The rulebook's two white dice, rolled together each turn. */
+  diceValues: [number | null, number | null]
   rolling: boolean
   onRollDice: () => void
   moveAnimation: MoveAnimationRequest | null
@@ -128,7 +100,7 @@ export function BoardScene({
   players,
   pendingMoves,
   onSelectPiece,
-  diceValue,
+  diceValues,
   rolling,
   onRollDice,
   moveAnimation,
@@ -233,9 +205,9 @@ export function BoardScene({
         )
       })}
 
-      <DiceMesh value={diceValue} rolling={rolling} onClick={onRollDice} />
+      <DiceMesh value={diceValues[0]} rolling={rolling} onClick={onRollDice} xOffset={-0.4} />
+      <DiceMesh value={diceValues[1]} rolling={rolling} onClick={onRollDice} xOffset={0.4} />
       <TrackDebugPath trackWaypoints={definition.trackWaypoints} safeTrackIndices={definition.safeTrackIndices} />
-      <HomeCorridorDebugPath definition={definition} />
       <OrbitControls enablePan={false} minPolarAngle={0.2} maxPolarAngle={1.2} />
     </Canvas>
   )

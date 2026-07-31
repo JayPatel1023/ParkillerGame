@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { PlayerState } from '../core/gameFlow/playerState'
-import type { TurnManager } from '../core/gameFlow/turnManager'
+import type { DiceRoll, TurnManager } from '../core/gameFlow/turnManager'
 import type { Piece } from '../core/pieces/piece'
 import type { MoveOption } from '../core/rules/moveOption'
 import { snapshotPiece, type PieceSnapshot } from '../scene/piecePosition'
@@ -13,11 +13,12 @@ export interface MoveAnimationRequest {
 
 export function useTurnManager(turnManager: TurnManager) {
   const [currentPlayer, setCurrentPlayer] = useState<PlayerState>(turnManager.currentPlayer)
-  const [lastRoll, setLastRoll] = useState<number | null>(null)
+  const [lastRoll, setLastRoll] = useState<DiceRoll | null>(null)
   const [rolling, setRolling] = useState(false)
   const [pendingMoves, setPendingMoves] = useState<MoveOption[]>([])
   const [winner, setWinner] = useState<PlayerState | null>(null)
   const [moveAnimation, setMoveAnimation] = useState<MoveAnimationRequest | null>(null)
+  const [eliminatedByDoubles, setEliminatedByDoubles] = useState<Piece | null>(null)
 
   useEffect(() => {
     const unsubscribers = [
@@ -28,10 +29,12 @@ export function useTurnManager(turnManager: TurnManager) {
       turnManager.diceRolled.on((roll) => {
         setLastRoll(roll)
         setRolling(false)
+        setEliminatedByDoubles(null)
       }),
       turnManager.moveChoicesReady.on((moves) => setPendingMoves(moves)),
       turnManager.moveNotPossible.on(() => setPendingMoves([])),
       turnManager.moveApplied.on(() => setPendingMoves([])),
+      turnManager.pieceEliminatedByDoubles.on((piece) => setEliminatedByDoubles(piece)),
       turnManager.gameWon.on((player) => setWinner(player)),
     ]
     return () => unsubscribers.forEach((off) => off())
@@ -54,5 +57,16 @@ export function useTurnManager(turnManager: TurnManager) {
     setMoveAnimation(null)
   }
 
-  return { currentPlayer, lastRoll, rolling, pendingMoves, winner, moveAnimation, rollDice, chooseMove, clearMoveAnimation }
+  return {
+    currentPlayer,
+    lastRoll,
+    rolling,
+    pendingMoves,
+    winner,
+    moveAnimation,
+    eliminatedByDoubles,
+    rollDice,
+    chooseMove,
+    clearMoveAnimation,
+  }
 }

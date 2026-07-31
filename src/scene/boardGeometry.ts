@@ -1,5 +1,9 @@
 export const BOARD_SIZE = 6
-export const BASE_HEIGHT = 0.16
+// Just enough clearance above the flat board plane (y=0) to avoid z-fighting with TrackTile's own
+// surface - was 0.16, which read fine for on-track pieces (sitting flush on the equally-elevated
+// TrackTile mesh) but left yard-resident pieces visibly floating above the yard artwork, which is
+// part of the flat board texture at y=0, not a raised tile.
+export const BASE_HEIGHT = 0.02
 
 /** Maps a normalized [0..1] board-image coordinate to a world position on the flat board plane. */
 export function toWorldPosition([u, v]: [number, number], height = BASE_HEIGHT): [number, number, number] {

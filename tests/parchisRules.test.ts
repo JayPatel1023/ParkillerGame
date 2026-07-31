@@ -17,7 +17,7 @@ function buildTestBoard(): BoardData {
 }
 
 describe('parchisRules', () => {
-  it('a piece in the yard cannot move without the entry roll', () => {
+  it('a piece in the yard cannot move without the exit roll', () => {
     const board = buildTestBoard()
     const player = createPlayerState('Red')
     const settings = defaultRuleSettings()
@@ -25,12 +25,12 @@ describe('parchisRules', () => {
     expect(getValidMoves(board, player, 4, settings)).toHaveLength(0)
   })
 
-  it('a piece in the yard can exit with a six', () => {
+  it('a piece in the yard can exit with a five (rulebook: 2 white dice, not the classic six)', () => {
     const board = buildTestBoard()
     const player = createPlayerState('Red')
     const settings = defaultRuleSettings()
 
-    const moves = getValidMoves(board, player, 6, settings)
+    const moves = getValidMoves(board, player, 5, settings)
 
     expect(moves).toHaveLength(4)
     expect(moves[0].kind).toBe('ExitYard')
@@ -98,8 +98,10 @@ describe('parchisRules', () => {
     player.pieces[0].state = 'InHomeCorridor'
     player.pieces[0].corridorPosition = 2 // 1 step from finish
 
+    // amount=2 both overshoots this piece and (unlike 5) doesn't coincide with the yard exit roll,
+    // which would otherwise let the player's other, still-InYard pieces "move" too.
     const settings = defaultRuleSettings()
-    expect(getValidMoves(board, player, 5, settings)).toHaveLength(0)
+    expect(getValidMoves(board, player, 2, settings)).toHaveLength(0)
   })
 
   it('a player with all pieces finished has won', () => {
