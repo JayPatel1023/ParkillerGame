@@ -48,7 +48,15 @@ export function getHopWaypoints(
 
   const hops: [number, number][] = []
 
-  if (before.state === 'OnTrack') {
+  // A piece that landed exactly on its own home-entrance square on an earlier turn sits there
+  // still OnTrack (parchisRules only switches it to InHomeCorridor once a later roll actually
+  // carries it past that square) - moving again from that exact spot needs zero track hops before
+  // falling through to the corridor loop below. Without this check, the walk below starts by
+  // stepping *past* index `before.trackPosition` and won't see it again as a break condition until
+  // it's walked every other square on the loop and wrapped back around - reproduced directly: a
+  // piece at trackPosition 50 (== its own homeEntranceTrackIndex) moving 2 into the corridor
+  // produced 58 phantom hops around the full loop before the real 2-hop corridor entry.
+  if (before.state === 'OnTrack' && before.trackPosition !== lane.homeEntranceTrackIndex) {
     const trackLength = definition.trackWaypoints.length
     let i = before.trackPosition
     let guard = 0
