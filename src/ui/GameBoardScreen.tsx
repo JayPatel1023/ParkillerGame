@@ -36,7 +36,7 @@ export function GameBoardScreen({
   const isDouble = lastRoll !== null && lastRoll.dieA === lastRoll.dieB
 
   return (
-    <div style={{ height: '100%', position: 'relative' }}>
+    <div className="game-screen-in" style={screenWrapperStyle}>
       <BoardScene
         definition={definition}
         players={session.players}
@@ -85,6 +85,16 @@ export function GameBoardScreen({
       )}
     </div>
   )
+}
+
+// A square board inside a landscape window always leaves margin beside it - no zoom/fit math
+// changes that geometry. Rather than fight it, give that margin a deliberate look (a soft radial
+// glow in the board's own parchment/gold tones fading to the page's dark ground) so it reads as
+// framing the board, not as empty unstyled space around it.
+const screenWrapperStyle: React.CSSProperties = {
+  height: '100%',
+  position: 'relative',
+  background: 'radial-gradient(ellipse at center, rgba(181, 203, 184, 0.16) 0%, rgba(28, 31, 29, 0) 62%)',
 }
 
 const hudPanelStyle: React.CSSProperties = {

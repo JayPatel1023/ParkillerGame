@@ -24,3 +24,20 @@ button {
   font: inherit;
   cursor: pointer;
 }
+
+@keyframes game-screen-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .game-screen-in {
+    animation: game-screen-in 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}

@@ -1,5 +1,5 @@
 import { Suspense } from 'react'
-import { Canvas } from '@react-three/fiber'
+import { Canvas, useThree } from '@react-three/fiber'
 import { Line, OrbitControls, OrthographicCamera } from '@react-three/drei'
 import type { BoardDefinition } from '../core/board/boardDefinition'
 import type { PlayerState } from '../core/gameFlow/playerState'
@@ -12,7 +12,20 @@ import { DiceMesh } from './DiceMesh'
 import { TrackTile } from './TrackTile'
 import { useBoardColorSampler } from './useBoardColorSampler'
 import { getHopWaypoints, getPieceWaypoint } from './piecePosition'
-import { toWorldPosition, estimateSquareSize, computeTileCorners, BASE_HEIGHT } from './boardGeometry'
+import { toWorldPosition, estimateSquareSize, computeTileCorners, BASE_HEIGHT, BOARD_SIZE } from './boardGeometry'
+
+// Fixed zoom made the board render at a constant pixel size regardless of viewport - fine on the
+// exact window size it was tuned against, but left large empty margins on any wider/taller
+// screen (the whole point of an orthographic top-down view is seeing the whole board at once).
+// Recomputes zoom from the canvas's actual pixel size on every resize so the board's own 6x6
+// world-unit footprint always fills the shorter viewport dimension, with a small margin so the
+// corner ornaments and the dice sitting just past the board edge aren't clipped.
+const FIT_MARGIN = 0.86
+function FitBoardCamera() {
+  const size = useThree((s) => s.size)
+  const zoom = (Math.min(size.width, size.height) / BOARD_SIZE) * FIT_MARGIN
+  return <OrthographicCamera makeDefault position={[0, 10, 0]} rotation={[-Math.PI / 2, 0, 0]} zoom={zoom} near={0.1} far={50} />
+}
 
 // Debug aid: draws a line through every trackWaypoint in array order, plus a dot at each one (larger
 // yellow dot on real safe squares, per safeTrackIndices - so it's directly checkable against the
@@ -130,8 +143,9 @@ export function BoardScene({
           up-vector singularity, and that small remaining tilt still shifted elevated pieces
           slightly (confirmed - the offset shrank but didn't fully disappear). Setting rotation
           explicitly instead of relying on lookAt sidesteps the singularity without needing any
-          tilt at all, so position can stay exactly [0, 10, 0]. */}
-      <OrthographicCamera makeDefault position={[0, 10, 0]} rotation={[-Math.PI / 2, 0, 0]} zoom={145} near={0.1} far={50} />
+          tilt at all, so position can stay exactly [0, 10, 0]. Zoom itself is computed in
+          FitBoardCamera from the live canvas size, not a fixed constant. */}
+      <FitBoardCamera />
       <ambientLight intensity={0.7} />
       <directionalLight position={[4, 8, 2]} intensity={1.1} castShadow />
       <Suspense fallback={null}>
@@ -186,7 +200,18 @@ export function BoardScene({
                 : lane?.homeCorridorWaypoints[moveAnimation.before.corridorPosition]
           if (beforeWaypoint) {
             hopFrom = toWorldPosition(beforeWaypoint)
-            hops = getHopWaypoints(piece.color, moveAnimation.before, moveAnimation.after, definition).map(toWorldPosition)
+            const rawHops = getHopWaypoints(piece.color, moveAnimation.before, moveAnimation.after, definition)
+            if (rawHops.length > 12) {
+              // eslint-disable-next-line no-console
+              console.warn(
+                '[hop-blowup]',
+                definition.playerCount,
+                piece.color,
+                piece.pieceIndex,
+                JSON.stringify({ before: moveAnimation.before, after: moveAnimation.after, hopCount: rawHops.length }),
+              )
+            }
+            hops = rawHops.map(toWorldPosition)
           }
         }
 
