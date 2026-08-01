@@ -156,6 +156,99 @@ const YARD_HOLES_OVERRIDES = {
     ],
     holeRadiusNorm: 0.0104,
   },
+  // Rest of this table (4-Green through 6-Green) measured in one pass against gridded crops of the
+  // source art, same method as the entries above - a full sweep after a client screenshot marked
+  // essentially every yard except 2p and 4/5/6-Blue as visibly clustered/off-hole.
+  '4-Green': {
+    holes: [
+      [0.32, 0.605],
+      [0.281, 0.639],
+      [0.357, 0.639],
+      [0.32, 0.673],
+    ],
+    holeRadiusNorm: 0.014,
+  },
+  '5-Red': {
+    holes: [
+      [0.25, 0.521],
+      [0.293, 0.541],
+      [0.234, 0.564],
+      [0.274, 0.586],
+    ],
+    holeRadiusNorm: 0.014,
+  },
+  '5-Gold': {
+    holes: [
+      [0.632, 0.234],
+      [0.679, 0.234],
+      [0.632, 0.282],
+      [0.679, 0.282],
+    ],
+    holeRadiusNorm: 0.014,
+  },
+  '5-Purple': {
+    holes: [
+      [0.736, 0.521],
+      [0.696, 0.538],
+      [0.753, 0.568],
+      [0.713, 0.585],
+    ],
+    holeRadiusNorm: 0.014,
+  },
+  '5-Green': {
+    holes: [
+      [0.504, 0.698],
+      [0.471, 0.731],
+      [0.537, 0.731],
+      [0.504, 0.764],
+    ],
+    holeRadiusNorm: 0.014,
+  },
+  '6-Blue': {
+    holes: [
+      [0.293, 0.33],
+      [0.242, 0.342],
+      [0.307, 0.382],
+      [0.255, 0.394],
+    ],
+    holeRadiusNorm: 0.014,
+  },
+  '6-Gold': {
+    holes: [
+      [0.483, 0.201],
+      [0.445, 0.239],
+      [0.522, 0.239],
+      [0.483, 0.273],
+    ],
+    holeRadiusNorm: 0.014,
+  },
+  '6-Purple': {
+    holes: [
+      [0.68, 0.331],
+      [0.725, 0.34],
+      [0.668, 0.375],
+      [0.713, 0.383],
+    ],
+    holeRadiusNorm: 0.014,
+  },
+  '6-Red': {
+    holes: [
+      [0.67, 0.596],
+      [0.713, 0.586],
+      [0.724, 0.629],
+      [0.682, 0.635],
+    ],
+    holeRadiusNorm: 0.014,
+  },
+  '6-Green': {
+    holes: [
+      [0.483, 0.702],
+      [0.443, 0.742],
+      [0.522, 0.742],
+      [0.483, 0.781],
+    ],
+    holeRadiusNorm: 0.014,
+  },
 }
 
 // Same measurement pass as YARD_HOLES_OVERRIDES, for the entry star icon - verified by cropping the
