@@ -13,6 +13,7 @@ import { TrackTile } from './TrackTile'
 import { useBoardColorSampler } from './useBoardColorSampler'
 import { getHopWaypoints, getPieceWaypoint } from './piecePosition'
 import { toWorldPosition, estimateSquareSize, computeTileCorners, BASE_HEIGHT, BOARD_SIZE } from './boardGeometry'
+import { getColor } from '../core/colorPalette'
 
 // Fixed zoom made the board render at a constant pixel size regardless of viewport - fine on the
 // exact window size it was tuned against, but left large empty margins on any wider/taller
@@ -69,6 +70,35 @@ function TrackDebugPath({
             <sphereGeometry args={[radius, 8, 8]} />
             <meshBasicMaterial color={safeSet.has(i) ? 'yellow' : 'magenta'} />
           </mesh>
+        )
+      })}
+    </>
+  )
+}
+
+// Debug aid: shows the otherwise-invisible path from each lane's home-entrance square (on the
+// main loop) to its own finish circle in the center - the board art draws no squares for this
+// stretch at all (confirmed via edge detection on the source image), so without this line there's
+// no way to see how a piece actually gets from the outer loop into the middle. Drawn in each
+// lane's own color so it's clear which corridor belongs to which player.
+function HomeCorridorDebugPath({ definition }: { definition: BoardDefinition }) {
+  const debugHeight = BASE_HEIGHT + 0.03
+  return (
+    <>
+      {definition.playerLanes.map((lane) => {
+        const entrance = definition.trackWaypoints[lane.homeEntranceTrackIndex]
+        const points = [entrance, ...lane.homeCorridorWaypoints].map((wp) => toWorldPosition(wp, debugHeight))
+        const color = getColor(lane.color)
+        return (
+          <group key={lane.color}>
+            <Line points={points} color={color} lineWidth={3} />
+            {points.map((p, i) => (
+              <mesh key={i} position={p}>
+                <sphereGeometry args={[0.03, 8, 8]} />
+                <meshBasicMaterial color={color} />
+              </mesh>
+            ))}
+          </group>
         )
       })}
     </>
@@ -233,6 +263,7 @@ export function BoardScene({
       <DiceMesh value={diceValues[0]} rolling={rolling} onClick={onRollDice} xOffset={-0.4} />
       <DiceMesh value={diceValues[1]} rolling={rolling} onClick={onRollDice} xOffset={0.4} />
       <TrackDebugPath trackWaypoints={definition.trackWaypoints} safeTrackIndices={definition.safeTrackIndices} />
+      <HomeCorridorDebugPath definition={definition} />
       <OrbitControls enablePan={false} minPolarAngle={0.2} maxPolarAngle={1.2} />
     </Canvas>
   )

@@ -93,6 +93,17 @@ const YARD_CENTER_OVERRIDES = {
 // width/height, averaged across that lane's 4 holes (Red bounding boxes ~0.0321-0.0336, Blue
 // ~0.0336-0.0350).
 const YARD_HOLES_OVERRIDES = {
+  // Same failure as the others below - fitted center (0.2998,0.3639) missed the real holes'
+  // (0.253-0.317, 0.354-0.410) clean 2x2 grid, measured directly against a gridded crop.
+  '3-Red': {
+    holes: [
+      [0.253, 0.354],
+      [0.317, 0.354],
+      [0.253, 0.41],
+      [0.317, 0.41],
+    ],
+    holeRadiusNorm: 0.015,
+  },
   '2-Red': {
     holes: [
       [0.2732, 0.6455],
@@ -131,6 +142,19 @@ const YARD_HOLES_OVERRIDES = {
       [0.6444, 0.642],
     ],
     holeRadiusNorm: 0.0106,
+  },
+  // Same failure again - the density search's fitted center for 4-Red landed about 0.037 off in x
+  // from the real holes (measured directly against a gridded crop of the source art: fitted
+  // (0.3542,0.2803) vs the real diamond-arranged holes' own center (0.317,0.280)), so pieces
+  // rendered clustered near the yard's middle instead of in the 4 holes.
+  '4-Red': {
+    holes: [
+      [0.317, 0.245],
+      [0.355, 0.28],
+      [0.317, 0.316],
+      [0.278, 0.28],
+    ],
+    holeRadiusNorm: 0.0104,
   },
 }
 
@@ -510,6 +534,7 @@ function findYardHoles(pixels, yardCenter, yardRadiusNorm, overrideKey) {
     console.error(
       `    fitted center_norm=(${center[0].toFixed(4)},${center[1].toFixed(4)}) radius_norm=${radius.toFixed(4)} offsetDeg=${((offset * 180) / Math.PI).toFixed(1)} holeRadiusNorm=${holeRadiusNorm.toFixed(4)} points=${kept.length}/${pts.length}`,
     )
+    console.error(`    slotCenters=${JSON.stringify(slotCenters.map(([x, y]) => [Number(x.toFixed(4)), Number(y.toFixed(4))]))}`)
   }
 
   return { holes: slotCenters.map(([x, y]) => point(x, y)), holeRadiusNorm }
