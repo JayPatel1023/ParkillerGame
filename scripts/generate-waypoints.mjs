@@ -249,6 +249,36 @@ const YARD_HOLES_OVERRIDES = {
     ],
     holeRadiusNorm: 0.014,
   },
+  // Follow-up pass: these three were missed in the first sweep (4/3-Gold weren't visibly wrong in
+  // the gridded-crop check at the time; 6-Orange wasn't checked at all - a client screenshot caught
+  // all three still clustered).
+  '4-Gold': {
+    holes: [
+      [0.685, 0.247],
+      [0.646, 0.28],
+      [0.722, 0.28],
+      [0.685, 0.317],
+    ],
+    holeRadiusNorm: 0.014,
+  },
+  '3-Gold': {
+    holes: [
+      [0.463, 0.692],
+      [0.525, 0.692],
+      [0.463, 0.753],
+      [0.525, 0.753],
+    ],
+    holeRadiusNorm: 0.014,
+  },
+  '6-Orange': {
+    holes: [
+      [0.273, 0.579],
+      [0.326, 0.593],
+      [0.26, 0.636],
+      [0.312, 0.642],
+    ],
+    holeRadiusNorm: 0.014,
+  },
 }
 
 // Same measurement pass as YARD_HOLES_OVERRIDES, for the entry star icon - verified by cropping the
