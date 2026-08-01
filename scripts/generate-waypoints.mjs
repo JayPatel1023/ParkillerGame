@@ -303,16 +303,20 @@ const HUB_FINISH_OVERRIDES = {
   '2-Blue': { x: 0.5447, y: 0.4256 },
 }
 
-// Tried bowing this into a curve (twice - once away from the yard, once tucked in close) to make it
-// look hand-traced, but the board art has no drawn squares for the home stretch at all (confirmed by
-// running edge detection directly on the source image: only the yard's rings/holes and the main
-// loop's tile dividers produce any edges - the wedge interior is one flat fill with a single
-// finish-circle marker). There's no real path there to curve along, and every curved attempt read as
-// further off the (nonexistent) path than a plain straight line does. Per explicit direction, this
-// stays a direct line from the ring junction to the lane's own finish circle (HUB_FINISH_OVERRIDES) -
-// leaving this override table empty makes buildBoardDefinition's fallback (control point == segment
-// midpoint) degenerate the quadratic bezier into that exact straight line.
-const HUB_CORRIDOR_CURVE_OVERRIDES = {}
+// The board art has no drawn squares for the home stretch (confirmed via edge detection on the
+// source image - only the yard rings/holes and the main loop's tile dividers produce edges, the
+// wedge interior is one flat fill with a single finish-circle marker), so there's no real path to
+// literally trace. A straight ring-junction -> finish line is the simplest option consistent with
+// that, but reads as visibly cutting across the wedge rather than following its own curved
+// boundary - per explicit direction, bow it instead. Control points below are verified two ways:
+// (1) every point on the curve stays within the *wedge's own painted fill* (sampled hue along the
+// whole curve, not just the control point - an earlier attempt bowed far enough to leave the paint
+// entirely), and (2) every point clears each of the yard's 4 hole centers by >=0.045 normalized
+// units (an even earlier attempt cut straight through them).
+const HUB_CORRIDOR_CURVE_OVERRIDES = {
+  '2-Red': { x: 0.2225, y: 0.539 },
+  '2-Blue': { x: 0.7678, y: 0.4212 },
+}
 
 // 2p board: entirely hand-verified and rebuilt, not patched in place - see git history on this file
 // for the long trail of per-index overrides (idx0-62 individually corrected, two array splices to
