@@ -186,12 +186,24 @@ const YARD_HOLES_OVERRIDES = {
     ],
     holeRadiusNorm: 0.014,
   },
+  // Never flagged as wrong in the earlier sweeps - a client screenshot caught it clustered.
+  '5-Blue': {
+    holes: [
+      [0.333, 0.232],
+      [0.379, 0.232],
+      [0.333, 0.276],
+      [0.379, 0.276],
+    ],
+    holeRadiusNorm: 0.014,
+  },
+  // Re-measured at higher precision (0.004 grid instead of 0.005, tighter crop) - the first pass's
+  // reading was off enough to still read as clustered rather than in the 4 holes.
   '5-Purple': {
     holes: [
-      [0.736, 0.521],
-      [0.696, 0.538],
-      [0.753, 0.568],
-      [0.713, 0.585],
+      [0.713, 0.538],
+      [0.758, 0.523],
+      [0.733, 0.583],
+      [0.769, 0.566],
     ],
     holeRadiusNorm: 0.014,
   },
