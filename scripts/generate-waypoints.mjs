@@ -282,12 +282,33 @@ const YARD_HOLES_OVERRIDES = {
     ],
     holeRadiusNorm: 0.014,
   },
+  // Re-measured at finer grid resolution (0.004 steps vs the original 0.005) after the first pass
+  // still read as visibly off-center once seen zoomed in on an actual device - the finer grid caught
+  // a consistent ~0.015-0.018 leftward offset the coarser one missed.
   '6-Orange': {
     holes: [
-      [0.273, 0.579],
-      [0.326, 0.593],
-      [0.26, 0.636],
-      [0.312, 0.642],
+      [0.2575, 0.5772],
+      [0.3084, 0.5901],
+      [0.246, 0.6291],
+      [0.2937, 0.6452],
+    ],
+    holeRadiusNorm: 0.0138,
+  },
+  '6-Red': {
+    holes: [
+      [0.7138, 0.5835],
+      [0.6707, 0.5923],
+      [0.684, 0.6396],
+      [0.7281, 0.6299],
+    ],
+    holeRadiusNorm: 0.014,
+  },
+  '6-Gold': {
+    holes: [
+      [0.4828, 0.2018],
+      [0.4475, 0.2404],
+      [0.52, 0.2404],
+      [0.4833, 0.2743],
     ],
     holeRadiusNorm: 0.014,
   },
