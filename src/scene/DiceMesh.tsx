@@ -14,16 +14,18 @@ declare global {
   }
 }
 
-// Board art is a 6x6 world-unit square (BOARD_SIZE), so its own edge sits at 3 in either axis -
-// dice need to clear that, not just be "close to it", or they rest on top of real track squares on
-// boards whose layout runs close to that edge (reported directly, twice: once resting on the
-// bottom edge, again after moving them to the board's right edge - the bottom spot in particular
-// left very little headroom before the camera's own frustum cut them off on close-to-square
-// viewports). Parked on the board's right side now instead of its near/bottom edge: the tilted
-// camera's left-right framing isn't squeezed by the same near-edge foreshortening the bottom edge
-// has, so there's more consistent clearance past the board here across viewport shapes.
-const SIDE_EDGE = 3.05
-const DIE_SPACING = 0.55 // stacked front-to-back along Z instead of side-by-side along X
+// Two prior positions both sat *past* the board's own edge (world X or Z > 3), which put them at
+// the mercy of the tilted camera's own margin past the board - inconsistent across viewport shapes
+// (reported directly, twice: resting on real track squares on one edge, then pushed half off-screen
+// on the other). Sitting *inside* the board's own footprint instead removes that dependency
+// entirely: as long as the board itself is on screen (guaranteed by FitBoardCamera), so is this
+// spot. Checked every board's actual trackWaypoints for the corner with the most consistent
+// clearance from any real track square - bottom-right wins on all five (closest point never nearer
+// than normalized (0.73, 0.67) - see git history for the exact per-board numbers), so parked well
+// past that at normalized (~0.88, 0.88) in world terms.
+const CORNER_X = 2.3
+const CORNER_Z = 2.3
+const DIE_SPACING = 0.55
 const DIE_SIZE = 0.5
 // The die's own geometry is centered on its local origin, so resting it on the flat board plane
 // (y=0) means lifting that center by half the die's height - was a flat 0.35, well above the
@@ -181,7 +183,7 @@ export function DiceMesh({
   }, [rolling])
 
   return (
-    <group position={[SIDE_EDGE, DIE_REST_Y, (stackIndex - 0.5) * DIE_SPACING]}>
+    <group position={[CORNER_X + (stackIndex - 0.5) * DIE_SPACING, DIE_REST_Y, CORNER_Z]}>
       <mesh ref={meshRef} castShadow onClick={onClick}>
         {/* Rounded corners/edges (not a sharp cardboard cube) to match the reference die photo -
             RoundedBoxGeometry extends BoxGeometry so it keeps the same 6 face-material groups. */}
