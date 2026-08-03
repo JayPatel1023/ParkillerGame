@@ -433,6 +433,28 @@ const TRACK_WAYPOINTS_2P = [
   [0.811, 0.4798],
 ]
 
+// Auto-traced boards (3p-6p) resample the walked/polar loop at even arc-length steps, which holds
+// up almost everywhere but can crowd two points into one square right at a sharp turn while
+// starving the square just past it of any point at all - the squares themselves are fine, only the
+// resampling missed their true centers. Detected generically (not by eyeballing every board): walk
+// each board's own consecutive-segment turn angle, flag any index where the path bends back on
+// itself (segment dot product < 0.3, i.e. more than roughly a right angle) - a real board path
+// never actually doubles back like that, so every flagged index is a resampling artifact, not a
+// real feature of the loop. Fixed indices are placed with a Catmull-Rom fit through their own
+// neighbors (not a straight lerp) so they still land on the drawn curve's true shape rather than
+// cutting a chord across it - verified per board by re-running the same turn-angle check afterward
+// until zero indices remain flagged.
+const TRACK_WAYPOINT_OVERRIDES = {
+  3: {
+    // Sharp turn where the gold arm bends up into its vertical stretch (near the gold/blue border) -
+    // indices 73/74 were both crowded into the elbow square while the square just past it (now 74)
+    // sat empty. Catmull-Rom through indices 71,72,75,76 at t=1/3 and t=2/3. Indices are against the
+    // final (post-reversal) trackWaypoints - see where this is applied, below the reversal.
+    73: [0.8704, 0.6523],
+    74: [0.8857, 0.6302],
+  },
+}
+
 function findYardCenter(pixels, color, playerCount) {
   const { data, width, height, channels } = pixels
   const innerRadius = Math.round(width * 0.06)
@@ -1467,6 +1489,17 @@ function buildBoardDefinition(playerCount, laneColors, yardCenters, trackOuterRa
     lane.homeEntranceTrackIndex = remapIndex(lane.homeEntranceTrackIndex)
   }
   const reversedSafeTrackIndices = safeTrackIndices.map(remapIndex).sort((a, b) => a - b)
+
+  // Indices here are measured against the *final*, already-reversed trackWaypoints (the order the
+  // game actually walks) - applied last so they can't be shuffled to the wrong physical square by
+  // anything upstream, unlike an earlier attempt at this that patched indices before the reversal
+  // above and ended up fixing the wrong squares once everything shifted.
+  const waypointOverrides = TRACK_WAYPOINT_OVERRIDES[playerCount]
+  if (waypointOverrides) {
+    for (const [idx, [x, y]] of Object.entries(waypointOverrides)) {
+      trackWaypoints[Number(idx)] = point(x, y)
+    }
+  }
 
   return {
     playerCount,
