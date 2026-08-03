@@ -105,9 +105,11 @@ interface PieceMeshProps {
   isCurrentTurn: boolean
 }
 
-const RING_PULSE_SPEED = 2.4 // radians/sec
-const RING_BASE_OPACITY = 0.45
-const RING_PULSE_AMPLITUDE = 0.4
+const RING_PULSE_SPEED = 1.5 // radians/sec - slower, gentler "breathing" rather than a mechanical blink
+const RING_BASE_OPACITY = 0.16
+const RING_PULSE_AMPLITUDE = 0.16
+const RING_BASE_SCALE = 1
+const RING_PULSE_SCALE_AMPLITUDE = 0.12 // grows/shrinks along with the fade, instead of just the opacity flickering in place
 
 // Renders as a small bouncing peg-pawn rather than a flat token: at board scale a flat disc barely
 // shows how far it travelled between rolls, but a shape that visibly arcs once per square makes
@@ -147,9 +149,14 @@ export function PieceMesh({
     if (ringRef.current) {
       if (isCurrentTurn) {
         ringElapsedRef.current += delta
-        const pulse = Math.sin(ringElapsedRef.current * RING_PULSE_SPEED) * 0.5 + 0.5
+        // Smoothed 0..1..0 rather than a raw sine, so the breathing lingers softly at each extreme
+        // instead of moving fastest exactly where it's most visible (a plain sine's own shape).
+        const raw = Math.sin(ringElapsedRef.current * RING_PULSE_SPEED) * 0.5 + 0.5
+        const pulse = raw * raw * (3 - 2 * raw)
         const material = ringRef.current.material as THREE.MeshBasicMaterial
         material.opacity = RING_BASE_OPACITY + pulse * RING_PULSE_AMPLITUDE
+        const scale = RING_BASE_SCALE + pulse * RING_PULSE_SCALE_AMPLITUDE
+        ringRef.current.scale.set(scale, scale, 1)
         ringRef.current.visible = true
       } else {
         ringRef.current.visible = false
@@ -242,7 +249,7 @@ export function PieceMesh({
           (rotated onto the board plane) and unlit (MeshBasicMaterial) so it reads as a glow rather
           than a lit disc, and just outside the piece's own footprint so it doesn't hide the base. */}
       <mesh ref={ringRef} position={[0, 0.004, 0]} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
-        <ringGeometry args={[PIECE_BASE_RADIUS * 1.5, PIECE_BASE_RADIUS * 2.1, 32]} />
+        <ringGeometry args={[PIECE_BASE_RADIUS * 1.6, PIECE_BASE_RADIUS * 1.95, 40]} />
         <meshBasicMaterial color="#fff4c2" transparent opacity={RING_BASE_OPACITY} side={THREE.DoubleSide} />
       </mesh>
     </group>
