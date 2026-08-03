@@ -149,7 +149,19 @@ export function BoardScene({
   moveAnimation,
   onAnimationComplete,
 }: BoardSceneProps) {
-  const selectablePieces = new Set(pendingMoves.map((m) => m.piece))
+  // While a move is still animating, its `hops` reconstruction runs against the piece's already-
+  // fully-updated logical state (game rules apply moves instantly; only the visual hop-by-hop
+  // playback takes time). If a second move were submitted before that playback finishes,
+  // `moveAnimation` - a single slot, not a queue - would be overwritten mid-flight: the first
+  // move's PieceMesh would see its `hops` prop change out from under it and, per the reset in
+  // PieceMesh's `useEffect(() => {...}, [hops])`, snap straight to wherever it had logically ended
+  // up (its `restPosition`) instead of finishing its own hop sequence, then play the second move's
+  // hops on top - reproduced directly: a piece rolled 5 visibly hopping only 4 squares, or (for two
+  // dice) a piece appearing to teleport to the first die's destination before hopping the second
+  // die's distance, instead of visibly hopping both in sequence. Gating selectability on
+  // `!moveAnimation` (same guard the roll button already uses) makes that overwrite impossible - a
+  // piece can't be picked for its next move until the current one's animation has actually finished.
+  const selectablePieces = new Set(moveAnimation ? [] : pendingMoves.map((m) => m.piece))
   const allPieces = players.flatMap((player) => player.pieces)
   const sampleColor = useBoardColorSampler(definition.boardImage)
   const tileSize = estimateSquareSize(definition.trackWaypoints)
