@@ -36,24 +36,6 @@ button {
   }
 }
 
-@keyframes dice-roll-shake {
-  0% {
-    transform: rotate(0deg);
-  }
-  25% {
-    transform: rotate(-12deg) scale(1.05);
-  }
-  50% {
-    transform: rotate(0deg);
-  }
-  75% {
-    transform: rotate(12deg) scale(1.05);
-  }
-  100% {
-    transform: rotate(0deg);
-  }
-}
-
 @media (prefers-reduced-motion: no-preference) {
   .game-screen-in {
     animation: game-screen-in 0.5s cubic-bezier(0.16, 1, 0.3, 1);

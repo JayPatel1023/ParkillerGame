@@ -8,6 +8,7 @@ import type { Piece } from '../core/pieces/piece'
 import type { MoveAnimationRequest } from '../hooks/useTurnManager'
 import { BoardMesh } from './BoardMesh'
 import { PieceMesh } from './PieceMesh'
+import { DiceMesh } from './DiceMesh'
 import { TrackTile } from './TrackTile'
 import { useBoardColorSampler } from './useBoardColorSampler'
 import { getHopWaypoints, getPieceWaypoint } from './piecePosition'
@@ -26,8 +27,9 @@ import { getColor } from '../core/colorPalette'
 // like it's sitting slightly off its square.
 // Off for now, per request - flip to true to bring the corridor-path debug overlay back.
 const SHOW_HOME_CORRIDOR_DEBUG = false
-// Same - off for a clean, client-presentable screenshot; flip back on for verification work.
-const SHOW_TRACK_DEBUG = false
+// On only for the two boards whose track data has been hand-verified so far (2p, 3p) - per
+// request, so it doesn't show a still-unverified/rougher path on 4p/5p/6p as if it were final.
+const TRACK_DEBUG_PLAYER_COUNTS = new Set([2, 3])
 
 const FOV_DEGREES = 45
 const DEFAULT_POLAR_ANGLE = 0.85 // ~49° off vertical - shallower than before so more of the board's far side stays in frame
@@ -150,6 +152,10 @@ interface BoardSceneProps {
   players: PlayerState[]
   pendingMoves: MoveOption[]
   onSelectPiece: (piece: Piece) => void
+  /** The rulebook's two white dice, rolled together each turn. */
+  diceValues: [number | null, number | null]
+  rolling: boolean
+  onRollDice: () => void
   moveAnimation: MoveAnimationRequest | null
   onAnimationComplete: () => void
 }
@@ -159,6 +165,9 @@ export function BoardScene({
   players,
   pendingMoves,
   onSelectPiece,
+  diceValues,
+  rolling,
+  onRollDice,
   moveAnimation,
   onAnimationComplete,
 }: BoardSceneProps) {
@@ -282,7 +291,9 @@ export function BoardScene({
         )
       })}
 
-      {SHOW_TRACK_DEBUG && (
+      <DiceMesh value={diceValues[0]} rolling={rolling} onClick={onRollDice} stackIndex={0} />
+      <DiceMesh value={diceValues[1]} rolling={rolling} onClick={onRollDice} stackIndex={1} />
+      {TRACK_DEBUG_PLAYER_COUNTS.has(definition.playerCount) && (
         <TrackDebugPath trackWaypoints={definition.trackWaypoints} safeTrackIndices={definition.safeTrackIndices} />
       )}
       {SHOW_HOME_CORRIDOR_DEBUG && <HomeCorridorDebugPath definition={definition} />}
