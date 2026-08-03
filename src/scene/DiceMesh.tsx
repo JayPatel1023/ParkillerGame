@@ -19,12 +19,14 @@ declare global {
 // (reported directly, twice: resting on real track squares on one edge, then pushed half off-screen
 // on the other). Sitting *inside* the board's own footprint instead removes that dependency
 // entirely: as long as the board itself is on screen (guaranteed by FitBoardCamera), so is this
-// spot. Checked every board's actual trackWaypoints for the corner with the most consistent
-// clearance from any real track square - bottom-right wins on all five (closest point never nearer
-// than normalized (0.73, 0.67) - see git history for the exact per-board numbers), so parked well
-// past that at normalized (~0.88, 0.88) in world terms.
-const CORNER_X = 2.3
-const CORNER_Z = 2.3
+// spot. The bottom-right corner has the most consistent clearance from any real track square across
+// all five boards, but the exact corner also has the board art's own "Parkiller" logo badge sitting
+// there (reported directly: the dice were drawn right on top of it) - nudged in from the corner to
+// the gap between that badge and the fleur-de-lis ornament above it instead, checked clear of both
+// the real track (nearest point 0.091 normalized units away on the tightest board, 4p) and the
+// artwork.
+const CORNER_X = 2.37
+const CORNER_Z = 1.98
 const DIE_SPACING = 0.55
 const DIE_SIZE = 0.5
 // The die's own geometry is centered on its local origin, so resting it on the flat board plane
