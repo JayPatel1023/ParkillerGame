@@ -358,6 +358,12 @@ const HUB_FINISH_OVERRIDES = {
 const HUB_CORRIDOR_CURVE_OVERRIDES = {
   '2-Red': { x: 0.2225, y: 0.539 },
   '2-Blue': { x: 0.7678, y: 0.4212 },
+  // 3-Gold: the 72-square loop rebuild moved Gold's ring junction (homeEntranceTrackIndex) to a
+  // spot where a straight line to its finish cuts directly through Gold's own yard - visually
+  // confirmed, the line ran straight across the 4 waiting pawns. Bows it through the open gap on
+  // the yard's own left side instead, verified clear of the yard's paint by inspection at this
+  // zoom level (same open-background gap Red/2p and Blue/2p's corridors already thread through).
+  '3-Gold': { x: 0.305, y: 0.8 },
 }
 
 // 2p board: entirely hand-verified and rebuilt, not patched in place - see git history on this file
