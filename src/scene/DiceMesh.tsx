@@ -14,7 +14,13 @@ declare global {
   }
 }
 
-const BOARD_EDGE = 2.5 // in front of the board, within the camera's frustum
+// Board art is a 6x6 world-unit square (BOARD_SIZE), so its own edge sits at Z=3 - this needs to
+// clear that, not just be "close to it", or the dice rest on top of real track squares near the
+// bottom edge on boards whose layout runs close to that edge (reported directly: dice sitting on
+// top of visible track tiles and blocking them). Past the edge, in the camera's own margin
+// (FIT_MARGIN in BoardScene reserves headroom past the board for exactly this and the corner
+// ornaments), not on the board itself.
+const BOARD_EDGE = 3.05
 const DIE_SIZE = 0.5
 // The die's own geometry is centered on its local origin, so resting it on the flat board plane
 // (y=0) means lifting that center by half the die's height - was a flat 0.35, well above the
