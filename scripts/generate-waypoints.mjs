@@ -334,6 +334,15 @@ const ENTRY_STAR_OVERRIDES = {
 const HUB_FINISH_OVERRIDES = {
   '2-Red': { x: 0.4428, y: 0.5274 },
   '2-Blue': { x: 0.5447, y: 0.4256 },
+  // 3p: without one of these, every lane's corridor fell back to the shared hub center (average of
+  // all 3 yards), not its own wedge third's real finish circle - harmless for boards where that
+  // fallback happens to land close enough, but on 3p it put Gold's corridor on a straight line that
+  // cut directly through Gold's own yard (visually obvious - the "corridor" ran right through the
+  // 4 waiting pawns). Measured directly: darkest-pixel centroid within each wedge third, hue-
+  // filtered to that lane's own color so the surrounding fill/border don't get pulled in.
+  '3-Red': { x: 0.455, y: 0.461 },
+  '3-Blue': { x: 0.531, y: 0.465 },
+  '3-Gold': { x: 0.488, y: 0.532 },
 }
 
 // The board art has no drawn squares for the home stretch (confirmed via edge detection on the
