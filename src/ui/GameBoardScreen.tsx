@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { BoardDefinition } from '../core/board/boardDefinition'
 import { beginLocalGame } from '../core/gameFlow/localGameSession'
 import type { PieceColor } from '../core/pieceColor'
@@ -23,6 +23,9 @@ export function GameBoardScreen({
   onExit: () => void
 }) {
   const session = useMemo(() => beginLocalGame(definition, colors), [definition, colors])
+  // A live game (turns, dice, positions) is real in-progress state a stray click shouldn't be able
+  // to throw away - confirm before actually leaving instead of exiting immediately on one click.
+  const [confirmingExit, setConfirmingExit] = useState(false)
   const {
     currentPlayer,
     lastRoll,
@@ -88,9 +91,24 @@ export function GameBoardScreen({
         </button>
       </div>
 
-      <button onClick={onExit} title="Salir del juego" style={exitButtonStyle}>
+      <button onClick={() => setConfirmingExit(true)} title="Salir del juego" style={exitButtonStyle}>
         ✕ Salir
       </button>
+
+      {confirmingExit && (
+        <div style={overlayStyle}>
+          <div style={{ fontSize: 18, fontWeight: 600, color: '#f2ede0' }}>¿Seguro que querés salir?</div>
+          <div style={{ ...hintTextStyle, marginBottom: 4 }}>Se perderá la partida en curso.</div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={() => setConfirmingExit(false)} style={secondaryButtonStyle}>
+              Cancelar
+            </button>
+            <button onClick={onExit} style={rollButtonStyle(true)}>
+              Sí, salir
+            </button>
+          </div>
+        </div>
+      )}
 
       {winner && (
         <div style={overlayStyle}>
@@ -161,6 +179,17 @@ function rollButtonStyle(enabled: boolean): React.CSSProperties {
     borderRadius: 8,
     cursor: enabled ? 'pointer' : 'default',
   }
+}
+
+const secondaryButtonStyle: React.CSSProperties = {
+  padding: '9px 16px',
+  fontSize: 15,
+  fontWeight: 600,
+  background: 'transparent',
+  color: '#f2ede0',
+  border: `1px solid ${BRAND_GOLD}`,
+  borderRadius: 8,
+  cursor: 'pointer',
 }
 
 const exitButtonStyle: React.CSSProperties = {
