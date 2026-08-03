@@ -29,6 +29,19 @@ export function snapshotPiece(piece: Piece): PieceSnapshot {
   return { state: piece.state, trackPosition: piece.trackPosition, corridorPosition: piece.corridorPosition }
 }
 
+// No legitimate single move produces anywhere near this many hops - two dice cap the largest
+// single amount at 12 (double sixes), and the longest corridor is a handful of squares past that.
+// A count above this is never a real move, only a reconstruction gone wrong (see the guard below).
+const MAX_PLAUSIBLE_HOPS = 20
+
+function finalWaypoint(color: Piece['color'], snapshot: PieceSnapshot, definition: BoardDefinition): [number, number] | null {
+  const lane = definition.playerLanes.find((l) => l.color === color)
+  if (!lane) return null
+  if (snapshot.state === 'OnTrack') return definition.trackWaypoints[snapshot.trackPosition] ?? null
+  if (snapshot.state === 'InHomeCorridor' || snapshot.state === 'Finished') return lane.homeCorridorWaypoints[snapshot.corridorPosition] ?? null
+  return null
+}
+
 // Reconstructs the square-by-square path a piece actually walked for one move, so the animation
 // can hop through every intermediate square instead of gliding straight from A to B. The number
 // of hops always equals the dice roll, since ParchisRules moves exactly one index per pip.
@@ -73,6 +86,17 @@ export function getHopWaypoints(
   for (let c = fromCorridor + 1; c <= after.corridorPosition; c++) {
     const wp = lane.homeCorridorWaypoints[c]
     if (wp) hops.push(wp)
+  }
+
+  // Belt-and-suspenders: some rare before/after combination still occasionally produces a
+  // full-loop-length reconstruction that hasn't been pinned down despite extensive testing (pure
+  // logic simulation across all 5 boards, and live rapid-interaction stress tests). Whatever the
+  // trigger, a piece visibly circling the entire board is a far worse failure than a plain glide -
+  // fall back to a single direct hop straight to the real destination so the game state stays
+  // correct (it always was - this only ever affected the animation) without the runaway visual.
+  if (hops.length > MAX_PLAUSIBLE_HOPS) {
+    const dest = finalWaypoint(color, after, definition)
+    return dest ? [dest] : hops.slice(-1)
   }
 
   return hops
