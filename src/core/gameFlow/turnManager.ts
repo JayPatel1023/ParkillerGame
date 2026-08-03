@@ -11,6 +11,17 @@ export interface DiceRoll {
   dieB: number
 }
 
+export type RewardReason = 'capture' | 'finish'
+
+export interface RewardGrant {
+  amount: number
+  reason: RewardReason
+}
+
+// PC 3 (capture) and PC 4 (finish) reward sizes, in squares.
+const CAPTURE_REWARD = 20
+const FINISH_REWARD = 10
+
 type Listener<T> = (value: T) => void
 
 class EventEmitter<T> {
@@ -47,6 +58,8 @@ export class TurnManager {
   readonly moveNotPossible = new EventEmitter<void>()
   readonly moveApplied = new EventEmitter<MoveResult>()
   readonly pieceEliminatedByDoubles = new EventEmitter<Piece>()
+  readonly rewardOffered = new EventEmitter<RewardGrant>()
+  readonly rewardForfeited = new EventEmitter<RewardGrant>()
   readonly gameWon = new EventEmitter<PlayerState>()
 
   private board: BoardData
@@ -141,19 +154,22 @@ export class TurnManager {
 
   submitMove(chosenPiece: Piece) {
     const move = this.pendingMoves?.find((m) => m.piece === chosenPiece)
-    if (!move || !this.diceState) return
+    if (!move) return
+    const isRewardMove = move.diceSource === 'reward'
 
     const result = applyMove(this.board, move, this.players, this.settings)
     this.lastMovedPiece = chosenPiece
     this.pendingMoves = null
 
-    if (move.diceSource === 'sum') {
-      this.diceState.dieAUsed = true
-      this.diceState.dieBUsed = true
-    } else if (move.diceSource === 'dieA') {
-      this.diceState.dieAUsed = true
-    } else {
-      this.diceState.dieBUsed = true
+    if (!isRewardMove && this.diceState) {
+      if (move.diceSource === 'sum') {
+        this.diceState.dieAUsed = true
+        this.diceState.dieBUsed = true
+      } else if (move.diceSource === 'dieA') {
+        this.diceState.dieAUsed = true
+      } else {
+        this.diceState.dieBUsed = true
+      }
     }
 
     this.moveApplied.emit(result)
@@ -163,11 +179,38 @@ export class TurnManager {
       return
     }
 
-    if (!this.diceState.dieAUsed || !this.diceState.dieBUsed) {
+    // PC 3/PC 4: capturing or finishing earns a reward, and PC 6.2 places collecting it ahead of
+    // any dice still unspent. A move landing on this same reward can itself capture again, in
+    // which case PC 5 adds the new reward on top rather than replacing it.
+    if (result.capturedPiece) this.offerReward({ amount: CAPTURE_REWARD, reason: 'capture' })
+    if (result.pieceFinished) this.offerReward({ amount: FINISH_REWARD, reason: 'finish' })
+    if (result.capturedPiece || result.pieceFinished) return
+
+    this.continueAfterMove()
+  }
+
+  // Offers a bonus move for an earned reward - restricted (via getValidMoves' own exitRoll check)
+  // to pieces already in play, per PC 5 ("you cannot remove a pawn from the shelter... and then
+  // claim it"). If nothing can use it, PC 5 forfeits it outright rather than holding it for later.
+  private offerReward(grant: RewardGrant) {
+    const moves = getValidMoves(this.board, this.currentPlayer, grant.amount, this.settings, 'reward')
+    if (moves.length === 0) {
+      this.rewardForfeited.emit(grant)
+      this.continueAfterMove()
+      return
+    }
+    this.pendingMoves = moves
+    this.rewardOffered.emit(grant)
+    this.moveChoicesReady.emit(this.pendingMoves)
+  }
+
+  // Resumes whatever the roll still owes after a move (and any reward chain from it) resolves:
+  // more dice to spend, or the turn is over.
+  private continueAfterMove() {
+    if (this.diceState && (!this.diceState.dieAUsed || !this.diceState.dieBUsed)) {
       this.offerMoves()
       return
     }
-
     this.finishDiceUsage()
   }
 
