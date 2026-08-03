@@ -230,18 +230,7 @@ export function BoardScene({
                 : lane?.homeCorridorWaypoints[moveAnimation.before.corridorPosition]
           if (beforeWaypoint) {
             hopFrom = toWorldPosition(beforeWaypoint)
-            const rawHops = getHopWaypoints(piece.color, moveAnimation.before, moveAnimation.after, definition)
-            if (rawHops.length > 12) {
-              // eslint-disable-next-line no-console
-              console.warn(
-                '[hop-blowup]',
-                definition.playerCount,
-                piece.color,
-                piece.pieceIndex,
-                JSON.stringify({ before: moveAnimation.before, after: moveAnimation.after, hopCount: rawHops.length }),
-              )
-            }
-            hops = rawHops.map(toWorldPosition)
+            hops = getHopWaypoints(piece.color, moveAnimation.before, moveAnimation.after, definition).map(toWorldPosition)
           }
         }
 
