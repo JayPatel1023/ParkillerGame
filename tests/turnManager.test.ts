@@ -215,7 +215,10 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     manager.moveChoicesReady.on((m) => (latestMoves = m))
 
     manager.requestRoll()
-    manager.submitMove(red.pieces[0]) // 5 -> 8 (die A = 3), lands on and captures Blue's piece
+    // useTurnManager's chooseMove reads this return value directly (not just the moveApplied event)
+    // to know which piece to keep rendering at the capture square until the animation finishes.
+    const submitResult = manager.submitMove(red.pieces[0]) // 5 -> 8 (die A = 3), lands on and captures Blue's piece
+    expect(submitResult?.capturedPiece).toBe(blue.pieces[0])
 
     expect(blue.pieces[0].state).toBe('InYard')
     expect(rewardGrant).toEqual({ amount: 20, reason: 'capture' })

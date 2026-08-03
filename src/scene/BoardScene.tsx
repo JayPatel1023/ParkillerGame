@@ -217,7 +217,15 @@ export function BoardScene({
       </Suspense>
 
       {allPieces.map((piece, index) => {
-        const waypoint = getPieceWaypoint(piece, definition)
+        // Capture applies to the captured piece's own state (InYard) the instant the move is
+        // submitted, same as every other rule - only the capturing piece's hop animation takes
+        // real time. Render the captured piece frozen at the square it was captured on (the
+        // capturing piece's own destination) for as long as that animation is in flight, instead
+        // of letting it jump home before the capturing piece has visually arrived.
+        const isBeingCaptured = moveAnimation?.capturedPiece === piece
+        const waypoint = isBeingCaptured
+          ? (definition.trackWaypoints[moveAnimation!.after.trackPosition] ?? null)
+          : getPieceWaypoint(piece, definition)
         if (!waypoint) return null
 
         const worldPos = toWorldPosition(waypoint)

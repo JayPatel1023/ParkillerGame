@@ -152,9 +152,12 @@ export class TurnManager {
     this.moveChoicesReady.emit(this.pendingMoves)
   }
 
-  submitMove(chosenPiece: Piece) {
+  // Returns the applied MoveResult (or null if the piece wasn't a valid choice) so callers - namely
+  // useTurnManager - can see what happened (e.g. capturedPiece) without a separate moveApplied
+  // subscription racing the synchronous mutation this method already performs.
+  submitMove(chosenPiece: Piece): MoveResult | null {
     const move = this.pendingMoves?.find((m) => m.piece === chosenPiece)
-    if (!move) return
+    if (!move) return null
     const isRewardMove = move.diceSource === 'reward'
 
     const result = applyMove(this.board, move, this.players, this.settings)
@@ -176,7 +179,7 @@ export class TurnManager {
 
     if (hasWon(this.currentPlayer)) {
       this.gameWon.emit(this.currentPlayer)
-      return
+      return result
     }
 
     // PC 3/PC 4: capturing or finishing earns a reward, and PC 6.2 places collecting it ahead of
@@ -184,9 +187,10 @@ export class TurnManager {
     // which case PC 5 adds the new reward on top rather than replacing it.
     if (result.capturedPiece) this.offerReward({ amount: CAPTURE_REWARD, reason: 'capture' })
     if (result.pieceFinished) this.offerReward({ amount: FINISH_REWARD, reason: 'finish' })
-    if (result.capturedPiece || result.pieceFinished) return
+    if (result.capturedPiece || result.pieceFinished) return result
 
     this.continueAfterMove()
+    return result
   }
 
   // Offers a bonus move for an earned reward - restricted (via getValidMoves' own exitRoll check)

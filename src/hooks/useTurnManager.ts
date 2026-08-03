@@ -9,6 +9,14 @@ export interface MoveAnimationRequest {
   piece: Piece
   before: PieceSnapshot
   after: PieceSnapshot
+  /**
+   * The opponent piece this move captured, if any. Rules apply a capture the instant the move is
+   * submitted (the captured piece's own state flips to InYard right away, same as everything
+   * else), but visually it should stay put until the capturing piece's hop animation actually
+   * arrives - see BoardScene, which keeps rendering this piece at the capture square for as long
+   * as `moveAnimation` names it here, only letting it snap home once the animation completes.
+   */
+  capturedPiece: Piece | null
 }
 
 export function useTurnManager(turnManager: TurnManager) {
@@ -65,9 +73,9 @@ export function useTurnManager(turnManager: TurnManager) {
 
   function chooseMove(piece: Piece) {
     const before = snapshotPiece(piece)
-    turnManager.submitMove(piece) // mutates `piece` synchronously - snapshot after read below is post-move
+    const result = turnManager.submitMove(piece) // mutates `piece` synchronously - after-snapshot below is post-move
     const after = snapshotPiece(piece)
-    setMoveAnimation({ piece, before, after })
+    setMoveAnimation({ piece, before, after, capturedPiece: result?.capturedPiece ?? null })
   }
 
   function clearMoveAnimation() {
