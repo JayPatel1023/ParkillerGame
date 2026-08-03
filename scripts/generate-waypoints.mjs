@@ -1478,6 +1478,12 @@ function buildBoardDefinition(playerCount, laneColors, yardCenters, trackOuterRa
   // 58-vs-63 indexing question.
   const EXTRA_SAFE_INDICES = {
     2: [6, 11, 16, 28, 35, 40, 45, 57],
+    // 3p: measured directly against a reference screenshot with every real safe square hand-marked
+    // in red (distinct from the 3 entry squares, which the game already marks safe on their own) -
+    // color-blob centroid per red dot, matched to the nearest real trackWaypoint (all within 0.03
+    // normalized units). These are pre-reversal indices (this runs before the counterclockwise-
+    // direction fix below remaps everything) - post-reversal they land at 0, 26, 32, 47, 52, 70.
+    3: [7, 25, 30, 45, 51, 77],
   }
   const safeTrackIndices = Array.from(
     new Set([...playerLanes.map((l) => l.entryTrackIndex), ...(EXTRA_SAFE_INDICES[playerCount] ?? [])]),
