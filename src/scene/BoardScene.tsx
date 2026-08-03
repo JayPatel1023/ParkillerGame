@@ -1,6 +1,6 @@
 import { Suspense } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
-import { Line, OrbitControls, PerspectiveCamera } from '@react-three/drei'
+import { Line, OrbitControls, PerspectiveCamera, Text } from '@react-three/drei'
 import type { BoardDefinition } from '../core/board/boardDefinition'
 import type { PlayerState } from '../core/gameFlow/playerState'
 import type { MoveOption } from '../core/rules/moveOption'
@@ -88,10 +88,15 @@ function TrackDebugPath({
         const baseRadius = safeSet.has(i) ? 0.045 : 0.025
         const radius = Math.min(baseRadius, gap * 0.35)
         return (
-          <mesh key={i} position={cur}>
-            <sphereGeometry args={[radius, 8, 8]} />
-            <meshBasicMaterial color={safeSet.has(i) ? 'yellow' : 'magenta'} />
-          </mesh>
+          <group key={i}>
+            <mesh position={cur}>
+              <sphereGeometry args={[radius, 8, 8]} />
+              <meshBasicMaterial color={safeSet.has(i) ? 'yellow' : 'magenta'} />
+            </mesh>
+            <Text position={[cur[0], cur[1] + 0.08, cur[2]]} fontSize={0.055} color="black" outlineWidth={0.006} outlineColor="white">
+              {i}
+            </Text>
+          </group>
         )
       })}
     </>
@@ -115,10 +120,15 @@ function HomeCorridorDebugPath({ definition }: { definition: BoardDefinition }) 
           <group key={lane.color}>
             <Line points={points} color={color} lineWidth={3} />
             {points.map((p, i) => (
-              <mesh key={i} position={p}>
-                <sphereGeometry args={[0.03, 8, 8]} />
-                <meshBasicMaterial color={color} />
-              </mesh>
+              <group key={i}>
+                <mesh position={p}>
+                  <sphereGeometry args={[0.03, 8, 8]} />
+                  <meshBasicMaterial color={color} />
+                </mesh>
+                <Text position={[p[0], p[1] + 0.08, p[2]]} fontSize={0.05} color={color} outlineWidth={0.006} outlineColor="white">
+                  {i === 0 ? `${lane.color[0]}-entrance(${lane.homeEntranceTrackIndex})` : `${lane.color[0]}${i - 1}`}
+                </Text>
+              </group>
             ))}
           </group>
         )
