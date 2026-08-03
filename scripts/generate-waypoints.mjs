@@ -453,16 +453,11 @@ const TRACK_WAYPOINTS_2P = [
 // neighbors (not a straight lerp) so they still land on the drawn curve's true shape rather than
 // cutting a chord across it - verified per board by re-running the same turn-angle check afterward
 // until zero indices remain flagged.
-const TRACK_WAYPOINT_OVERRIDES = {
-  3: {
-    // Sharp turn where the gold arm bends up into its vertical stretch (near the gold/blue border) -
-    // indices 73/74 were both crowded into the elbow square while the square just past it (now 74)
-    // sat empty. Catmull-Rom through indices 71,72,75,76 at t=1/3 and t=2/3. Indices are against the
-    // final (post-reversal) trackWaypoints - see where this is applied, below the reversal.
-    73: [0.8704, 0.6523],
-    74: [0.8857, 0.6302],
-  },
-}
+// Empty for now - 3p's only entry (indices 73/74, a crowded-elbow zigzag) was against the old,
+// divider-crossing-derived 78-square count. Resampling that loop down to the hand-verified 72
+// squares (see VERIFIED_LOOP_LENGTH near extractRealSquares) evened the crowding out on its own;
+// re-run the turn-angle zigzag check against the new count before adding anything back here.
+const TRACK_WAYPOINT_OVERRIDES = {}
 
 function findYardCenter(pixels, color, playerCount) {
   const { data, width, height, channels } = pixels
@@ -1478,12 +1473,36 @@ function buildBoardDefinition(playerCount, laneColors, yardCenters, trackOuterRa
   // 58-vs-63 indexing question.
   const EXTRA_SAFE_INDICES = {
     2: [6, 11, 16, 28, 35, 40, 45, 57],
-    // 3p: measured directly against a reference screenshot with every real safe square hand-marked
-    // in red (distinct from the 3 entry squares, which the game already marks safe on their own) -
-    // color-blob centroid per red dot, matched to the nearest real trackWaypoint (all within 0.03
-    // normalized units). These are pre-reversal indices (this runs before the counterclockwise-
-    // direction fix below remaps everything) - post-reversal they land at 0, 26, 32, 47, 52, 70.
-    3: [7, 25, 30, 45, 51, 77],
+  }
+  // 3p: measured directly against a reference screenshot with every real safe square hand-marked in
+  // red (distinct from the 3 entry squares, which the game already marks safe on their own) - color-
+  // blob centroid per red dot. Recorded as real (x,y) coordinates rather than raw indices because
+  // those survived the 78->72 loop resample unchanged, unlike any hardcoded index would have -
+  // matched here to whichever trackWaypoint index is physically nearest post-resample.
+  const EXTRA_SAFE_COORDS = {
+    3: [
+      [0.898, 0.478],
+      [0.804, 0.699],
+      [0.181, 0.716],
+      [0.269, 0.134],
+      [0.485, 0.107],
+      [0.311, 0.905],
+    ],
+  }
+  if (EXTRA_SAFE_COORDS[playerCount]) {
+    const nearestIndices = EXTRA_SAFE_COORDS[playerCount].map(([sx, sy]) => {
+      let bestIdx = 0
+      let bestDist = Infinity
+      trackWaypoints.forEach(([x, y], i) => {
+        const d = Math.hypot(x - sx, y - sy)
+        if (d < bestDist) {
+          bestDist = d
+          bestIdx = i
+        }
+      })
+      return bestIdx
+    })
+    EXTRA_SAFE_INDICES[playerCount] = nearestIndices
   }
   const safeTrackIndices = Array.from(
     new Set([...playerLanes.map((l) => l.entryTrackIndex), ...(EXTRA_SAFE_INDICES[playerCount] ?? [])]),
@@ -1619,6 +1638,21 @@ async function main() {
     if (realSquares.length >= playerCount * 8) {
       tracedLoop = realSquares
       console.log(`  measured ${realSquares.length} real squares directly from the board art`)
+
+      // extractRealSquares' divider-crossing count can still overcount by a handful on some boards
+      // (a shadow edge or compression artifact reads as an extra divider) - 3p's count was hand-
+      // verified against the real art (24 squares per arm, all three arms symmetric = 72, not the
+      // 78 divider-crossing found) after the raw count produced visibly wrong results: multiple
+      // waypoints crowded into one drawn square in some spots while an adjacent square got none at
+      // all. Resampling the already-measured loop to the verified count evens that back out along
+      // the same real curve, rather than trusting the raw crossing count over a human count of the
+      // actual art.
+      const VERIFIED_LOOP_LENGTH = { 3: 72 }
+      const verifiedCount = VERIFIED_LOOP_LENGTH[playerCount]
+      if (verifiedCount && verifiedCount !== tracedLoop.length) {
+        tracedLoop = resampleClosedLoop(tracedLoop, verifiedCount)
+        console.log(`  resampled ${realSquares.length} -> ${verifiedCount} squares (hand-verified count)`)
+      }
     } else {
       console.warn(`  [board_${playerCount}p] divider extraction found too few squares (${realSquares.length}) - falling back to estimated resampling`)
       if (tracedLoop.length >= 8) {
