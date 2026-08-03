@@ -1,6 +1,6 @@
 import { Suspense } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
-import { Line, OrbitControls, OrthographicCamera } from '@react-three/drei'
+import { Line, OrbitControls, PerspectiveCamera } from '@react-three/drei'
 import type { BoardDefinition } from '../core/board/boardDefinition'
 import type { PlayerState } from '../core/gameFlow/playerState'
 import type { MoveOption } from '../core/rules/moveOption'
@@ -12,33 +12,36 @@ import { DiceMesh } from './DiceMesh'
 import { TrackTile } from './TrackTile'
 import { useBoardColorSampler } from './useBoardColorSampler'
 import { getHopWaypoints, getPieceWaypoint } from './piecePosition'
-import { toWorldPosition, estimateSquareSize, computeTileCorners, BASE_HEIGHT, BOARD_SIZE } from './boardGeometry'
+import { toWorldPosition, estimateSquareSize, computeTileCorners, BASE_HEIGHT } from './boardGeometry'
 import { getColor } from '../core/colorPalette'
 
-// Fixed zoom made the board render at a constant pixel size regardless of viewport - fine on the
-// exact window size it was tuned against, but left large empty margins on any wider/taller
-// screen (the whole point of an orthographic top-down view is seeing the whole board at once).
-// Recomputes zoom from the canvas's actual pixel size on every resize so the board's own 6x6
-// world-unit footprint always fills the shorter viewport dimension, with a small margin so the
-// corner ornaments and the dice sitting just past the board edge aren't clipped.
-const FIT_MARGIN = 0.86
+// Requested look is a real tabletop perspective shot (dramatic near/far foreshortening, board
+// filling the frame edge to edge) rather than the flatter, evenly-scaled orthographic view this
+// used previously. That orthographic choice traded the dramatic look away on purpose - a
+// perspective camera makes elevated points (a piece's own body, sitting above the board on
+// BASE_HEIGHT) drift away from their true ground position on screen the further they sit from
+// the view's center, whereas orthographic keeps an elevated point visually stacked directly above
+// its ground square from any angle. Going back to perspective reintroduces that drift; it reads as
+// negligible at this FOV/distance/tilt combination for pieces near the board's center but grows
+// toward the corners - acceptable for the requested look, but worth knowing if a piece ever looks
+// like it's sitting slightly off its square.
+const FOV_DEGREES = 45
+const DEFAULT_POLAR_ANGLE = 0.85 // ~49° off vertical - shallower than before so more of the board's far side stays in frame
+const CAMERA_DISTANCE = 6.6
+// Calibrated (not derived) against BOARD_SIZE=6 at a ~1.6:1 viewport aspect - see FitBoardCamera.
+const REFERENCE_MIN_DIMENSION_FACTOR = 620
 
-// A dead-straight-down start read as flat/lifeless - a game board wants some tilt by default so
-// pieces visibly stand up off the board on first load, not just after a player manually drags the
-// view (OrbitControls' own min/maxPolarAngle below still let them adjust further either way).
-// Polar angle here (~55° off vertical) is the initial camera *direction* from the board, not a
-// tilt applied after the fact, so it composes correctly with OrbitControls, which derives its own
-// starting orbit angles from this position and takes over the camera's rotation from here -
-// there's no longer a straight-down singularity to dodge with an explicit `rotation` prop once the
-// position itself is off-axis, so that prop is gone.
-const DEFAULT_POLAR_ANGLE = 0.96
-const CAMERA_DISTANCE = 10
 function FitBoardCamera() {
   const size = useThree((s) => s.size)
-  const zoom = (Math.min(size.width, size.height) / BOARD_SIZE) * FIT_MARGIN
-  const y = CAMERA_DISTANCE * Math.cos(DEFAULT_POLAR_ANGLE)
-  const z = CAMERA_DISTANCE * Math.sin(DEFAULT_POLAR_ANGLE)
-  return <OrthographicCamera makeDefault position={[0, y, z]} zoom={zoom} near={0.1} far={50} />
+  // Perspective framing has no single "zoom" knob - distance itself is what fits the board to the
+  // viewport, scaled by the same shorter-viewport-dimension logic the old orthographic zoom used,
+  // so the board still fills the frame consistently across window sizes instead of only at the
+  // exact size this was tuned against.
+  const scale = REFERENCE_MIN_DIMENSION_FACTOR / Math.min(size.width, size.height)
+  const distance = CAMERA_DISTANCE * scale
+  const y = distance * Math.cos(DEFAULT_POLAR_ANGLE)
+  const z = distance * Math.sin(DEFAULT_POLAR_ANGLE)
+  return <PerspectiveCamera makeDefault position={[0, y, z]} fov={FOV_DEGREES} near={0.1} far={50} />
 }
 
 // Debug aid: draws a line through every trackWaypoint in array order, plus a dot at each one (larger
