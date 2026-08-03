@@ -25,6 +25,9 @@ import { getColor } from '../core/colorPalette'
 // negligible at this FOV/distance/tilt combination for pieces near the board's center but grows
 // toward the corners - acceptable for the requested look, but worth knowing if a piece ever looks
 // like it's sitting slightly off its square.
+// Off for now, per request - flip to true to bring the corridor-path debug overlay back.
+const SHOW_HOME_CORRIDOR_DEBUG = false
+
 const FOV_DEGREES = 45
 const DEFAULT_POLAR_ANGLE = 0.85 // ~49° off vertical - shallower than before so more of the board's far side stays in frame
 const CAMERA_DISTANCE = 6.6
@@ -288,7 +291,7 @@ export function BoardScene({
       <DiceMesh value={diceValues[0]} rolling={rolling} onClick={onRollDice} xOffset={-0.4} />
       <DiceMesh value={diceValues[1]} rolling={rolling} onClick={onRollDice} xOffset={0.4} />
       <TrackDebugPath trackWaypoints={definition.trackWaypoints} safeTrackIndices={definition.safeTrackIndices} />
-      <HomeCorridorDebugPath definition={definition} />
+      {SHOW_HOME_CORRIDOR_DEBUG && <HomeCorridorDebugPath definition={definition} />}
       <OrbitControls enablePan={false} minPolarAngle={0.2} maxPolarAngle={1.2} />
     </Canvas>
   )
