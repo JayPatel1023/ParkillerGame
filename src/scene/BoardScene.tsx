@@ -8,7 +8,6 @@ import type { Piece } from '../core/pieces/piece'
 import type { MoveAnimationRequest } from '../hooks/useTurnManager'
 import { BoardMesh } from './BoardMesh'
 import { PieceMesh } from './PieceMesh'
-import { DiceMesh } from './DiceMesh'
 import { TrackTile } from './TrackTile'
 import { useBoardColorSampler } from './useBoardColorSampler'
 import { getHopWaypoints, getPieceWaypoint } from './piecePosition'
@@ -151,10 +150,6 @@ interface BoardSceneProps {
   players: PlayerState[]
   pendingMoves: MoveOption[]
   onSelectPiece: (piece: Piece) => void
-  /** The rulebook's two white dice, rolled together each turn. */
-  diceValues: [number | null, number | null]
-  rolling: boolean
-  onRollDice: () => void
   moveAnimation: MoveAnimationRequest | null
   onAnimationComplete: () => void
 }
@@ -164,9 +159,6 @@ export function BoardScene({
   players,
   pendingMoves,
   onSelectPiece,
-  diceValues,
-  rolling,
-  onRollDice,
   moveAnimation,
   onAnimationComplete,
 }: BoardSceneProps) {
@@ -290,8 +282,6 @@ export function BoardScene({
         )
       })}
 
-      <DiceMesh value={diceValues[0]} rolling={rolling} onClick={onRollDice} xOffset={-0.4} />
-      <DiceMesh value={diceValues[1]} rolling={rolling} onClick={onRollDice} xOffset={0.4} />
       {SHOW_TRACK_DEBUG && (
         <TrackDebugPath trackWaypoints={definition.trackWaypoints} safeTrackIndices={definition.safeTrackIndices} />
       )}

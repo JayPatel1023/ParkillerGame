@@ -6,6 +6,7 @@ import { getColor } from '../core/colorPalette'
 import type { RewardReason } from '../core/gameFlow/turnManager'
 import { useTurnManager } from '../hooks/useTurnManager'
 import { BoardScene } from '../scene/BoardScene'
+import { DiceOverlay } from './DiceOverlay'
 
 const BRAND_GOLD = '#ccb154'
 
@@ -49,12 +50,11 @@ export function GameBoardScreen({
         players={session.players}
         pendingMoves={pendingMoves}
         onSelectPiece={chooseMove}
-        diceValues={diceValues}
-        rolling={rolling}
-        onRollDice={() => canRoll && rollDice()}
         moveAnimation={moveAnimation}
         onAnimationComplete={clearMoveAnimation}
       />
+
+      <DiceOverlay values={diceValues} rolling={rolling} onClick={() => canRoll && rollDice()} disabled={!canRoll} />
 
       <div style={hudPanelStyle}>
         <div style={turnRowStyle}>
