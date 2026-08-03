@@ -39,10 +39,15 @@ const PIECE_PROFILE_RAW: [number, number][] = [
 ]
 const PIECE_BASE_RADIUS = 0.065
 const PROFILE_SCALE = PIECE_BASE_RADIUS / Math.max(...PIECE_PROFILE_RAW.map(([r]) => r))
+// Stretches the profile taller without widening the base - requested directly ("peones más
+// alargados", with a reference photo of taller pawns). Applied only to the height axis, not
+// PROFILE_SCALE/PIECE_BASE_RADIUS, so the footprint that was measured against the real yard holes
+// doesn't change - a piece still sits exactly centered in its slot, just stands taller.
+const PIECE_HEIGHT_SCALE = 1.28
 // Equator of the head ball (y=0.70 in the raw profile, its widest point) - a second, slightly-
 // larger, near-transparent sphere there catches the light as a highlight band, the "glass marble"
 // glint real glossy pawns have instead of flat-shaded plastic.
-const HIGHLIGHT_Y = 0.7 * PROFILE_SCALE
+const HIGHLIGHT_Y = 0.7 * PROFILE_SCALE * PIECE_HEIGHT_SCALE
 const HIGHLIGHT_RADIUS = 0.2 * PROFILE_SCALE
 
 const HOP_DURATION = 0.32 // seconds per square hopped - slow enough that each step reads clearly
@@ -214,7 +219,10 @@ export function PieceMesh({
   // ~0.168 slot diameter - see scripts/generate-waypoints.mjs findYardHoles, run with
   // DEBUG_HOLES=1 to re-measure); only the silhouette itself changed, from a plain cone to this
   // lathe-revolved pawn profile.
-  const profile = useMemo(() => PIECE_PROFILE_RAW.map(([r, y]) => new THREE.Vector2(r * PROFILE_SCALE, y * PROFILE_SCALE)), [])
+  const profile = useMemo(
+    () => PIECE_PROFILE_RAW.map(([r, y]) => new THREE.Vector2(r * PROFILE_SCALE, y * PROFILE_SCALE * PIECE_HEIGHT_SCALE)),
+    [],
+  )
 
   return (
     <group
