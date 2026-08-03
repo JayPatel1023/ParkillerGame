@@ -152,6 +152,7 @@ interface BoardSceneProps {
   players: PlayerState[]
   pendingMoves: MoveOption[]
   onSelectPiece: (piece: Piece) => void
+  currentPlayerColor: Piece['color']
   /** The rulebook's two white dice, rolled together each turn. */
   diceValues: [number | null, number | null]
   rolling: boolean
@@ -165,6 +166,7 @@ export function BoardScene({
   players,
   pendingMoves,
   onSelectPiece,
+  currentPlayerColor,
   diceValues,
   rolling,
   onRollDice,
@@ -287,6 +289,7 @@ export function BoardScene({
             introDelay={index * INTRO_STAGGER}
             selectable={selectablePieces.has(piece)}
             onSelect={onSelectPiece}
+            isCurrentTurn={piece.color === currentPlayerColor}
           />
         )
       })}

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import type { Group } from 'three'
+import type { Group, Mesh } from 'three'
 import { getColor } from '../core/colorPalette'
 import type { Piece } from '../core/pieces/piece'
 import { BASE_HEIGHT } from './boardGeometry'
@@ -98,17 +98,38 @@ interface PieceMeshProps {
   introDelay: number
   selectable: boolean
   onSelect: (piece: Piece) => void
+  /** True for every piece belonging to whoever's turn it is right now - a whose-turn cue, distinct
+   * from (and weaker than) `selectable`, which only lights up the specific piece(s) with an actual
+   * move available once the dice are rolled. Without this, before rolling there was no visual
+   * indication at all of which pieces on the board are even yours this turn. */
+  isCurrentTurn: boolean
 }
+
+const RING_PULSE_SPEED = 2.4 // radians/sec
+const RING_BASE_OPACITY = 0.45
+const RING_PULSE_AMPLITUDE = 0.4
 
 // Renders as a small bouncing peg-pawn rather than a flat token: at board scale a flat disc barely
 // shows how far it travelled between rolls, but a shape that visibly arcs once per square makes
 // the step count countable at a glance.
-export function PieceMesh({ piece, restPosition, hopFrom, hops, onHopsComplete, introDelay, selectable, onSelect }: PieceMeshProps) {
+export function PieceMesh({
+  piece,
+  restPosition,
+  hopFrom,
+  hops,
+  onHopsComplete,
+  introDelay,
+  selectable,
+  onSelect,
+  isCurrentTurn,
+}: PieceMeshProps) {
   const meshRef = useRef<Group>(null)
   const hopIndexRef = useRef(0)
   const elapsedRef = useRef(0)
   const notifiedRef = useRef(true)
   const introRef = useRef({ done: false, elapsed: 0 })
+  const ringRef = useRef<Mesh>(null)
+  const ringElapsedRef = useRef(0)
 
   useEffect(() => {
     hopIndexRef.current = 0
@@ -122,6 +143,18 @@ export function PieceMesh({ piece, restPosition, hopFrom, hops, onHopsComplete, 
     const mesh = meshRef.current
     if (!mesh) return
     const delta = Math.min(rawDelta, MAX_FRAME_DELTA)
+
+    if (ringRef.current) {
+      if (isCurrentTurn) {
+        ringElapsedRef.current += delta
+        const pulse = Math.sin(ringElapsedRef.current * RING_PULSE_SPEED) * 0.5 + 0.5
+        const material = ringRef.current.material as THREE.MeshBasicMaterial
+        material.opacity = RING_BASE_OPACITY + pulse * RING_PULSE_AMPLITUDE
+        ringRef.current.visible = true
+      } else {
+        ringRef.current.visible = false
+      }
+    }
 
     if (!introRef.current.done) {
       introRef.current.elapsed += delta
@@ -203,6 +236,14 @@ export function PieceMesh({ piece, restPosition, hopFrom, hops, onHopsComplete, 
       <mesh position={[0, HIGHLIGHT_Y, 0]}>
         <sphereGeometry args={[HIGHLIGHT_RADIUS, 16, 16]} />
         <meshPhysicalMaterial color="#ffffff" transparent opacity={0.18} roughness={0.15} metalness={0} />
+      </mesh>
+      {/* Whose-turn cue: a soft pulsing ring at the base, visible on every piece belonging to the
+          current player for their whole turn - not just the one(s) selectable right now. Flat
+          (rotated onto the board plane) and unlit (MeshBasicMaterial) so it reads as a glow rather
+          than a lit disc, and just outside the piece's own footprint so it doesn't hide the base. */}
+      <mesh ref={ringRef} position={[0, 0.004, 0]} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
+        <ringGeometry args={[PIECE_BASE_RADIUS * 1.5, PIECE_BASE_RADIUS * 2.1, 32]} />
+        <meshBasicMaterial color="#fff4c2" transparent opacity={RING_BASE_OPACITY} side={THREE.DoubleSide} />
       </mesh>
     </group>
   )
