@@ -167,7 +167,8 @@ export default function WaypointEditor() {
         </label>
 
         <div style={{ marginTop: 12 }}>
-          <button onClick={downloadJson}>Download board_{playerCount}p.json</button>
+          <button onClick={downloadJson}>Download board_{playerCount}p.json</button>{' '}
+          <button onClick={() => navigator.clipboard.writeText(json)}>Copy JSON</button>
         </div>
         <textarea readOnly value={json} style={{ width: '100%', height: 300, marginTop: 8 }} />
       </div>
