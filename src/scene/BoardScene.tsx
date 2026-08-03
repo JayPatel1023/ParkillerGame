@@ -22,10 +22,23 @@ import { getColor } from '../core/colorPalette'
 // world-unit footprint always fills the shorter viewport dimension, with a small margin so the
 // corner ornaments and the dice sitting just past the board edge aren't clipped.
 const FIT_MARGIN = 0.86
+
+// A dead-straight-down start read as flat/lifeless - a game board wants some tilt by default so
+// pieces visibly stand up off the board on first load, not just after a player manually drags the
+// view (OrbitControls' own min/maxPolarAngle below still let them adjust further either way).
+// Polar angle here (~55° off vertical) is the initial camera *direction* from the board, not a
+// tilt applied after the fact, so it composes correctly with OrbitControls, which derives its own
+// starting orbit angles from this position and takes over the camera's rotation from here -
+// there's no longer a straight-down singularity to dodge with an explicit `rotation` prop once the
+// position itself is off-axis, so that prop is gone.
+const DEFAULT_POLAR_ANGLE = 0.96
+const CAMERA_DISTANCE = 10
 function FitBoardCamera() {
   const size = useThree((s) => s.size)
   const zoom = (Math.min(size.width, size.height) / BOARD_SIZE) * FIT_MARGIN
-  return <OrthographicCamera makeDefault position={[0, 10, 0]} rotation={[-Math.PI / 2, 0, 0]} zoom={zoom} near={0.1} far={50} />
+  const y = CAMERA_DISTANCE * Math.cos(DEFAULT_POLAR_ANGLE)
+  const z = CAMERA_DISTANCE * Math.sin(DEFAULT_POLAR_ANGLE)
+  return <OrthographicCamera makeDefault position={[0, y, z]} zoom={zoom} near={0.1} far={50} />
 }
 
 // Debug aid: draws a line through every trackWaypoint in array order, plus a dot at each one (larger
