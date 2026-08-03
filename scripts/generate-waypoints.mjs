@@ -1340,13 +1340,13 @@ function buildBoardDefinition(playerCount, laneColors, yardCenters, trackOuterRa
   const trackLength = trackWaypoints.length
 
   const playerLanes = withAngles.map((lane) => {
-    const homeEntranceTrackIndex = getHomeEntranceIndex(lane)
+    const angleHomeEntranceIndex = getHomeEntranceIndex(lane)
 
     // The board art marks each lane's real entry square with a gold star - use it directly
     // instead of assuming entry sits right next to home-entrance (the two are usually different
     // physical spokes: the short yard connector vs. the long home-stretch corridor).
     const star = entryStars[lane.color]
-    let entryTrackIndex = (homeEntranceTrackIndex + 1) % trackLength
+    let entryTrackIndex = (angleHomeEntranceIndex + 1) % trackLength
     if (star) {
       let bestIdx = 0
       let bestDist = Infinity
@@ -1362,6 +1362,31 @@ function buildBoardDefinition(playerCount, laneColors, yardCenters, trackOuterRa
       // the angle-based guess.
       if (bestDist < 0.05) entryTrackIndex = bestIdx
     }
+
+    // getHomeEntranceIndex is a pure angular-nearest search - it has no notion of which rotational
+    // direction the rules require, so depending on each board's exact geometry it can land on
+    // either physical neighbor of entryTrackIndex (the board draws no visual marker distinguishing
+    // the true home-entrance from the yard-side square right next to it - confirmed by sampling
+    // pixel color across that whole neighborhood, all uniform). The rulebook requires
+    // counterclockwise movement ("from right to left" - PC 2, corroborated by the Parkiller piece
+    // explicitly moving the opposite way, clockwise, per PK 3) and separately requires a piece to
+    // complete a full lap before reaching home (PC 4) - so once trackWaypoints is reversed below to
+    // fix the direction, home-entrance must sit only a couple of squares *ahead* of entry in this
+    // (pre-reversal) indexing, not behind it, so that after reversal the long way around is still
+    // what separates them. If angle-search's answer is already ahead, use it as-is; if it landed
+    // behind (the far more common case empirically), reflect it across entryTrackIndex to its
+    // physical neighbor on the other side instead - same distance from entry, opposite side.
+    // On sparser boards (6p falls back to coarse polar sampling rather than a walked trace - see
+    // the "using polar" log line), angle-search can land exactly on entryTrackIndex itself - no
+    // separation to mirror around, so fall back to entry's immediate successor (already on the
+    // "ahead" side required below, same as every other lane's resolved value) instead.
+    const rawForwardGap = ((angleHomeEntranceIndex - entryTrackIndex) % trackLength + trackLength) % trackLength
+    const homeEntranceTrackIndex =
+      angleHomeEntranceIndex === entryTrackIndex
+        ? (entryTrackIndex + 1) % trackLength
+        : rawForwardGap <= trackLength / 2
+          ? angleHomeEntranceIndex
+          : (((2 * entryTrackIndex - angleHomeEntranceIndex) % trackLength) + trackLength) % trackLength
     const [ringJunctionX, ringJunctionY] = trackWaypoints[homeEntranceTrackIndex]
 
     // Prefer the actually-fitted pip holes (see findYardHoles) so pieces sit exactly in the real
@@ -1427,11 +1452,27 @@ function buildBoardDefinition(playerCount, laneColors, yardCenters, trackOuterRa
     new Set([...playerLanes.map((l) => l.entryTrackIndex), ...(EXTRA_SAFE_INDICES[playerCount] ?? [])]),
   ).sort((a, b) => a - b)
 
+  // Every index above was resolved by walking trackWaypoints in the order the tracer originally
+  // wound it, which - measured against the real art - turned out to run clockwise. The rulebook
+  // requires the opposite ("Pawns move counterclockwise, that is, from right to left" - PC 2;
+  // corroborated by the Parkiller piece's own movement being called out as clockwise, the other
+  // way, in PK 3). Reversing the array here, after every index above is already resolved against
+  // the original order, flips the walking direction without re-deriving any of the measured/traced
+  // positions themselves - same physical squares, opposite order - so every index into
+  // trackWaypoints must be remapped to wherever its physical square now lives post-reversal.
+  trackWaypoints.reverse()
+  const remapIndex = (i) => trackLength - 1 - i
+  for (const lane of playerLanes) {
+    lane.entryTrackIndex = remapIndex(lane.entryTrackIndex)
+    lane.homeEntranceTrackIndex = remapIndex(lane.homeEntranceTrackIndex)
+  }
+  const reversedSafeTrackIndices = safeTrackIndices.map(remapIndex).sort((a, b) => a - b)
+
   return {
     playerCount,
     boardImage: `/boards/board_${playerCount}p.jpg`,
     trackWaypoints,
-    safeTrackIndices,
+    safeTrackIndices: reversedSafeTrackIndices,
     playerLanes,
   }
 }
