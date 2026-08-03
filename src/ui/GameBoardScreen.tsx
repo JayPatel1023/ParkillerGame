@@ -52,6 +52,7 @@ export function GameBoardScreen({
         players={session.players}
         pendingMoves={pendingMoves}
         onSelectPiece={chooseMove}
+        currentPlayerColor={currentPlayer.color}
         diceValues={diceValues}
         rolling={rolling}
         onRollDice={() => canRoll && rollDice()}
