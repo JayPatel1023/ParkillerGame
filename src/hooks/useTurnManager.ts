@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { PlayerState } from '../core/gameFlow/playerState'
-import type { DiceRoll, TurnManager } from '../core/gameFlow/turnManager'
+import type { DiceRoll, RewardGrant, TurnManager } from '../core/gameFlow/turnManager'
 import type { Piece } from '../core/pieces/piece'
 import type { MoveOption } from '../core/rules/moveOption'
 import { snapshotPiece, type PieceSnapshot } from '../scene/piecePosition'
@@ -19,6 +19,8 @@ export function useTurnManager(turnManager: TurnManager) {
   const [winner, setWinner] = useState<PlayerState | null>(null)
   const [moveAnimation, setMoveAnimation] = useState<MoveAnimationRequest | null>(null)
   const [eliminatedByDoubles, setEliminatedByDoubles] = useState<Piece | null>(null)
+  const [pendingReward, setPendingReward] = useState<RewardGrant | null>(null)
+  const [forfeitedReward, setForfeitedReward] = useState<RewardGrant | null>(null)
 
   useEffect(() => {
     const unsubscribers = [
@@ -30,11 +32,26 @@ export function useTurnManager(turnManager: TurnManager) {
         setLastRoll(roll)
         setRolling(false)
         setEliminatedByDoubles(null)
+        setPendingReward(null)
+        setForfeitedReward(null)
       }),
       turnManager.moveChoicesReady.on((moves) => setPendingMoves(moves)),
       turnManager.moveNotPossible.on(() => setPendingMoves([])),
-      turnManager.moveApplied.on(() => setPendingMoves([])),
+      turnManager.moveApplied.on(() => {
+        setPendingMoves([])
+        // Cleared here and re-set by rewardOffered/rewardForfeited if this move earned another one -
+        // both happen synchronously within the same submitMove call, so React batches them together.
+        setPendingReward(null)
+      }),
       turnManager.pieceEliminatedByDoubles.on((piece) => setEliminatedByDoubles(piece)),
+      turnManager.rewardOffered.on((grant) => {
+        setPendingReward(grant)
+        setForfeitedReward(null)
+      }),
+      turnManager.rewardForfeited.on((grant) => {
+        setPendingReward(null)
+        setForfeitedReward(grant)
+      }),
       turnManager.gameWon.on((player) => setWinner(player)),
     ]
     return () => unsubscribers.forEach((off) => off())
@@ -65,6 +82,8 @@ export function useTurnManager(turnManager: TurnManager) {
     winner,
     moveAnimation,
     eliminatedByDoubles,
+    pendingReward,
+    forfeitedReward,
     rollDice,
     chooseMove,
     clearMoveAnimation,

@@ -3,10 +3,15 @@ import type { BoardDefinition } from '../core/board/boardDefinition'
 import { beginLocalGame } from '../core/gameFlow/localGameSession'
 import type { PieceColor } from '../core/pieceColor'
 import { getColor } from '../core/colorPalette'
+import type { RewardReason } from '../core/gameFlow/turnManager'
 import { useTurnManager } from '../hooks/useTurnManager'
 import { BoardScene } from '../scene/BoardScene'
 
 const BRAND_GOLD = '#ccb154'
+
+function rewardReasonLabel(reason: RewardReason): string {
+  return reason === 'capture' ? 'captura' : 'llegada a meta'
+}
 
 export function GameBoardScreen({
   definition,
@@ -26,6 +31,8 @@ export function GameBoardScreen({
     winner,
     moveAnimation,
     eliminatedByDoubles,
+    pendingReward,
+    forfeitedReward,
     rollDice,
     chooseMove,
     clearMoveAnimation,
@@ -65,7 +72,17 @@ export function GameBoardScreen({
             Tercer dobles seguido: {eliminatedByDoubles.color} pierde una ficha
           </div>
         )}
-        {pendingMoves.length > 0 && <div style={hintTextStyle}>Elegí una ficha para mover</div>}
+        {pendingReward && (
+          <div style={{ ...hintTextStyle, color: '#7fd88f' }}>
+            Recompensa: {pendingReward.amount} casillas ({rewardReasonLabel(pendingReward.reason)}) - elegí una ficha
+          </div>
+        )}
+        {forfeitedReward && !pendingReward && (
+          <div style={{ ...hintTextStyle, color: '#e8a15c' }}>
+            Recompensa de {forfeitedReward.amount} casillas perdida (sin ficha disponible)
+          </div>
+        )}
+        {pendingMoves.length > 0 && !pendingReward && <div style={hintTextStyle}>Elegí una ficha para mover</div>}
         <button onClick={() => canRoll && rollDice()} disabled={!canRoll} style={rollButtonStyle(canRoll)}>
           {rolling ? 'Rodando...' : 'Tirar dados'}
         </button>

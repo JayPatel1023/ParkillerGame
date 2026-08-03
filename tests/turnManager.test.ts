@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { BoardData } from '../src/core/board/boardData'
 import type { DiceLike } from '../src/core/dice'
 import { createPlayerState } from '../src/core/gameFlow/playerState'
-import { TurnManager, type DiceRoll } from '../src/core/gameFlow/turnManager'
+import { TurnManager, type DiceRoll, type RewardGrant } from '../src/core/gameFlow/turnManager'
 import { defaultRuleSettings } from '../src/core/rules/ruleSettings'
 
 // Rolls a fixed, hand-picked sequence instead of a seed - a seed is deterministic but its face
@@ -28,6 +28,21 @@ function buildTestBoard(): BoardData {
       Blue: { color: 'Blue', entryTrackIndex: 10, homeEntranceTrackIndex: 9, corridorLength: 6 },
     },
     safeTrackIndices: new Set([0, 10]),
+  }
+}
+
+// A 20-square reward can't fit as a plain TrackMove on the small test board above (its longest
+// possible distanceToHomeEntrance is 19), so the reward-chaining test needs more room to land a
+// second capture without also cutting into the corridor.
+function buildBigTestBoard(): BoardData {
+  return {
+    playerCount: 2,
+    trackLength: 40,
+    lanes: {
+      Red: { color: 'Red', entryTrackIndex: 0, homeEntranceTrackIndex: 39, corridorLength: 6 },
+      Blue: { color: 'Blue', entryTrackIndex: 20, homeEntranceTrackIndex: 19, corridorLength: 6 },
+    },
+    safeTrackIndices: new Set([0, 20]),
   }
 }
 
@@ -176,5 +191,122 @@ describe('TurnManager - two-dice rulebook flow', () => {
 
     expect(eliminated).toBe(false)
     expect(red.pieces[0].state).not.toBe('InYard')
+  })
+})
+
+describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
+  it('capturing an opponent grants a 20-square reward, offered ahead of the remaining die', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red')
+    const blue = createPlayerState('Blue')
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 0
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 8
+
+    const dice = new ScriptedDice([3, 1])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let rewardGrant: RewardGrant | null = null
+    manager.rewardOffered.on((g) => (rewardGrant = g))
+    let latestMoves: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((m) => (latestMoves = m))
+
+    manager.requestRoll()
+    manager.submitMove(red.pieces[0]) // 5 -> 8 (die A = 3), lands on and captures Blue's piece
+
+    expect(blue.pieces[0].state).toBe('InYard')
+    expect(rewardGrant).toEqual({ amount: 20, reason: 'capture' })
+    // offered moves are now the reward (die B is still unspent but must wait per PC 6.2)
+    expect(latestMoves.length).toBeGreaterThan(0)
+    expect(latestMoves.every((m) => m.diceSource === 'reward' && m.amount === 20)).toBe(true)
+    expect(latestMoves.some((m) => m.piece === red.pieces[1])).toBe(true)
+
+    manager.submitMove(red.pieces[1]) // spends the reward: track 0 + 20 -> corridor index 0
+    expect(red.pieces[1].state).toBe('InHomeCorridor')
+    expect(red.pieces[1].corridorPosition).toBe(0)
+  })
+
+  it('finishing a piece grants a 10-square reward', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red')
+    const blue = createPlayerState('Blue')
+    red.pieces[0].state = 'InHomeCorridor'
+    red.pieces[0].corridorPosition = 3 // +2 lands exactly on the finish square (corridor index 5)
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 0
+
+    const dice = new ScriptedDice([2, 1])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let rewardGrant: RewardGrant | null = null
+    manager.rewardOffered.on((g) => (rewardGrant = g))
+
+    manager.requestRoll()
+    manager.submitMove(red.pieces[0])
+
+    expect(red.pieces[0].state).toBe('Finished')
+    expect(rewardGrant).toEqual({ amount: 10, reason: 'finish' })
+  })
+
+  it('a reward move that itself captures chains another reward on top (PC 5)', () => {
+    const board = buildBigTestBoard()
+    const red = createPlayerState('Red')
+    const blue = createPlayerState('Blue')
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 1
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 8
+    blue.pieces[1].state = 'OnTrack'
+    blue.pieces[1].trackPosition = 21
+
+    const dice = new ScriptedDice([3, 1])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    const grants: RewardGrant[] = []
+    manager.rewardOffered.on((g) => grants.push(g))
+
+    manager.requestRoll()
+    manager.submitMove(red.pieces[0]) // 5 -> 8, captures blue.pieces[0]
+    expect(blue.pieces[0].state).toBe('InYard')
+
+    manager.submitMove(red.pieces[1]) // spends the 20-reward: 1 -> 21, captures blue.pieces[1]
+    expect(blue.pieces[1].state).toBe('InYard')
+
+    expect(grants).toEqual([
+      { amount: 20, reason: 'capture' },
+      { amount: 20, reason: 'capture' },
+    ])
+  })
+
+  it('forfeits the reward when no piece already in play can use it (PC 5)', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red')
+    const blue = createPlayerState('Blue')
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 8
+    // red.pieces[1..3] stay InYard - a reward can never move a piece out of the shelter (PC 5),
+    // and red.pieces[0] itself would overshoot its own finish with 20, so nothing qualifies.
+
+    const dice = new ScriptedDice([3, 1])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let forfeited: RewardGrant | null = null
+    manager.rewardForfeited.on((g) => (forfeited = g))
+    let offered: RewardGrant | null = null
+    manager.rewardOffered.on((g) => (offered = g))
+
+    manager.requestRoll()
+    manager.submitMove(red.pieces[0])
+
+    expect(blue.pieces[0].state).toBe('InYard')
+    expect(offered).toBeNull()
+    expect(forfeited).toEqual({ amount: 20, reason: 'capture' })
   })
 })
