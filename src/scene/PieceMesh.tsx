@@ -46,6 +46,13 @@ const HIGHLIGHT_Y = 0.7 * PROFILE_SCALE
 const HIGHLIGHT_RADIUS = 0.2 * PROFILE_SCALE
 
 const HOP_DURATION = 0.32 // seconds per square hopped - slow enough that each step reads clearly
+// A reward (PC 5) can move a piece 10-20 squares in one go - at the standard duration that's
+// 3.2-6.4 continuous seconds of hopping, which reads as broken/stuck rather than as a bonus move
+// (reported directly). Longer sequences speed up per-hop so the *total* playback stays capped
+// near MAX_TOTAL_ANIMATION_TIME - a normal 1-6 hop dice move is short enough that this never
+// kicks in and keeps the full HOP_DURATION per hop; only long reward moves compress.
+const MAX_TOTAL_ANIMATION_TIME = 2.4
+const MIN_HOP_DURATION = 0.09 // floor so a very long reward move still reads as discrete hops, not a blur
 const BOUNCE_HEIGHT = 0.24 // world units, how high each hop arcs - a more emphatic, visible bounce
 
 // Caps how much animation time a single frame can advance. Without this, a slow/dropped frame
@@ -109,6 +116,8 @@ export function PieceMesh({ piece, restPosition, hopFrom, hops, onHopsComplete, 
     notifiedRef.current = hops.length === 0
   }, [hops])
 
+  const hopDuration = Math.max(MIN_HOP_DURATION, Math.min(HOP_DURATION, MAX_TOTAL_ANIMATION_TIME / Math.max(1, hops.length)))
+
   useFrame((_, rawDelta) => {
     const mesh = meshRef.current
     if (!mesh) return
@@ -146,7 +155,7 @@ export function PieceMesh({ piece, restPosition, hopFrom, hops, onHopsComplete, 
     }
 
     elapsedRef.current += delta
-    const t = Math.min(1, elapsedRef.current / HOP_DURATION)
+    const t = Math.min(1, elapsedRef.current / hopDuration)
     const from = hopIndexRef.current === 0 ? hopFrom : hops[hopIndexRef.current - 1]
     const to = hops[hopIndexRef.current]
 
