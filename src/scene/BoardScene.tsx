@@ -27,9 +27,9 @@ import { getColor } from '../core/colorPalette'
 // like it's sitting slightly off its square.
 // Off for now, per request - flip to true to bring the corridor-path debug overlay back.
 const SHOW_HOME_CORRIDOR_DEBUG = true
-// On only for the boards whose track data has been hand-verified so far (2p, 3p, 4p) - per
-// request, so it doesn't show a still-unverified/rougher path on 5p/6p as if it were final.
-const TRACK_DEBUG_PLAYER_COUNTS = new Set([2, 3, 4])
+// On only for the boards whose track data has been hand-verified so far (2p, 3p, 4p, 5p) - per
+// request, so it doesn't show a still-unverified/rougher path on 6p as if it were final.
+const TRACK_DEBUG_PLAYER_COUNTS = new Set([2, 3, 4, 5])
 
 const FOV_DEGREES = 45
 const DEFAULT_POLAR_ANGLE = 0.85 // ~49° off vertical - shallower than before so more of the board's far side stays in frame
