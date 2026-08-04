@@ -25,10 +25,11 @@ import { getColor } from '../core/colorPalette'
 // negligible at this FOV/distance/tilt combination for pieces near the board's center but grows
 // toward the corners - acceptable for the requested look, but worth knowing if a piece ever looks
 // like it's sitting slightly off its square.
-// Off for now, per request - flip to true to bring the corridor-path debug overlay back.
-const SHOW_HOME_CORRIDOR_DEBUG = true
-// On for all 5 boards now that every one's track data has been hand-verified.
-const TRACK_DEBUG_PLAYER_COUNTS = new Set([2, 3, 4, 5, 6])
+// Off for client-facing builds - this was left on and accidentally shipped to the client, who
+// mistook the debug lines/labels themselves for broken track data. Flip both back to true only
+// for local verification work, never for a build meant to be shown to Carlos.
+const SHOW_HOME_CORRIDOR_DEBUG = false
+const TRACK_DEBUG_PLAYER_COUNTS = new Set<number>([])
 
 const FOV_DEGREES = 45
 const DEFAULT_POLAR_ANGLE = 0.85 // ~49° off vertical - shallower than before so more of the board's far side stays in frame
