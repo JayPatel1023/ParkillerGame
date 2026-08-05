@@ -22,6 +22,16 @@ allprojects {
         google()
         mavenCentral()
     }
+    configurations.all {
+        resolutionStrategy {
+            // AndroidX libraries pulled in by the Capacitor scaffold disagree on the Kotlin
+            // stdlib version (1.8.22 vs 1.6.21 jdk7/jdk8 artifacts), which fails the build with
+            // duplicate class errors. Force one consistent version everywhere.
+            force 'org.jetbrains.kotlin:kotlin-stdlib:1.8.22'
+            force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22'
+            force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22'
+        }
+    }
 }
 
 task clean(type: Delete) {
