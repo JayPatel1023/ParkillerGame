@@ -25,11 +25,11 @@ import { getColor } from '../core/colorPalette'
 // negligible at this FOV/distance/tilt combination for pieces near the board's center but grows
 // toward the corners - acceptable for the requested look, but worth knowing if a piece ever looks
 // like it's sitting slightly off its square.
-// Off for client-facing builds. All five boards' outer loops and corridors are now complete and
-// verified (see generated-boards.json history) - flip both back to true only for local
-// verification work, never for a build meant to be shown to Carlos.
-const SHOW_HOME_CORRIDOR_DEBUG = false
-const TRACK_DEBUG_PLAYER_COUNTS = new Set<number>([])
+// On for verification. Must be turned back off (false / empty Set) before any client-facing
+// deploy - it was accidentally left on once already and the client mistook the debug lines
+// themselves for broken track data.
+const SHOW_HOME_CORRIDOR_DEBUG = true
+const TRACK_DEBUG_PLAYER_COUNTS = new Set([2, 3, 4, 5, 6])
 
 const FOV_DEGREES = 45
 const DEFAULT_POLAR_ANGLE = 0.85 // ~49° off vertical - shallower than before so more of the board's far side stays in frame
