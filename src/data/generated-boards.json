@@ -252,64 +252,7 @@
       {
         "color": "Red",
         "entryTrackIndex": 34,
-        "homeEntranceTrackIndex": 32,
-        "homeCorridorWaypoints": [
-          [
-            0.225,
-            0.477
-          ],
-          [
-            0.267,
-            0.47
-          ],
-          [
-            0.303,
-            0.459
-          ],
-          [
-            0.338,
-            0.444
-          ],
-          [
-            0.372,
-            0.422
-          ],
-          [
-            0.405,
-            0.398
-          ],
-          [
-            0.433,
-            0.369
-          ],
-          [
-            0.545,
-            0.42
-          ]
-        ],
-        "yardWaypoints": [
-          [
-            0.273,
-            0.646
-          ],
-          [
-            0.329,
-            0.644
-          ],
-          [
-            0.275,
-            0.7
-          ],
-          [
-            0.33,
-            0.698
-          ]
-        ]
-      },
-      {
-        "color": "Blue",
-        "entryTrackIndex": 5,
-        "homeEntranceTrackIndex": 3,
+        "homeEntranceTrackIndex": 0,
         "homeCorridorWaypoints": [
           [
             0.767,
@@ -342,6 +285,63 @@
           [
             0.444,
             0.527
+          ]
+        ],
+        "yardWaypoints": [
+          [
+            0.273,
+            0.646
+          ],
+          [
+            0.329,
+            0.644
+          ],
+          [
+            0.275,
+            0.7
+          ],
+          [
+            0.33,
+            0.698
+          ]
+        ]
+      },
+      {
+        "color": "Blue",
+        "entryTrackIndex": 5,
+        "homeEntranceTrackIndex": 29,
+        "homeCorridorWaypoints": [
+          [
+            0.225,
+            0.477
+          ],
+          [
+            0.267,
+            0.47
+          ],
+          [
+            0.303,
+            0.459
+          ],
+          [
+            0.338,
+            0.444
+          ],
+          [
+            0.372,
+            0.422
+          ],
+          [
+            0.405,
+            0.398
+          ],
+          [
+            0.433,
+            0.369
+          ],
+          [
+            0.545,
+            0.42
           ]
         ],
         "yardWaypoints": [
@@ -588,7 +588,7 @@
       {
         "color": "Red",
         "entryTrackIndex": 17,
-        "homeEntranceTrackIndex": 15,
+        "homeEntranceTrackIndex": 12,
         "homeCorridorWaypoints": [
           [
             0.313,
@@ -645,7 +645,7 @@
       {
         "color": "Blue",
         "entryTrackIndex": 0,
-        "homeEntranceTrackIndex": 50,
+        "homeEntranceTrackIndex": 46,
         "homeCorridorWaypoints": [
           [
             0.859,
@@ -702,7 +702,7 @@
       {
         "color": "Gold",
         "entryTrackIndex": 34,
-        "homeEntranceTrackIndex": 32,
+        "homeEntranceTrackIndex": 29,
         "homeCorridorWaypoints": [
           [
             0.303,
@@ -1045,7 +1045,7 @@
       {
         "color": "Red",
         "entryTrackIndex": 0,
-        "homeEntranceTrackIndex": 64,
+        "homeEntranceTrackIndex": 63,
         "homeCorridorWaypoints": [
           [
             0.5,
@@ -1216,7 +1216,7 @@
       {
         "color": "Blue",
         "entryTrackIndex": 32,
-        "homeEntranceTrackIndex": 28,
+        "homeEntranceTrackIndex": 29,
         "homeCorridorWaypoints": [
           [
             0.4992,
@@ -1528,7 +1528,7 @@
       {
         "color": "Blue",
         "entryTrackIndex": 0,
-        "homeEntranceTrackIndex": 58,
+        "homeEntranceTrackIndex": 55,
         "homeCorridorWaypoints": [
           [
             0.5029,
@@ -1585,7 +1585,7 @@
       {
         "color": "Gold",
         "entryTrackIndex": 48,
-        "homeEntranceTrackIndex": 46,
+        "homeEntranceTrackIndex": 43,
         "homeCorridorWaypoints": [
           [
             0.794,
@@ -1642,7 +1642,7 @@
       {
         "color": "Purple",
         "entryTrackIndex": 36,
-        "homeEntranceTrackIndex": 35,
+        "homeEntranceTrackIndex": 31,
         "homeCorridorWaypoints": [
           [
             0.6835,
@@ -1699,7 +1699,7 @@
       {
         "color": "Green",
         "entryTrackIndex": 24,
-        "homeEntranceTrackIndex": 23,
+        "homeEntranceTrackIndex": 19,
         "homeCorridorWaypoints": [
           [
             0.3212,
@@ -1756,7 +1756,7 @@
       {
         "color": "Red",
         "entryTrackIndex": 12,
-        "homeEntranceTrackIndex": 10,
+        "homeEntranceTrackIndex": 7,
         "homeCorridorWaypoints": [
           [
             0.2178,
@@ -2117,7 +2117,7 @@
       {
         "color": "Gold",
         "entryTrackIndex": 0,
-        "homeEntranceTrackIndex": 71,
+        "homeEntranceTrackIndex": 67,
         "homeCorridorWaypoints": [
           [
             0.63,
@@ -2174,7 +2174,7 @@
       {
         "color": "Blue",
         "entryTrackIndex": 12,
-        "homeEntranceTrackIndex": 11,
+        "homeEntranceTrackIndex": 7,
         "homeCorridorWaypoints": [
           [
             0.336,
@@ -2231,7 +2231,7 @@
       {
         "color": "Purple",
         "entryTrackIndex": 61,
-        "homeEntranceTrackIndex": 60,
+        "homeEntranceTrackIndex": 55,
         "homeCorridorWaypoints": [
           [
             0.781,
@@ -2288,7 +2288,7 @@
       {
         "color": "Orange",
         "entryTrackIndex": 24,
-        "homeEntranceTrackIndex": 23,
+        "homeEntranceTrackIndex": 19,
         "homeCorridorWaypoints": [
           [
             0.191,
@@ -2345,7 +2345,7 @@
       {
         "color": "Green",
         "entryTrackIndex": 36,
-        "homeEntranceTrackIndex": 34,
+        "homeEntranceTrackIndex": 31,
         "homeCorridorWaypoints": [
           [
             0.33,
@@ -2402,7 +2402,7 @@
       {
         "color": "Red",
         "entryTrackIndex": 48,
-        "homeEntranceTrackIndex": 47,
+        "homeEntranceTrackIndex": 43,
         "homeCorridorWaypoints": [
           [
             0.634,
