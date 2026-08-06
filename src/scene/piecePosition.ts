@@ -29,10 +29,15 @@ export function snapshotPiece(piece: Piece): PieceSnapshot {
   return { state: piece.state, trackPosition: piece.trackPosition, corridorPosition: piece.corridorPosition }
 }
 
-// No legitimate single move produces anywhere near this many hops - two dice cap the largest
-// single amount at 12 (double sixes), and the longest corridor is a handful of squares past that.
-// A count above this is never a real move, only a reconstruction gone wrong (see the guard below).
-const MAX_PLAUSIBLE_HOPS = 20
+// No legitimate single move produces anywhere near this many hops. Two dice cap a normal move at
+// 12 (double sixes), but a capture/finish reward (PC 5) legitimately moves a piece up to 20
+// squares in one go (see CAPTURE_REWARD in turnManager.ts) - confirmed directly as the cause of
+// reward moves occasionally collapsing to a single instant jump instead of animating hop-by-hop:
+// the old ceiling of 20 didn't leave room for a 20-square reward that also crosses into the home
+// corridor, tipping it just over the limit. Sized well above that (20 reward + longest corridor)
+// while staying far below a full lap on even the smallest board (51 on the 3p board), so a genuine
+// runaway reconstruction is still caught.
+const MAX_PLAUSIBLE_HOPS = 32
 
 function finalWaypoint(color: Piece['color'], snapshot: PieceSnapshot, definition: BoardDefinition): [number, number] | null {
   const lane = definition.playerLanes.find((l) => l.color === color)
