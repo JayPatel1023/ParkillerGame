@@ -51,13 +51,18 @@ const HIGHLIGHT_Y = 0.7 * PROFILE_SCALE * PIECE_HEIGHT_SCALE
 const HIGHLIGHT_RADIUS = 0.2 * PROFILE_SCALE
 
 const HOP_DURATION = 0.32 // seconds per square hopped - slow enough that each step reads clearly
-// A reward (PC 5) can move a piece 10-20 squares in one go - at the standard duration that's
-// 3.2-6.4 continuous seconds of hopping, which reads as broken/stuck rather than as a bonus move
+// A reward (PC 5) can move a piece 10-20+ squares in one go - at the standard duration that's
+// several continuous seconds of hopping, which reads as broken/stuck rather than as a bonus move
 // (reported directly). Longer sequences speed up per-hop so the *total* playback stays capped
-// near MAX_TOTAL_ANIMATION_TIME - a normal 1-6 hop dice move is short enough that this never
-// kicks in and keeps the full HOP_DURATION per hop; only long reward moves compress.
-const MAX_TOTAL_ANIMATION_TIME = 2.4
-const MIN_HOP_DURATION = 0.09 // floor so a very long reward move still reads as discrete hops, not a blur
+// near MAX_TOTAL_ANIMATION_TIME - a normal 1-10 hop dice move is short enough that this never
+// kicks in and keeps the full HOP_DURATION per hop; only long reward moves compress, and only
+// gradually (a normal move and a huge one sitting right next to each other in hop count used to
+// jump straight from 0.32s to near the old 0.09s floor, reported as the animation "suddenly"
+// speeding up to an unreadable blur - MIN_HOP_DURATION is now slow enough to still read as
+// discrete hops even at the longest legitimate move, and MAX_TOTAL_ANIMATION_TIME raised so the
+// speed-up ramps in gradually instead of cliffing at a handful of hops).
+const MAX_TOTAL_ANIMATION_TIME = 3.5
+const MIN_HOP_DURATION = 0.18 // floor so even the longest reward move still reads as discrete hops, not a blur
 const BOUNCE_HEIGHT = 0.24 // world units, how high each hop arcs - a more emphatic, visible bounce
 
 // Caps how much animation time a single frame can advance. Without this, a slow/dropped frame
