@@ -12,7 +12,7 @@ import { DiceMesh } from './DiceMesh'
 import { TrackTile } from './TrackTile'
 import { useBoardColorSampler } from './useBoardColorSampler'
 import { getHopWaypoints, getPieceWaypoint } from './piecePosition'
-import { toWorldPosition, estimateSquareSize, computeTileCorners, BASE_HEIGHT } from './boardGeometry'
+import { toWorldPosition, estimateSquareSize, computeTileCorners, computeOpenPathTileCorners, BASE_HEIGHT } from './boardGeometry'
 import { getColor } from '../core/colorPalette'
 
 // Requested look is a real tabletop perspective shot (dramatic near/far foreshortening, board
@@ -250,6 +250,45 @@ export function BoardScene({
             ))
           })()}
       </Suspense>
+
+      {/* Client-requested: on the 2-player board only, Red's home corridor (a real red-painted
+          ladder in the source art, confirmed by direct pixel sampling) is recolored blue. Tiled
+          over the existing art the same way the main loop's TrackTile squares are, rather than
+          edited into the JPG itself, so it stays reversible. */}
+      {definition.playerCount === 2 &&
+        (() => {
+          const redLane = definition.playerLanes.find((l) => l.color === 'Red')
+          if (!redLane) return null
+          const entrance = definition.trackWaypoints[redLane.homeEntranceTrackIndex]
+          // Drops the hub pip (last corridor point) entirely, not just from the tiles rendered -
+          // it's a round hole inside the center circle, not a ladder square, and the real segment
+          // leading into it is much longer than any other (a genuine dive into the hub). Leaving
+          // it in worldPoints just for the second-to-last tile's "next" reference still stretched
+          // that one tile toward it (confirmed directly); excluding it from the input entirely
+          // makes the second-to-last tile a natural boundary using the same bounded synthesized
+          // extension as every other open-path endpoint, sized consistently with its neighbors.
+          const corridorPoints = [entrance, ...redLane.homeCorridorWaypoints.slice(0, -1)]
+          const worldPoints: [number, number][] = corridorPoints.map((wp) => {
+            const w = toWorldPosition(wp)
+            return [w[0], w[2]]
+          })
+          return (
+            <>
+              {redLane.homeCorridorWaypoints.slice(0, -1).map((_wp, i) => (
+                <TrackTile
+                  key={`red-corridor-tile-${i}`}
+                  // The corridor's own point order winds opposite to the main loop's convention
+                  // (it wasn't traced in the same rotational direction) - reversed here rather
+                  // than making TrackTile itself double-sided, which z-fights a zero-thickness
+                  // quad against its own backface and dulls every tile's color (confirmed
+                  // directly, then reverted).
+                  corners={[...computeOpenPathTileCorners(worldPoints, i + 1, tileSize / 2)].reverse()}
+                  color={getColor('Blue')}
+                />
+              ))}
+            </>
+          )
+        })()}
 
       {allPieces.map((piece, index) => {
         // Capture applies to the captured piece's own state (InYard) the instant the move is
