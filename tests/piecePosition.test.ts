@@ -2,6 +2,37 @@ import { describe, expect, it } from 'vitest'
 import type { BoardDefinition } from '../src/core/board/boardDefinition'
 import { getHopWaypoints } from '../src/scene/piecePosition'
 
+// Mirrors CAPTURE_REWARD (20) in turnManager.ts plus a few corridor squares, to reproduce a
+// legitimate reward move that must NOT collapse to a single instant hop.
+function buildLongTrackDefinition(): BoardDefinition {
+  const trackLength = 30
+  return {
+    playerCount: 2,
+    boardImage: '',
+    trackWaypoints: Array.from({ length: trackLength }, (_, i) => [i, i]) as [number, number][],
+    safeTrackIndices: [],
+    playerLanes: [
+      {
+        color: 'Red',
+        entryTrackIndex: 0,
+        homeEntranceTrackIndex: 25,
+        yardWaypoints: [
+          [0, 0],
+          [0, 0],
+          [0, 0],
+          [0, 0],
+        ],
+        homeCorridorWaypoints: [
+          [100, 0],
+          [100, 1],
+          [100, 2],
+          [100, 3],
+        ],
+      },
+    ],
+  } as unknown as BoardDefinition
+}
+
 function buildTestDefinition(): BoardDefinition {
   const trackLength = 20
   return {
@@ -76,6 +107,28 @@ describe('getHopWaypoints', () => {
       [15, 15],
       [100, 0],
       [100, 1],
+    ])
+  })
+
+  it('a large but legitimate reward move (>20 squares, crossing into the corridor) still hops every square instead of collapsing to one jump', () => {
+    // Reproduces the reward-move bug: a capture reward moves a piece 20 squares, which combined
+    // with crossing into the corridor exceeded the old MAX_PLAUSIBLE_HOPS ceiling of 20 and
+    // wrongly collapsed to a single instant hop straight to the destination.
+    const definition = buildLongTrackDefinition()
+    const before = { state: 'OnTrack' as const, trackPosition: 3, corridorPosition: -1 }
+    const after = { state: 'InHomeCorridor' as const, trackPosition: -1, corridorPosition: 3 }
+
+    const hops = getHopWaypoints('Red', before, after, definition)
+
+    // 22 track hops (4..25) + 4 corridor hops = 26 total - well past the old 20-hop ceiling.
+    expect(hops.length).toBe(26)
+    expect(hops[0]).toEqual([4, 4])
+    expect(hops[21]).toEqual([25, 25])
+    expect(hops.slice(22)).toEqual([
+      [100, 0],
+      [100, 1],
+      [100, 2],
+      [100, 3],
     ])
   })
 })
