@@ -1,4 +1,4 @@
-import { Suspense } from 'react'
+import { Suspense, useMemo } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
 import { Line, OrbitControls, PerspectiveCamera, Text } from '@react-three/drei'
 import type { BoardDefinition } from '../core/board/boardDefinition'
@@ -12,7 +12,7 @@ import { DiceMesh } from './DiceMesh'
 import { TrackTile } from './TrackTile'
 import { useBoardColorSampler } from './useBoardColorSampler'
 import { getHopWaypoints, getPieceWaypoint } from './piecePosition'
-import { toWorldPosition, estimateSquareSize, computeTileCorners, computeOpenPathTileCorners, BASE_HEIGHT } from './boardGeometry'
+import { toWorldPosition, estimateSquareSize, computeTileCorners, BASE_HEIGHT } from './boardGeometry'
 import { getColor } from '../core/colorPalette'
 
 // Requested look is a real tabletop perspective shot (dramatic near/far foreshortening, board
@@ -201,6 +201,44 @@ export function BoardScene({
   const sampleColor = useBoardColorSampler(definition.boardImage)
   const tileSize = estimateSquareSize(definition.trackWaypoints)
 
+  // Recomputing hops/hopFrom inline in the render below (as this used to) builds a brand new
+  // array every time BoardScene re-renders, even though `moveAnimation` itself hasn't changed -
+  // and PieceMesh's own `useEffect(() => {...}, [hops])` resets its hop progress back to the
+  // start on any new array reference, not just a logically new move. `moveAnimation` is a stable
+  // object for the whole duration of one animation (only replaced by chooseMove/cleared by
+  // clearMoveAnimation - see useTurnManager), but anything else re-rendering BoardScene mid-flight
+  // (dice state, pending-move updates, OrbitControls) was enough to restart the current hop from
+  // hop 0 - reproduced directly as the reported "sometimes smooth, sometimes erratic" playback:
+  // smooth when nothing else re-rendered during that particular move, stuttering/zipping when it
+  // did. Memoized on moveAnimation's own primitive fields so the array is only rebuilt when the
+  // move itself actually changes.
+  const animatingHopData = useMemo(() => {
+    if (!moveAnimation) return null
+    const { piece, before, after } = moveAnimation
+    const lane = definition.playerLanes.find((l) => l.color === piece.color)
+    const beforeWaypoint =
+      before.state === 'InYard'
+        ? lane?.yardWaypoints[piece.pieceIndex]
+        : before.state === 'OnTrack'
+          ? definition.trackWaypoints[before.trackPosition]
+          : lane?.homeCorridorWaypoints[before.corridorPosition]
+    if (!beforeWaypoint) return null
+    return {
+      hopFrom: toWorldPosition(beforeWaypoint),
+      hops: getHopWaypoints(piece.color, before, after, definition).map(toWorldPosition),
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    moveAnimation?.piece,
+    moveAnimation?.before.state,
+    moveAnimation?.before.trackPosition,
+    moveAnimation?.before.corridorPosition,
+    moveAnimation?.after.state,
+    moveAnimation?.after.trackPosition,
+    moveAnimation?.after.corridorPosition,
+    definition,
+  ])
+
   const stackGroups = new Map<string, Piece[]>()
   for (const piece of allPieces) {
     const key = stackKeyFor(piece)
@@ -251,45 +289,6 @@ export function BoardScene({
           })()}
       </Suspense>
 
-      {/* Client-requested: on the 2-player board only, Red's home corridor (a real red-painted
-          ladder in the source art, confirmed by direct pixel sampling) is recolored blue. Tiled
-          over the existing art the same way the main loop's TrackTile squares are, rather than
-          edited into the JPG itself, so it stays reversible. */}
-      {definition.playerCount === 2 &&
-        (() => {
-          const redLane = definition.playerLanes.find((l) => l.color === 'Red')
-          if (!redLane) return null
-          const entrance = definition.trackWaypoints[redLane.homeEntranceTrackIndex]
-          // Drops the hub pip (last corridor point) entirely, not just from the tiles rendered -
-          // it's a round hole inside the center circle, not a ladder square, and the real segment
-          // leading into it is much longer than any other (a genuine dive into the hub). Leaving
-          // it in worldPoints just for the second-to-last tile's "next" reference still stretched
-          // that one tile toward it (confirmed directly); excluding it from the input entirely
-          // makes the second-to-last tile a natural boundary using the same bounded synthesized
-          // extension as every other open-path endpoint, sized consistently with its neighbors.
-          const corridorPoints = [entrance, ...redLane.homeCorridorWaypoints.slice(0, -1)]
-          const worldPoints: [number, number][] = corridorPoints.map((wp) => {
-            const w = toWorldPosition(wp)
-            return [w[0], w[2]]
-          })
-          return (
-            <>
-              {redLane.homeCorridorWaypoints.slice(0, -1).map((_wp, i) => (
-                <TrackTile
-                  key={`red-corridor-tile-${i}`}
-                  // The corridor's own point order winds opposite to the main loop's convention
-                  // (it wasn't traced in the same rotational direction) - reversed here rather
-                  // than making TrackTile itself double-sided, which z-fights a zero-thickness
-                  // quad against its own backface and dulls every tile's color (confirmed
-                  // directly, then reverted).
-                  corners={[...computeOpenPathTileCorners(worldPoints, i + 1, tileSize / 2)].reverse()}
-                  color={getColor('Blue')}
-                />
-              ))}
-            </>
-          )
-        })()}
-
       {allPieces.map((piece, index) => {
         // Capture applies to the captured piece's own state (InYard) the instant the move is
         // submitted, same as every other rule - only the capturing piece's hop animation takes
@@ -312,21 +311,8 @@ export function BoardScene({
           restPosition[2] += oz
         }
         const isAnimating = moveAnimation?.piece === piece
-        let hopFrom: [number, number, number] | null = null
-        let hops: [number, number, number][] = []
-        if (isAnimating && moveAnimation) {
-          const lane = definition.playerLanes.find((l) => l.color === piece.color)
-          const beforeWaypoint =
-            moveAnimation.before.state === 'InYard'
-              ? lane?.yardWaypoints[piece.pieceIndex]
-              : moveAnimation.before.state === 'OnTrack'
-                ? definition.trackWaypoints[moveAnimation.before.trackPosition]
-                : lane?.homeCorridorWaypoints[moveAnimation.before.corridorPosition]
-          if (beforeWaypoint) {
-            hopFrom = toWorldPosition(beforeWaypoint)
-            hops = getHopWaypoints(piece.color, moveAnimation.before, moveAnimation.after, definition).map(toWorldPosition)
-          }
-        }
+        const hopFrom = isAnimating ? (animatingHopData?.hopFrom ?? null) : null
+        const hops = isAnimating ? (animatingHopData?.hops ?? []) : []
 
         return (
           <PieceMesh
