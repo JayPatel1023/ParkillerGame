@@ -255,7 +255,7 @@
     "playerLanes": [
       {
         "color": "Red",
-        "entryTrackIndex": 29,
+        "entryTrackIndex": 30,
         "homeEntranceTrackIndex": 25,
         "homeCorridorWaypoints": [
           [
@@ -1109,7 +1109,7 @@
       },
       {
         "color": "Gold",
-        "entryTrackIndex": 49,
+        "entryTrackIndex": 51,
         "homeEntranceTrackIndex": 46,
         "homeCorridorWaypoints": [
           [
@@ -1166,7 +1166,7 @@
       },
       {
         "color": "Green",
-        "entryTrackIndex": 16,
+        "entryTrackIndex": 17,
         "homeEntranceTrackIndex": 12,
         "homeCorridorWaypoints": [
           [
@@ -1223,7 +1223,7 @@
       },
       {
         "color": "Blue",
-        "entryTrackIndex": 32,
+        "entryTrackIndex": 34,
         "homeEntranceTrackIndex": 29,
         "homeCorridorWaypoints": [
           [
@@ -2238,7 +2238,7 @@
       },
       {
         "color": "Purple",
-        "entryTrackIndex": 61,
+        "entryTrackIndex": 60,
         "homeEntranceTrackIndex": 55,
         "homeCorridorWaypoints": [
           [
