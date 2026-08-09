@@ -12,7 +12,7 @@ import { DiceMesh } from './DiceMesh'
 import { TrackTile } from './TrackTile'
 import { useBoardColorSampler } from './useBoardColorSampler'
 import { getHopWaypoints, getPieceWaypoint } from './piecePosition'
-import { toWorldPosition, estimateSquareSize, computeTileCorners, BASE_HEIGHT } from './boardGeometry'
+import { toWorldPosition, estimateSquareSize, computeTileCorners, BASE_HEIGHT, FLAT_SURFACE_HEIGHT } from './boardGeometry'
 import { getColor } from '../core/colorPalette'
 
 // Requested look is a real tabletop perspective shot (dramatic near/far foreshortening, board
@@ -171,6 +171,13 @@ const STACK_OFFSETS: [number, number][] = [
   [0, -0.16],
 ]
 
+// Only OnTrack pieces stand on a raised TrackTile mesh (see BASE_HEIGHT); every other state rests
+// directly on the flat board texture and needs FLAT_SURFACE_HEIGHT instead, or it visibly floats
+// above its own square.
+function restHeightFor(piece: Piece): number {
+  return piece.state === 'OnTrack' ? BASE_HEIGHT : FLAT_SURFACE_HEIGHT
+}
+
 function stackKeyFor(piece: Piece): string | null {
   if (piece.state === 'OnTrack') return `track-${piece.trackPosition}`
   if (piece.state === 'InHomeCorridor') return `corridor-${piece.color}-${piece.corridorPosition}`
@@ -322,7 +329,7 @@ export function BoardScene({
           : getPieceWaypoint(piece, definition)
         if (!waypoint) return null
 
-        const worldPos = toWorldPosition(waypoint)
+        const worldPos = toWorldPosition(waypoint, isBeingCaptured ? BASE_HEIGHT : restHeightFor(piece))
         const stackKey = stackKeyFor(piece)
         const group = stackKey ? stackGroups.get(stackKey) : undefined
         const restPosition: [number, number, number] = worldPos

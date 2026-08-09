@@ -1,9 +1,18 @@
 export const BOARD_SIZE = 6
-// Just enough clearance above the flat board plane (y=0) to avoid z-fighting with TrackTile's own
-// surface - was 0.16, which read fine for on-track pieces (sitting flush on the equally-elevated
-// TrackTile mesh) but left yard-resident pieces visibly floating above the yard artwork, which is
-// part of the flat board texture at y=0, not a raised tile.
+// Just enough clearance above TrackTile's own surface (which itself sits at this same height - see
+// TrackTile.tsx) to avoid z-fighting between a piece's base and the tile underneath it. Only
+// correct for pieces actually standing on a raised TrackTile, i.e. OnTrack - see FLAT_SURFACE_HEIGHT
+// for every other state.
 export const BASE_HEIGHT = 0.02
+
+// Yard, home-corridor, and finished-hub squares have no TrackTile mesh at all (confirmed via edge
+// detection on the source art - see HomeCorridorDebugPath's own comment) - a piece resting there
+// sits directly over the flat board plane at y=0, not a raised tile, so it doesn't need BASE_HEIGHT's
+// clearance and using it anyway left these pieces visibly hovering above their own square (reported
+// directly as pieces "floating in space", worst at close/low camera angles where the gap reads as
+// large relative to the piece's own footprint). Small enough to still dodge z-fighting with the flat
+// board texture, nowhere near tall enough to read as a gap.
+export const FLAT_SURFACE_HEIGHT = 0.003
 
 /** Maps a normalized [0..1] board-image coordinate to a world position on the flat board plane. */
 export function toWorldPosition([u, v]: [number, number], height = BASE_HEIGHT): [number, number, number] {
