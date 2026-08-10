@@ -68,10 +68,6 @@
         0.183
       ],
       [
-        0.372,
-        0.181
-      ],
-      [
         0.334,
         0.206
       ],
@@ -241,22 +237,22 @@
       ]
     ],
     "safeTrackIndices": [
-      54,
+      53,
       0,
       7,
       12,
-      18,
-      25,
-      29,
-      37,
-      42,
-      47
+      17,
+      24,
+      28,
+      36,
+      41,
+      46
     ],
     "playerLanes": [
       {
         "color": "Red",
-        "entryTrackIndex": 30,
-        "homeEntranceTrackIndex": 25,
+        "entryTrackIndex": 29,
+        "homeEntranceTrackIndex": 24,
         "homeCorridorWaypoints": [
           [
             0.245,
@@ -317,7 +313,7 @@
       {
         "color": "Blue",
         "entryTrackIndex": 0,
-        "homeEntranceTrackIndex": 54,
+        "homeEntranceTrackIndex": 53,
         "homeCorridorWaypoints": [
           [
             0.769,
