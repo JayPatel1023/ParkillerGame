@@ -134,29 +134,6 @@ function HomeCorridorDebugPath({ definition }: { definition: BoardDefinition }) 
   )
 }
 
-// Marks each lane's entry square - where its pieces first land on the main loop after leaving
-// the yard on a 6 - with a flat blue dot, so players can see at a glance where a piece is about
-// to enter play. One marker per lane, in a single fixed blue regardless of that lane's own color
-// (distinguishing "this is the entry square" from "this square belongs to color X").
-const ENTRY_MARKER_HEIGHT = BASE_HEIGHT + 0.005 // just above the tile surface, below piece height
-
-function EntryPointMarkers({ definition, tileSize }: { definition: BoardDefinition; tileSize: number }) {
-  return (
-    <>
-      {definition.playerLanes.map((lane) => {
-        const waypoint = definition.trackWaypoints[lane.entryTrackIndex]
-        const [x, , z] = toWorldPosition(waypoint, ENTRY_MARKER_HEIGHT)
-        return (
-          <mesh key={lane.color} position={[x, ENTRY_MARKER_HEIGHT, z]} rotation={[-Math.PI / 2, 0, 0]}>
-            <circleGeometry args={[tileSize * 0.22, 24]} />
-            <meshBasicMaterial color="#1e5fd9" />
-          </mesh>
-        )
-      })}
-    </>
-  )
-}
-
 const INTRO_STAGGER = 0.09 // seconds between each piece's drop-in entrance, for a cascading effect
 
 // When multiple pieces land on the same square, they'd otherwise render fully overlapping and
@@ -314,8 +291,6 @@ export function BoardScene({
             ))
           })()}
       </Suspense>
-
-      <EntryPointMarkers definition={definition} tileSize={tileSize} />
 
       {allPieces.map((piece, index) => {
         // Capture applies to the captured piece's own state (InYard) the instant the move is
