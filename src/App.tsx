@@ -7,7 +7,15 @@ import { StartScreen } from './ui/StartScreen'
 import WaypointEditor from './tools/WaypointEditor'
 import ComponentPreview from './tools/ComponentPreview'
 
-const DEFAULT_COLOR_ORDER: PieceColor[] = ['Red', 'Blue', 'Gold', 'Green', 'Purple', 'Orange']
+// Turn order (who goes first, then next, etc.) requested per player count - not the same as each
+// board's own playerLanes order, which only fixes where each color's yard/track sits spatially.
+const TURN_ORDER_BY_COUNT: Record<number, PieceColor[]> = {
+  2: ['Red', 'Blue'],
+  3: ['Red', 'Gold', 'Blue'],
+  4: ['Green', 'Blue', 'Gold', 'Red'],
+  5: ['Red', 'Green', 'Purple', 'Gold', 'Blue'],
+  6: ['Orange', 'Green', 'Red', 'Purple', 'Gold', 'Blue'],
+}
 
 type Screen = 'start' | 'selectCount' | 'game'
 
@@ -39,7 +47,7 @@ export default function App() {
       {screen === 'game' && (
         <GameBoardScreen
           definition={BOARD_DEFINITIONS[playerCount]}
-          colors={DEFAULT_COLOR_ORDER.slice(0, playerCount)}
+          colors={TURN_ORDER_BY_COUNT[playerCount]}
           onExit={() => setScreen('start')}
         />
       )}
