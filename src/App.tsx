@@ -1,22 +1,13 @@
 import { useMemo, useState } from 'react'
-import type { PieceColor } from './core/pieceColor'
 import { beginLocalGame } from './core/gameFlow/localGameSession'
+import { TURN_ORDER_BY_COUNT } from './core/turnOrder'
 import { BOARD_DEFINITIONS } from './data/boards'
 import { GameBoardScreen } from './ui/GameBoardScreen'
 import { PlayerCountSelector } from './ui/PlayerCountSelector'
 import { StartScreen } from './ui/StartScreen'
 import WaypointEditor from './tools/WaypointEditor'
 import ComponentPreview from './tools/ComponentPreview'
-
-// Turn order (who goes first, then next, etc.) requested per player count - not the same as each
-// board's own playerLanes order, which only fixes where each color's yard/track sits spatially.
-const TURN_ORDER_BY_COUNT: Record<number, PieceColor[]> = {
-  2: ['Red', 'Blue'],
-  3: ['Red', 'Gold', 'Blue'],
-  4: ['Green', 'Blue', 'Gold', 'Red'],
-  5: ['Red', 'Green', 'Purple', 'Gold', 'Blue'],
-  6: ['Orange', 'Green', 'Red', 'Purple', 'Gold', 'Blue'],
-}
+import OnlineLobbyScreen from './ui/OnlineLobbyScreen'
 
 type Screen = 'start' | 'selectCount' | 'game'
 
@@ -39,6 +30,12 @@ export default function App() {
   // isolation, with nothing else rendered. See src/tools/ComponentPreview.tsx.
   if (window.location.hash === '#component') {
     return <ComponentPreview />
+  }
+  // Dev-only route (milestone 2, in progress): online play via Photon Realtime - not linked from
+  // anywhere in the visible UI ("Jugar online" on StartScreen stays disabled) until it's actually
+  // ready to show the client. See src/ui/OnlineLobbyScreen.tsx.
+  if (window.location.hash === '#online') {
+    return <OnlineLobbyScreen />
   }
 
   return (
