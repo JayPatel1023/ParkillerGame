@@ -359,11 +359,21 @@ export function BoardScene({
         const hopFrom = isAnimating ? (parkillerHopData?.hopFrom ?? null) : null
         const hops = isAnimating ? (parkillerHopData?.hops ?? []) : []
 
+        // The Parkiller's forward hand marks its direction of travel (reported directly) - PK3:
+        // it always walks the shared track loop in decreasing-index order (see
+        // getParkillerHopWaypoints), so "the square it's heading to next" is always index-1, even
+        // at rest between moves. ParkillerMesh turns to face this every frame.
+        const trackLength = definition.trackWaypoints.length
+        const nextIndex = (player.parkiller.trackPosition - 1 + trackLength) % trackLength
+        const nextWaypoint = definition.trackWaypoints[nextIndex]
+        const facingTarget = nextWaypoint ? toWorldPosition(nextWaypoint, BASE_HEIGHT) : restPosition
+
         return (
           <ParkillerMesh
             key={`parkiller-${player.color}`}
             color={player.color}
             restPosition={restPosition}
+            facingTarget={facingTarget}
             hopFrom={hopFrom}
             hops={hops}
             onHopsComplete={isAnimating ? onParkillerAnimationComplete : undefined}
