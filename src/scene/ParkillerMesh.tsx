@@ -17,30 +17,47 @@ interface ParkillerMeshProps {
   introDelay: number
 }
 
-// Hooded-cloak silhouette (wide hem -> tapering robe -> narrow neck -> hood flaring back out ->
-// pointed tip), traced from the reference physical piece photo - a deliberately different profile
-// from PieceMesh's round-headed pawn (not just a recolor) so the Parkiller reads as its own token
-// type at a glance, same as the real set does. Still a lathe revolve (radially symmetric), which
-// can't capture the reference photo's clasped-hands/asymmetric front detail without hand-authored
-// non-lathe geometry - the hood + robe silhouette alone is what's scoped for now.
-const PARKILLER_PROFILE_RAW: [number, number][] = [
+// A single lathe revolve (radially symmetric) reads as a round-topped blob, not a hooded figure -
+// tried that first, confirmed directly against the reference photo that it didn't read as hooded
+// at all. This is a small composite instead: a robe (its own lathe), a separate pointed hood
+// (another lathe, sitting on top of the robe rather than blended into one profile, so it can flare
+// out wider than the robe's neck before pointing up - the "cowl draped over the shoulders" look in
+// the photo), and two arm+hand pieces that break full radial symmetry on purpose, since the
+// reference photo's silhouette clearly has visible arms at the sides.
+const PARKILLER_BASE_RADIUS = 0.075 // slightly wider stance than a regular pawn's 0.065, per the reference photo
+
+const ROBE_PROFILE_RAW: [number, number][] = [
   [0.0, 0.0],
-  [0.38, 0.0],
-  [0.4, 0.05],
-  [0.34, 0.22],
-  [0.27, 0.38],
-  [0.21, 0.5],
-  [0.195, 0.58],
-  [0.22, 0.63],
-  [0.3, 0.68],
-  [0.31, 0.76],
-  [0.27, 0.86],
-  [0.19, 0.95],
-  [0.1, 1.02],
-  [0.0, 1.06],
+  [0.4, 0.0],
+  [0.42, 0.05],
+  [0.36, 0.18],
+  [0.3, 0.32],
+  [0.24, 0.44],
+  [0.21, 0.52],
+  [0.2, 0.55],
 ]
-const PARKILLER_BASE_RADIUS = 0.07 // slightly wider stance than a regular pawn's 0.065, per the reference photo
-const PARKILLER_PROFILE_SCALE = PARKILLER_BASE_RADIUS / Math.max(...PARKILLER_PROFILE_RAW.map(([r]) => r))
+const ROBE_SCALE = PARKILLER_BASE_RADIUS / Math.max(...ROBE_PROFILE_RAW.map(([r]) => r))
+const ROBE_TOP_Y = 0.55 * ROBE_SCALE // where the hood sits, in world units
+
+const HOOD_PROFILE_RAW: [number, number][] = [
+  [0.2, 0.0],
+  [0.27, 0.04],
+  [0.29, 0.1],
+  [0.26, 0.2],
+  [0.19, 0.32],
+  [0.1, 0.4],
+  [0.0, 0.46],
+]
+// Hood uses the same overall scale as the robe (not its own max-radius scale) so the two profiles
+// join at a matching radius where the hood sits on the robe's shoulders, instead of a visible seam.
+const HOOD_SCALE = ROBE_SCALE
+
+const ARM_Y = 0.32 * ROBE_SCALE // roughly mid-robe height
+const ARM_X = 0.27 * ROBE_SCALE
+const ARM_Z = 0.06 * ROBE_SCALE
+const HAND_Y = 0.16 * ROBE_SCALE
+const HAND_X = 0.2 * ROBE_SCALE
+const HAND_Z = 0.12 * ROBE_SCALE // hands sit further forward than the arms, like the photo's clasped pose
 
 export function ParkillerMesh({ color, restPosition, hopFrom, hops, onHopsComplete, introDelay }: ParkillerMeshProps) {
   const meshRef = useRef<Group>(null)
@@ -107,31 +124,52 @@ export function ParkillerMesh({ color, restPosition, hopFrom, hops, onHopsComple
     }
   })
 
-  const profile = useMemo(
-    () => PARKILLER_PROFILE_RAW.map(([r, y]) => new THREE.Vector2(r * PARKILLER_PROFILE_SCALE, y * PARKILLER_PROFILE_SCALE)),
-    [],
+  const robeProfile = useMemo(() => ROBE_PROFILE_RAW.map(([r, y]) => new THREE.Vector2(r * ROBE_SCALE, y * ROBE_SCALE)), [])
+  const hoodProfile = useMemo(() => HOOD_PROFILE_RAW.map(([r, y]) => new THREE.Vector2(r * HOOD_SCALE, y * HOOD_SCALE)), [])
+
+  const bodyMaterial = (
+    <meshPhysicalMaterial
+      color={getColor(color)}
+      emissive={getColor(color)}
+      emissiveIntensity={0.22}
+      roughness={0.35}
+      metalness={0.1}
+      clearcoat={0.5}
+      clearcoatRoughness={0.3}
+    />
   )
 
   return (
     <group ref={meshRef} position={restPosition}>
       <mesh castShadow receiveShadow>
-        <latheGeometry args={[profile, 24]} />
-        <meshPhysicalMaterial
-          color={getColor(color)}
-          emissive={getColor(color)}
-          emissiveIntensity={0.22}
-          roughness={0.35}
-          metalness={0.1}
-          clearcoat={0.5}
-          clearcoatRoughness={0.3}
-        />
+        <latheGeometry args={[robeProfile, 24]} />
+        {bodyMaterial}
+      </mesh>
+      <mesh castShadow receiveShadow position={[0, ROBE_TOP_Y, 0]}>
+        <latheGeometry args={[hoodProfile, 24]} />
+        {bodyMaterial}
       </mesh>
       {/* Shadowed hollow under the hood's brim, like the reference photo's recessed face - a small
-          dark disc just under the flare-out point rather than fully sculpting an opening. */}
-      <mesh position={[0, 0.63 * PARKILLER_PROFILE_SCALE, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[0.2 * PARKILLER_PROFILE_SCALE, 16]} />
+          dark disc rather than fully sculpting an opening. */}
+      <mesh position={[0, ROBE_TOP_Y + 0.08 * ROBE_SCALE, ARM_Z * 1.6]} rotation={[-Math.PI / 3, 0, 0]}>
+        <circleGeometry args={[0.16 * ROBE_SCALE, 16]} />
         <meshBasicMaterial color="#0a0a0a" />
       </mesh>
+      {/* Two arms + hands, breaking full radial symmetry on purpose - the reference photo's
+          silhouette clearly shows both, hanging at the sides and meeting slightly forward near the
+          waist, not tucked invisibly inside a smooth cloak revolve. */}
+      {[-1, 1].map((side) => (
+        <group key={side}>
+          <mesh castShadow position={[side * ARM_X, ARM_Y, ARM_Z]} rotation={[0.15, 0, side * 0.25]} scale={[0.85, 1.8, 0.85]}>
+            <sphereGeometry args={[0.09 * ROBE_SCALE, 12, 12]} />
+            {bodyMaterial}
+          </mesh>
+          <mesh castShadow position={[side * HAND_X, HAND_Y, HAND_Z]} scale={[1, 0.85, 1]}>
+            <sphereGeometry args={[0.085 * ROBE_SCALE, 12, 12]} />
+            {bodyMaterial}
+          </mesh>
+        </group>
+      ))}
     </group>
   )
 }
