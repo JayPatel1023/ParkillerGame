@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import type { BoardDefinition } from '../core/board/boardDefinition'
-import { beginLocalGame } from '../core/gameFlow/localGameSession'
-import type { PieceColor } from '../core/pieceColor'
+import type { PlayerState } from '../core/gameFlow/playerState'
 import { getColor } from '../core/colorPalette'
 import type { RewardReason } from '../core/gameFlow/turnManager'
+import type { TurnManagerLike } from '../core/gameFlow/turnManagerLike'
 import { useTurnManager } from '../hooks/useTurnManager'
 import { BoardScene } from '../scene/BoardScene'
 
@@ -13,16 +13,24 @@ function rewardReasonLabel(reason: RewardReason): string {
   return reason === 'capture' ? 'captura' : 'llegada a meta'
 }
 
+/** A local game builds this via beginLocalGame (src/core/gameFlow/localGameSession.ts); an online
+ * game builds it from a HostTurnManagerBridge/RemoteTurnManager (src/online/) plus the players
+ * assigned to that room's seats - this screen only ever depends on the TurnManagerLike surface,
+ * not which kind of session produced it. */
+export interface GameSession {
+  turnManager: TurnManagerLike
+  players: PlayerState[]
+}
+
 export function GameBoardScreen({
   definition,
-  colors,
+  session,
   onExit,
 }: {
   definition: BoardDefinition
-  colors: PieceColor[]
+  session: GameSession
   onExit: () => void
 }) {
-  const session = useMemo(() => beginLocalGame(definition, colors), [definition, colors])
   // A live game (turns, dice, positions) is real in-progress state a stray click shouldn't be able
   // to throw away - confirm before actually leaving instead of exiting immediately on one click.
   const [confirmingExit, setConfirmingExit] = useState(false)

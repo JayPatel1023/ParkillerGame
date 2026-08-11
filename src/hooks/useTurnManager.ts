@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { PlayerState } from '../core/gameFlow/playerState'
-import type { DiceRoll, ParkillerMoveResult, RewardGrant, TurnManager } from '../core/gameFlow/turnManager'
+import type { DiceRoll, ParkillerMoveResult, RewardGrant } from '../core/gameFlow/turnManager'
+import type { TurnManagerLike } from '../core/gameFlow/turnManagerLike'
 import type { Piece } from '../core/pieces/piece'
 import type { MoveOption } from '../core/rules/moveOption'
 import { snapshotPiece, type PieceSnapshot } from '../scene/piecePosition'
@@ -19,7 +20,7 @@ export interface MoveAnimationRequest {
   capturedPiece: Piece | null
 }
 
-export function useTurnManager(turnManager: TurnManager) {
+export function useTurnManager(turnManager: TurnManagerLike) {
   const [currentPlayer, setCurrentPlayer] = useState<PlayerState>(turnManager.currentPlayer)
   const [lastRoll, setLastRoll] = useState<DiceRoll | null>(null)
   const [rolling, setRolling] = useState(false)
