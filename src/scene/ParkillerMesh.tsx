@@ -24,7 +24,11 @@ interface ParkillerMeshProps {
 // out wider than the robe's neck before pointing up - the "cowl draped over the shoulders" look in
 // the photo), and two arm+hand pieces that break full radial symmetry on purpose, since the
 // reference photo's silhouette clearly has visible arms at the sides.
-const PARKILLER_BASE_RADIUS = 0.075 // slightly wider stance than a regular pawn's 0.065, per the reference photo
+// Reported directly (with reference photos): the Parki figure is clearly bigger than a regular
+// pawn, not just slightly wider - 0.075 (vs. a pawn's 0.065 base radius) read as barely different
+// once both were on the board. This also scales the hood/robe/arms/hands uniformly since they're
+// all derived from this value via ROBE_SCALE below.
+const PARKILLER_BASE_RADIUS = 0.1
 
 // Re-measured against a clean, isolated front-on reference shot (no background clutter) - the
 // hood reads noticeably rounder/more bulbous than a sharp cone, is proportionally larger than the
