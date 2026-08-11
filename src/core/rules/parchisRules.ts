@@ -1,5 +1,6 @@
 import type { BoardData } from '../board/boardData'
 import type { PlayerState } from '../gameFlow/playerState'
+import type { PieceColor } from '../pieceColor'
 import type { Piece } from '../pieces/piece'
 import type { DiceSource, MoveOption, MoveResult } from './moveOption'
 import type { RuleSettings } from './ruleSettings'
@@ -85,7 +86,7 @@ export function applyMove(
   settings: RuleSettings,
 ): MoveResult {
   const piece = move.piece
-  const result: MoveResult = { movedPiece: piece, capturedPiece: null, pieceFinished: false }
+  const result: MoveResult = { movedPiece: piece, capturedPiece: null, capturedParkillerColor: null, pieceFinished: false }
 
   switch (move.kind) {
     case 'ExitYard':
@@ -96,6 +97,7 @@ export function applyMove(
       result.capturedPiece = settings.captureSendsToYard
         ? captureAt(board, piece, move.resultingTrackPosition, allPlayers)
         : null
+      result.capturedParkillerColor = captureParkillerAt(piece, move.resultingTrackPosition, allPlayers)
       break
 
     case 'CorridorMove':
@@ -134,5 +136,20 @@ function captureAt(
     }
   }
 
+  return null
+}
+
+// PK6: landing exactly on an opposing color's Parkiller eliminates it permanently (unlike a
+// regular pawn, it doesn't go back to a yard - it's simply out for the rest of the game). Not
+// restricted by safeTrackIndices - the rulebook only protects a Parkiller's *target* pawn from
+// the Parkiller itself (PK5), not the Parkiller from being caught by a pawn.
+function captureParkillerAt(mover: Piece, trackPosition: number, allPlayers: readonly PlayerState[]): PieceColor | null {
+  for (const opponent of allPlayers) {
+    if (opponent.color === mover.color) continue
+    if (opponent.parkiller.state === 'InPlay' && opponent.parkiller.trackPosition === trackPosition) {
+      opponent.parkiller.state = 'Eliminated'
+      return opponent.color
+    }
+  }
   return null
 }

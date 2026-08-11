@@ -1,5 +1,6 @@
 import type { BoardData } from '../board/boardData'
 import { Dice, type DiceLike } from '../dice'
+import type { PieceColor } from '../pieceColor'
 import type { Piece } from '../pieces/piece'
 import { applyMove, getValidMoves } from '../rules/parchisRules'
 import type { DiceSource, MoveOption, MoveResult } from '../rules/moveOption'
@@ -9,6 +10,16 @@ import { hasWon, type PlayerState } from './playerState'
 export interface DiceRoll {
   dieA: number
   dieB: number
+  /** The Parkiller's own die (PK2) - a 3rd, black die, rolled and resolved before dieA/dieB. */
+  blackDie: number
+}
+
+export interface ParkillerMoveResult {
+  color: PieceColor
+  before: number
+  after: number
+  capturedPawn: Piece | null
+  capturedParkillerColor: PieceColor | null
 }
 
 export type RewardReason = 'capture' | 'finish'
@@ -18,9 +29,15 @@ export interface RewardGrant {
   reason: RewardReason
 }
 
-// PC 3 (capture) and PC 4 (finish) reward sizes, in squares.
+// PC 3 (capture) and PC 4 (finish) reward sizes, in squares. PK7 rewards a Parkiller kill at the
+// same 20-square size ("10 x 2") as a regular capture, so it reuses CAPTURE_REWARD rather than
+// needing its own constant.
 const CAPTURE_REWARD = 20
 const FINISH_REWARD = 10
+
+function mod(value: number, modulus: number): number {
+  return ((value % modulus) + modulus) % modulus
+}
 
 type Listener<T> = (value: T) => void
 
@@ -54,6 +71,7 @@ interface DiceState {
 export class TurnManager {
   readonly turnStarted = new EventEmitter<PlayerState>()
   readonly diceRolled = new EventEmitter<DiceRoll>()
+  readonly parkillerMoved = new EventEmitter<ParkillerMoveResult>()
   readonly moveChoicesReady = new EventEmitter<MoveOption[]>()
   readonly moveNotPossible = new EventEmitter<void>()
   readonly moveApplied = new EventEmitter<MoveResult>()
@@ -93,7 +111,17 @@ export class TurnManager {
   requestRoll() {
     const dieA = this.dice.roll()
     const dieB = this.dice.roll()
-    this.diceRolled.emit({ dieA, dieB })
+    const blackDie = this.dice.roll()
+    this.diceRolled.emit({ dieA, dieB, blackDie })
+
+    // PK2: the Parkiller's black die is resolved first, every turn, regardless of what the white
+    // dice end up doing - it isn't a move the player chooses, so it's applied here immediately
+    // rather than waiting on a pendingMoves selection. The UI plays its hop animation off this
+    // event on its own; resolution here doesn't wait on that animation actually finishing, same as
+    // every other move in this engine (game state always advances synchronously - only the visual
+    // playback takes real time).
+    const parkillerResult = this.resolveParkillerMove(blackDie)
+    this.parkillerMoved.emit(parkillerResult)
 
     if (dieA === dieB) {
       this.consecutiveDoubles++
@@ -115,7 +143,63 @@ export class TurnManager {
     }
 
     this.diceState = { dieA, dieB, dieAUsed: false, dieBUsed: false }
+
+    // PC 6.2: collecting a reward takes priority over any dice still unspent - if the Parkiller's
+    // own move just eliminated an opposing Parkiller, its PK7 reward is offered ahead of the
+    // white-dice move choices below, same as a regular capture's reward already is in submitMove().
+    // offerReward()'s own fallback (continueAfterMove()) already knows how to fall through to
+    // offerMoves() once the reward is spent or forfeited.
+    if (parkillerResult.capturedParkillerColor) {
+      this.offerReward({ amount: CAPTURE_REWARD, reason: 'capture' })
+      return
+    }
+
     this.offerMoves()
+  }
+
+  // PK2/PK3: moves the current player's Parkiller by the black die's value, opposite direction
+  // (decreasing track index) from every regular piece. PK5/PK6: eliminates whichever opposing
+  // pawn or Parkiller it lands on exactly, if any - a captured pawn goes back to its yard with no
+  // reward to its owner (PK5); a captured opposing Parkiller earns this player PK7's reward,
+  // offered by requestRoll() right after this returns.
+  private resolveParkillerMove(blackDieValue: number): ParkillerMoveResult {
+    const player = this.currentPlayer
+    const parkiller = player.parkiller
+    const before = parkiller.trackPosition
+
+    if (parkiller.state !== 'InPlay') {
+      return { color: player.color, before, after: before, capturedPawn: null, capturedParkillerColor: null }
+    }
+
+    const after = mod(before - blackDieValue, this.board.trackLength)
+    parkiller.trackPosition = after
+
+    let capturedPawn: Piece | null = null
+    if (!this.board.safeTrackIndices.has(after)) {
+      outer: for (const opponent of this.players) {
+        if (opponent.color === player.color) continue
+        for (const piece of opponent.pieces) {
+          if (piece.state === 'OnTrack' && piece.trackPosition === after) {
+            piece.state = 'InYard'
+            piece.trackPosition = -1
+            capturedPawn = piece
+            break outer
+          }
+        }
+      }
+    }
+
+    let capturedParkillerColor: PieceColor | null = null
+    for (const opponent of this.players) {
+      if (opponent.color === player.color) continue
+      if (opponent.parkiller.state === 'InPlay' && opponent.parkiller.trackPosition === after) {
+        opponent.parkiller.state = 'Eliminated'
+        capturedParkillerColor = opponent.color
+        break
+      }
+    }
+
+    return { color: player.color, before, after, capturedPawn, capturedParkillerColor }
   }
 
   private offerMoves() {
@@ -184,10 +268,11 @@ export class TurnManager {
 
     // PC 3/PC 4: capturing or finishing earns a reward, and PC 6.2 places collecting it ahead of
     // any dice still unspent. A move landing on this same reward can itself capture again, in
-    // which case PC 5 adds the new reward on top rather than replacing it.
-    if (result.capturedPiece) this.offerReward({ amount: CAPTURE_REWARD, reason: 'capture' })
+    // which case PC 5 adds the new reward on top rather than replacing it. PK7 rewards eliminating
+    // an opposing Parkiller the same way a regular capture does.
+    if (result.capturedPiece || result.capturedParkillerColor) this.offerReward({ amount: CAPTURE_REWARD, reason: 'capture' })
     if (result.pieceFinished) this.offerReward({ amount: FINISH_REWARD, reason: 'finish' })
-    if (result.capturedPiece || result.pieceFinished) return result
+    if (result.capturedPiece || result.capturedParkillerColor || result.pieceFinished) return result
 
     this.continueAfterMove()
     return result

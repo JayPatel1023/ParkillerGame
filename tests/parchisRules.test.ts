@@ -19,7 +19,7 @@ function buildTestBoard(): BoardData {
 describe('parchisRules', () => {
   it('a piece in the yard cannot move without the exit roll', () => {
     const board = buildTestBoard()
-    const player = createPlayerState('Red')
+    const player = createPlayerState('Red', board)
     const settings = defaultRuleSettings()
 
     expect(getValidMoves(board, player, 4, settings)).toHaveLength(0)
@@ -27,7 +27,7 @@ describe('parchisRules', () => {
 
   it('a piece in the yard can exit with a five (rulebook: 2 white dice, not the classic six)', () => {
     const board = buildTestBoard()
-    const player = createPlayerState('Red')
+    const player = createPlayerState('Red', board)
     const settings = defaultRuleSettings()
 
     const moves = getValidMoves(board, player, 5, settings)
@@ -39,8 +39,8 @@ describe('parchisRules', () => {
 
   it('landing on an opponent on an unsafe square captures it', () => {
     const board = buildTestBoard()
-    const attacker = createPlayerState('Red')
-    const defender = createPlayerState('Blue')
+    const attacker = createPlayerState('Red', board)
+    const defender = createPlayerState('Blue', board)
 
     defender.pieces[0].state = 'OnTrack'
     defender.pieces[0].trackPosition = 3
@@ -58,8 +58,8 @@ describe('parchisRules', () => {
 
   it('landing on an opponent on a safe square does not capture', () => {
     const board = buildTestBoard()
-    const attacker = createPlayerState('Red')
-    const defender = createPlayerState('Blue')
+    const attacker = createPlayerState('Red', board)
+    const defender = createPlayerState('Blue', board)
 
     defender.pieces[0].state = 'OnTrack'
     defender.pieces[0].trackPosition = 10 // a safe square
@@ -77,7 +77,7 @@ describe('parchisRules', () => {
 
   it('an exact roll to finish finishes the piece', () => {
     const board = buildTestBoard()
-    const player = createPlayerState('Red')
+    const player = createPlayerState('Red', board)
     player.pieces[0].state = 'InHomeCorridor'
     player.pieces[0].corridorPosition = 1 // 2 steps from the last corridor square (index 3)
 
@@ -94,7 +94,7 @@ describe('parchisRules', () => {
 
   it('overshooting past the finish is not a valid move', () => {
     const board = buildTestBoard()
-    const player = createPlayerState('Red')
+    const player = createPlayerState('Red', board)
     player.pieces[0].state = 'InHomeCorridor'
     player.pieces[0].corridorPosition = 2 // 1 step from finish
 
@@ -105,7 +105,8 @@ describe('parchisRules', () => {
   })
 
   it('a player with all pieces finished has won', () => {
-    const player = createPlayerState('Red')
+    const board = buildTestBoard()
+    const player = createPlayerState('Red', board)
     for (const piece of player.pieces) piece.state = 'Finished'
 
     expect(hasWon(player)).toBe(true)

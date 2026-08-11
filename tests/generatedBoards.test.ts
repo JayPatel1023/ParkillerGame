@@ -64,7 +64,7 @@ describe('generated board data', () => {
       const board = toBoardData(def)
       const settings = defaultRuleSettings()
       const colors = def.playerLanes.map((l) => l.color)
-      const players = colors.map(createPlayerState)
+      const players = colors.map((color) => createPlayerState(color, board))
       const mover = players[0]
 
       // exit the yard (rulebook: 2 white dice, a 5 on either die exits - not the classic six)

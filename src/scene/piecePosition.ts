@@ -106,3 +106,26 @@ export function getHopWaypoints(
 
   return hops
 }
+
+/** Null once eliminated (PK6) - it's simply not rendered anywhere from that point on. */
+export function getParkillerWaypoint(trackPosition: number, state: 'InPlay' | 'Eliminated', definition: BoardDefinition): [number, number] | null {
+  if (state !== 'InPlay') return null
+  return definition.trackWaypoints[trackPosition] ?? null
+}
+
+// Same square-by-square reconstruction as getHopWaypoints, but walking the shared track loop
+// backward (decreasing index) instead of forward - PK3: the Parkiller moves clockwise, opposite
+// every regular piece's counterclockwise direction, and it only ever moves along this one shared
+// loop (no yard/corridor of its own to enter), so this is simpler than the regular-piece version.
+export function getParkillerHopWaypoints(before: number, after: number, definition: BoardDefinition): [number, number][] {
+  const trackLength = definition.trackWaypoints.length
+  const hops: [number, number][] = []
+  let i = before
+  let guard = 0
+  while (i !== after && guard++ <= trackLength) {
+    i = (i - 1 + trackLength) % trackLength
+    const wp = definition.trackWaypoints[i]
+    if (wp) hops.push(wp)
+  }
+  return hops
+}

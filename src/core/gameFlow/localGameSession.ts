@@ -11,7 +11,7 @@ export function beginLocalGame(
   participatingColors: PieceColor[],
 ): { turnManager: TurnManager; players: PlayerState[] } {
   const board = toBoardData(boardDefinition)
-  const players = participatingColors.map(createPlayerState)
+  const players = participatingColors.map((color) => createPlayerState(color, board))
   const turnManager = new TurnManager(board, players, defaultRuleSettings())
   turnManager.start()
   return { turnManager, players }

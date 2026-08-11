@@ -16,7 +16,7 @@ import { BASE_HEIGHT } from './boardGeometry'
 // the waist up is a true circular arc (center (0, 0.70), radius 0.335) sampled at even angles, not
 // more hand-picked points - a sphere needs that to read as round instead of faceted at this low a
 // vertex count.
-const PIECE_PROFILE_RAW: [number, number][] = [
+export const PIECE_PROFILE_RAW: [number, number][] = [
   [0.0, 0.0],
   [0.34, 0.0],
   [0.36, 0.04],
@@ -37,13 +37,13 @@ const PIECE_PROFILE_RAW: [number, number][] = [
   [0.0654, 1.0286],
   [0.0, 1.035],
 ]
-const PIECE_BASE_RADIUS = 0.065
-const PROFILE_SCALE = PIECE_BASE_RADIUS / Math.max(...PIECE_PROFILE_RAW.map(([r]) => r))
+export const PIECE_BASE_RADIUS = 0.065
+export const PROFILE_SCALE = PIECE_BASE_RADIUS / Math.max(...PIECE_PROFILE_RAW.map(([r]) => r))
 // Stretches the profile taller without widening the base - requested directly ("peones más
 // alargados", with a reference photo of taller pawns). Applied only to the height axis, not
 // PROFILE_SCALE/PIECE_BASE_RADIUS, so the footprint that was measured against the real yard holes
 // doesn't change - a piece still sits exactly centered in its slot, just stands taller.
-const PIECE_HEIGHT_SCALE = 1.28
+export const PIECE_HEIGHT_SCALE = 1.28
 // Equator of the head ball (y=0.70 in the raw profile, its widest point) - a second, slightly-
 // larger, near-transparent sphere there catches the light as a highlight band, the "glass marble"
 // glint real glossy pawns have instead of flat-shaded plastic.
@@ -56,26 +56,26 @@ const HIGHLIGHT_RADIUS = 0.2 * PROFILE_SCALE
 // inconsistent ("sometimes smooth, sometimes zips along erratically"). Every hop, on every move,
 // now takes exactly this long - a long reward move simply plays for longer in total, which is a
 // smaller cost than the animation appearing to change speed depending on the roll.
-const HOP_DURATION = 0.32 // seconds per square hopped - slow enough that each step reads clearly
-const BOUNCE_HEIGHT = 0.24 // world units, how high each hop arcs - a more emphatic, visible bounce
+export const HOP_DURATION = 0.32 // seconds per square hopped - slow enough that each step reads clearly
+export const BOUNCE_HEIGHT = 0.24 // world units, how high each hop arcs - a more emphatic, visible bounce
 
 // Caps how much animation time a single frame can advance. Without this, a slow/dropped frame
 // (e.g. CPU contention from screen-recording software) can push `delta` past HOP_DURATION in one
 // tick, completing an entire hop with no interpolated frame ever rendered - visually the piece
 // appears to jump multiple squares at once instead of hopping through them one at a time.
-const MAX_FRAME_DELTA = 1 / 30
+export const MAX_FRAME_DELTA = 1 / 30
 
-const INTRO_DURATION = 0.55
-const INTRO_X_OFFSET = 6 // starts well off-screen to the right
-const INTRO_Y_START = 5 // and well above the board
+export const INTRO_DURATION = 0.55
+export const INTRO_X_OFFSET = 6 // starts well off-screen to the right
+export const INTRO_Y_START = 5 // and well above the board
 
-function easeOutCubic(t: number): number {
+export function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - t, 3)
 }
 
 // Standard easeOutBounce: overshoots past 1 and settles back, giving a "lands and bounces" feel
 // when used to drive a position lerp instead of a plain 0..1 fade.
-function easeOutBounce(t: number): number {
+export function easeOutBounce(t: number): number {
   const n1 = 7.5625
   const d1 = 2.75
   if (t < 1 / d1) return n1 * t * t
