@@ -15,12 +15,24 @@ export type BroadcastMessage =
   | { type: 'diceRolled'; dieA: number; dieB: number; blackDie: number }
   | { type: 'moveChosen'; color: PieceColor; pieceIndex: number }
 
-export type GameMessage = IntentMessage | BroadcastMessage
+/** Sent once by whoever starts the game (always the Master, from the lobby) - `colors` is the
+ * turn-order-assigned color list every peer must build its own `players` array from, in this
+ * exact order, so everyone's TurnManager.currentPlayerIndex refers to the same player. `seats`
+ * maps each occupied seat's actor number to its color - a bot-assigned color simply has no entry.
+ * Sent as its own broadcast (not just room custom properties) so every already-connected client
+ * transitions from the lobby to the game at the same moment. */
+export interface GameStartedMessage {
+  type: 'gameStarted'
+  colors: PieceColor[]
+  seats: Record<number, PieceColor>
+}
+
+export type GameMessage = IntentMessage | BroadcastMessage | GameStartedMessage
 
 export function isIntentMessage(msg: GameMessage): msg is IntentMessage {
   return msg.type === 'rollIntent' || msg.type === 'moveIntent'
 }
 
-export function isBroadcastMessage(msg: GameMessage): msg is BroadcastMessage {
-  return msg.type === 'diceRolled' || msg.type === 'moveChosen'
+export function isBroadcastMessage(msg: GameMessage): msg is BroadcastMessage | GameStartedMessage {
+  return msg.type === 'diceRolled' || msg.type === 'moveChosen' || msg.type === 'gameStarted'
 }
