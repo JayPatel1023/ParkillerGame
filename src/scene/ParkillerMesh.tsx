@@ -10,11 +10,25 @@ import { BOUNCE_HEIGHT, HOP_DURATION, INTRO_DURATION, INTRO_X_OFFSET, INTRO_Y_ST
 interface ParkillerMeshProps {
   color: PieceColor
   restPosition: [number, number, number]
+  /** World position of the next track square in this Parkiller's direction of travel (it always
+   * walks the shared loop in decreasing-index order) - the forward hand turns to face this, both
+   * at rest and mid-hop, so it visually marks which way the piece is heading. */
+  facingTarget: [number, number, number]
   /** Set only while this Parkiller is animating its own move; null means "just sit at restPosition". */
   hopFrom: [number, number, number] | null
   hops: [number, number, number][]
   onHopsComplete?: () => void
   introDelay: number
+}
+
+// null when `from`/`to` are (near-)identical - happens when a Parkiller is captured/eliminated
+// right on the same square it started the frame on, and atan2(0,0) would otherwise snap the
+// facing to a meaningless 0 instead of just keeping whatever heading it already had.
+function yawTowards(from: [number, number, number], to: [number, number, number]): number | null {
+  const dx = to[0] - from[0]
+  const dz = to[2] - from[2]
+  if (Math.abs(dx) < 1e-5 && Math.abs(dz) < 1e-5) return null
+  return Math.atan2(dx, dz)
 }
 
 // A single lathe revolve (radially symmetric) reads as a round-topped blob, not a hooded figure -
@@ -61,6 +75,11 @@ const HOOD_PROFILE_RAW: [number, number][] = [
 // join at a matching radius where the hood sits on the robe's shoulders, instead of a visible seam.
 const HOOD_SCALE = ROBE_SCALE
 
+// Reported directly: the forward hand isn't just decoration - on the real piece it marks the
+// Parkiller's direction of travel. It already sat at the front (+Z, HAND_Z below) before this was
+// known, so the fix was giving the whole figure a heading (see facingTarget/yawTowards) rather
+// than reshaping the hands themselves - the group now turns so this hand always points toward the
+// next square it's walking to, at rest and mid-hop.
 const ARM_Y = 0.34 * ROBE_SCALE // roughly mid-robe height
 const ARM_X = 0.24 * ROBE_SCALE
 const ARM_Z = 0.08 * ROBE_SCALE
@@ -68,7 +87,7 @@ const HAND_Y = 0.22 * ROBE_SCALE
 const HAND_X = 0.1 * ROBE_SCALE // hands come together near the front center, not out at the sides
 const HAND_Z = 0.17 * ROBE_SCALE // well forward of the arms, like the photo's clasped pose
 
-export function ParkillerMesh({ color, restPosition, hopFrom, hops, onHopsComplete, introDelay }: ParkillerMeshProps) {
+export function ParkillerMesh({ color, restPosition, facingTarget, hopFrom, hops, onHopsComplete, introDelay }: ParkillerMeshProps) {
   const meshRef = useRef<Group>(null)
   const hopIndexRef = useRef(0)
   const elapsedRef = useRef(0)
@@ -85,6 +104,13 @@ export function ParkillerMesh({ color, restPosition, hopFrom, hops, onHopsComple
     const mesh = meshRef.current
     if (!mesh) return
     const delta = Math.min(rawDelta, MAX_FRAME_DELTA)
+
+    // Baseline heading toward the next square - covers the intro drop and idle rest below.
+    // Overridden with the exact per-hop heading further down while actively hopping, so a turn
+    // mid-move (the shared loop curves) still updates the facing hop-by-hop instead of only once
+    // the whole move settles.
+    const restYaw = yawTowards(restPosition, facingTarget)
+    if (restYaw !== null) mesh.rotation.y = restYaw
 
     if (!introRef.current.done) {
       introRef.current.elapsed += delta
@@ -121,6 +147,9 @@ export function ParkillerMesh({ color, restPosition, hopFrom, hops, onHopsComple
     const t = Math.min(1, elapsedRef.current / HOP_DURATION)
     const from = hopIndexRef.current === 0 ? hopFrom : hops[hopIndexRef.current - 1]
     const to = hops[hopIndexRef.current]
+
+    const hopYaw = yawTowards(from, to)
+    if (hopYaw !== null) mesh.rotation.y = hopYaw
 
     const x = THREE.MathUtils.lerp(from[0], to[0], t)
     const z = THREE.MathUtils.lerp(from[2], to[2], t)
