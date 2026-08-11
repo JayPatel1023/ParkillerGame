@@ -5,20 +5,7 @@ import type { Group } from 'three'
 import { getColor } from '../core/colorPalette'
 import type { PieceColor } from '../core/pieceColor'
 import { BASE_HEIGHT } from './boardGeometry'
-import {
-  BOUNCE_HEIGHT,
-  HOP_DURATION,
-  INTRO_DURATION,
-  INTRO_X_OFFSET,
-  INTRO_Y_START,
-  MAX_FRAME_DELTA,
-  PIECE_BASE_RADIUS,
-  PIECE_HEIGHT_SCALE,
-  PIECE_PROFILE_RAW,
-  PROFILE_SCALE,
-  easeOutBounce,
-  easeOutCubic,
-} from './PieceMesh'
+import { BOUNCE_HEIGHT, HOP_DURATION, INTRO_DURATION, INTRO_X_OFFSET, INTRO_Y_START, MAX_FRAME_DELTA, easeOutBounce, easeOutCubic } from './PieceMesh'
 
 interface ParkillerMeshProps {
   color: PieceColor
@@ -30,13 +17,30 @@ interface ParkillerMeshProps {
   introDelay: number
 }
 
-// Same lathe-revolved pawn body as PieceMesh (see its own comment for where the profile numbers
-// come from), reused wholesale rather than duplicated, plus a small dark hood-tip marker on top so
-// it reads as "the Parkiller" for that color at a glance instead of a 5th identical pawn - a full
-// sculpted hooded-cloak model (matching the physical piece) was scoped out as extra art work well
-// beyond what distinguishing it visually actually requires.
-const HOOD_TIP_HEIGHT = 1.035 * PROFILE_SCALE * PIECE_HEIGHT_SCALE // top of the head, in world units
-const HOOD_TIP_RADIUS = PIECE_BASE_RADIUS * 0.55
+// Hooded-cloak silhouette (wide hem -> tapering robe -> narrow neck -> hood flaring back out ->
+// pointed tip), traced from the reference physical piece photo - a deliberately different profile
+// from PieceMesh's round-headed pawn (not just a recolor) so the Parkiller reads as its own token
+// type at a glance, same as the real set does. Still a lathe revolve (radially symmetric), which
+// can't capture the reference photo's clasped-hands/asymmetric front detail without hand-authored
+// non-lathe geometry - the hood + robe silhouette alone is what's scoped for now.
+const PARKILLER_PROFILE_RAW: [number, number][] = [
+  [0.0, 0.0],
+  [0.38, 0.0],
+  [0.4, 0.05],
+  [0.34, 0.22],
+  [0.27, 0.38],
+  [0.21, 0.5],
+  [0.195, 0.58],
+  [0.22, 0.63],
+  [0.3, 0.68],
+  [0.31, 0.76],
+  [0.27, 0.86],
+  [0.19, 0.95],
+  [0.1, 1.02],
+  [0.0, 1.06],
+]
+const PARKILLER_BASE_RADIUS = 0.07 // slightly wider stance than a regular pawn's 0.065, per the reference photo
+const PARKILLER_PROFILE_SCALE = PARKILLER_BASE_RADIUS / Math.max(...PARKILLER_PROFILE_RAW.map(([r]) => r))
 
 export function ParkillerMesh({ color, restPosition, hopFrom, hops, onHopsComplete, introDelay }: ParkillerMeshProps) {
   const meshRef = useRef<Group>(null)
@@ -104,7 +108,7 @@ export function ParkillerMesh({ color, restPosition, hopFrom, hops, onHopsComple
   })
 
   const profile = useMemo(
-    () => PIECE_PROFILE_RAW.map(([r, y]) => new THREE.Vector2(r * PROFILE_SCALE, y * PROFILE_SCALE * PIECE_HEIGHT_SCALE)),
+    () => PARKILLER_PROFILE_RAW.map(([r, y]) => new THREE.Vector2(r * PARKILLER_PROFILE_SCALE, y * PARKILLER_PROFILE_SCALE)),
     [],
   )
 
@@ -112,13 +116,21 @@ export function ParkillerMesh({ color, restPosition, hopFrom, hops, onHopsComple
     <group ref={meshRef} position={restPosition}>
       <mesh castShadow receiveShadow>
         <latheGeometry args={[profile, 24]} />
-        <meshPhysicalMaterial color="#1a1a1a" emissive="#1a1a1a" emissiveIntensity={0.25} roughness={0.3} metalness={0.2} clearcoat={0.6} clearcoatRoughness={0.25} />
+        <meshPhysicalMaterial
+          color={getColor(color)}
+          emissive={getColor(color)}
+          emissiveIntensity={0.22}
+          roughness={0.35}
+          metalness={0.1}
+          clearcoat={0.5}
+          clearcoatRoughness={0.3}
+        />
       </mesh>
-      {/* Small marker in the color it's hunting/protecting, at the hood tip, so it's still readable
-          as "belongs to color X" even though the body itself is black. */}
-      <mesh position={[0, HOOD_TIP_HEIGHT + HOOD_TIP_RADIUS * 0.6, 0]}>
-        <sphereGeometry args={[HOOD_TIP_RADIUS, 12, 12]} />
-        <meshStandardMaterial color={getColor(color)} emissive={getColor(color)} emissiveIntensity={0.4} roughness={0.35} />
+      {/* Shadowed hollow under the hood's brim, like the reference photo's recessed face - a small
+          dark disc just under the flare-out point rather than fully sculpting an opening. */}
+      <mesh position={[0, 0.63 * PARKILLER_PROFILE_SCALE, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[0.2 * PARKILLER_PROFILE_SCALE, 16]} />
+        <meshBasicMaterial color="#0a0a0a" />
       </mesh>
     </group>
   )
