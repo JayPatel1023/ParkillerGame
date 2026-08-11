@@ -26,38 +26,43 @@ interface ParkillerMeshProps {
 // reference photo's silhouette clearly has visible arms at the sides.
 const PARKILLER_BASE_RADIUS = 0.075 // slightly wider stance than a regular pawn's 0.065, per the reference photo
 
+// Re-measured against a clean, isolated front-on reference shot (no background clutter) - the
+// hood reads noticeably rounder/more bulbous than a sharp cone, is proportionally larger than the
+// first attempt (close to half the total height), and the hands come together near the front
+// center (a clasped pose), not out at the sides.
 const ROBE_PROFILE_RAW: [number, number][] = [
   [0.0, 0.0],
-  [0.4, 0.0],
-  [0.42, 0.05],
-  [0.36, 0.18],
-  [0.3, 0.32],
+  [0.36, 0.0],
+  [0.38, 0.05],
+  [0.33, 0.18],
+  [0.28, 0.32],
   [0.24, 0.44],
-  [0.21, 0.52],
-  [0.2, 0.55],
+  [0.22, 0.52],
+  [0.21, 0.55],
 ]
 const ROBE_SCALE = PARKILLER_BASE_RADIUS / Math.max(...ROBE_PROFILE_RAW.map(([r]) => r))
 const ROBE_TOP_Y = 0.55 * ROBE_SCALE // where the hood sits, in world units
 
 const HOOD_PROFILE_RAW: [number, number][] = [
-  [0.2, 0.0],
-  [0.27, 0.04],
-  [0.29, 0.1],
-  [0.26, 0.2],
-  [0.19, 0.32],
-  [0.1, 0.4],
-  [0.0, 0.46],
+  [0.21, 0.0],
+  [0.29, 0.05],
+  [0.32, 0.14],
+  [0.3, 0.24],
+  [0.24, 0.34],
+  [0.15, 0.42],
+  [0.06, 0.48],
+  [0.0, 0.51],
 ]
 // Hood uses the same overall scale as the robe (not its own max-radius scale) so the two profiles
 // join at a matching radius where the hood sits on the robe's shoulders, instead of a visible seam.
 const HOOD_SCALE = ROBE_SCALE
 
-const ARM_Y = 0.32 * ROBE_SCALE // roughly mid-robe height
-const ARM_X = 0.27 * ROBE_SCALE
-const ARM_Z = 0.06 * ROBE_SCALE
-const HAND_Y = 0.16 * ROBE_SCALE
-const HAND_X = 0.2 * ROBE_SCALE
-const HAND_Z = 0.12 * ROBE_SCALE // hands sit further forward than the arms, like the photo's clasped pose
+const ARM_Y = 0.34 * ROBE_SCALE // roughly mid-robe height
+const ARM_X = 0.24 * ROBE_SCALE
+const ARM_Z = 0.08 * ROBE_SCALE
+const HAND_Y = 0.22 * ROBE_SCALE
+const HAND_X = 0.1 * ROBE_SCALE // hands come together near the front center, not out at the sides
+const HAND_Z = 0.17 * ROBE_SCALE // well forward of the arms, like the photo's clasped pose
 
 export function ParkillerMesh({ color, restPosition, hopFrom, hops, onHopsComplete, introDelay }: ParkillerMeshProps) {
   const meshRef = useRef<Group>(null)
@@ -151,8 +156,8 @@ export function ParkillerMesh({ color, restPosition, hopFrom, hops, onHopsComple
       </mesh>
       {/* Shadowed hollow under the hood's brim, like the reference photo's recessed face - a small
           dark disc rather than fully sculpting an opening. */}
-      <mesh position={[0, ROBE_TOP_Y + 0.08 * ROBE_SCALE, ARM_Z * 1.6]} rotation={[-Math.PI / 3, 0, 0]}>
-        <circleGeometry args={[0.16 * ROBE_SCALE, 16]} />
+      <mesh position={[0, ROBE_TOP_Y + 0.12 * ROBE_SCALE, 0.2 * ROBE_SCALE]} rotation={[-Math.PI / 3, 0, 0]}>
+        <circleGeometry args={[0.15 * ROBE_SCALE, 16]} />
         <meshBasicMaterial color="#0a0a0a" />
       </mesh>
       {/* Two arms + hands, breaking full radial symmetry on purpose - the reference photo's
