@@ -110,10 +110,14 @@ interface PieceMeshProps {
 }
 
 const RING_PULSE_SPEED = 1.5 // radians/sec - slower, gentler "breathing" rather than a mechanical blink
-const RING_BASE_OPACITY = 0.16
-const RING_PULSE_AMPLITUDE = 0.16
+// Was 0.16 base / 0.16 amplitude in a pale cream (#fff4c2) - reported directly as not noticeable
+// enough to actually tell whose turn it is at a glance. Raised well past "subtle glow" into
+// "obviously highlighted", plus a punchier gold instead of near-white-cream so it reads distinctly
+// from the piece's own highlight band and from light-colored board tiles behind it.
+const RING_BASE_OPACITY = 0.55
+const RING_PULSE_AMPLITUDE = 0.35
 const RING_BASE_SCALE = 1
-const RING_PULSE_SCALE_AMPLITUDE = 0.12 // grows/shrinks along with the fade, instead of just the opacity flickering in place
+const RING_PULSE_SCALE_AMPLITUDE = 0.18 // grows/shrinks along with the fade, instead of just the opacity flickering in place
 
 // Renders as a small bouncing peg-pawn rather than a flat token: at board scale a flat disc barely
 // shows how far it travelled between rolls, but a shape that visibly arcs once per square makes
@@ -237,7 +241,7 @@ export function PieceMesh({
         <meshPhysicalMaterial
           color={getColor(piece.color)}
           emissive={getColor(piece.color)}
-          emissiveIntensity={selectable ? 0.55 : 0.18}
+          emissiveIntensity={selectable ? 0.55 : isCurrentTurn ? 0.32 : 0.18}
           roughness={0.25}
           metalness={0.15}
           clearcoat={0.7}
@@ -254,8 +258,8 @@ export function PieceMesh({
           (rotated onto the board plane) and unlit (MeshBasicMaterial) so it reads as a glow rather
           than a lit disc, and just outside the piece's own footprint so it doesn't hide the base. */}
       <mesh ref={ringRef} position={[0, 0.004, 0]} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
-        <ringGeometry args={[PIECE_BASE_RADIUS * 1.6, PIECE_BASE_RADIUS * 1.95, 40]} />
-        <meshBasicMaterial color="#fff4c2" transparent opacity={RING_BASE_OPACITY} side={THREE.DoubleSide} />
+        <ringGeometry args={[PIECE_BASE_RADIUS * 1.7, PIECE_BASE_RADIUS * 2.3, 40]} />
+        <meshBasicMaterial color="#ffcc00" transparent opacity={RING_BASE_OPACITY} side={THREE.DoubleSide} />
       </mesh>
     </group>
   )
