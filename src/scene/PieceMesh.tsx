@@ -6,49 +6,51 @@ import { getColor } from '../core/colorPalette'
 import type { Piece } from '../core/pieces/piece'
 import { BASE_HEIGHT } from './boardGeometry'
 
-// Classic peg-pawn silhouette (flat wide base -> tapered waist/neck -> round ball head) traced
-// from a reference pawn photo - a flat bottom disc (the first two points share y=0: the [0,0]
-// point sweeps to a single center vertex, [baseR,0] sweeps to a circle, and the lathe connects
-// them into a solid cap) rather than a point resting on the board, so it reads as a piece sitting
-// ON the tile rather than a cone/teardrop balanced on its tip. Scaled so the base radius lands on
-// the same 0.065 world-unit footprint the old cone used (measured against the yard holes).
-// Base + waist are hand-placed (a real molded plastic base has straighter facets); the head from
-// the waist up is a true circular arc (center (0, 0.70), radius 0.335) sampled at even angles, not
-// more hand-picked points - a sphere needs that to read as round instead of faceted at this low a
-// vertex count.
+// Re-traced from a clean reference photo of classic parchís pawns (reported directly: the
+// previous silhouette read as bulbous/hourglass-shaped, not a proper cone-and-ball pawn) - the
+// previous profile's "waist" narrowed then flared back out almost to the base's own width before
+// curving to a point, so the head swelled gradually out of the body instead of sitting as a
+// distinct round ball. This one is a clean single taper (base -> neck, hand-placed, a real molded
+// plastic base has straighter facets than a smooth curve) topped by a full sphere (neck -> pole,
+// a true circular arc - center (0, 0.6766), radius 0.235 - sampled at even angles so it reads as
+// round instead of faceted), with the ball's own widest point (its equator, at y=0.6766) narrower
+// than the base (0.335 vs 0.335 raw... see PIECE_BASE_RADIUS note) so it reads as a ball sitting
+// ON the cone rather than a continuation of it. The first two points are a flat bottom disc (as
+// before) so the piece sits flush on the tile instead of balanced on a point.
 export const PIECE_PROFILE_RAW: [number, number][] = [
   [0.0, 0.0],
-  [0.34, 0.0],
-  [0.36, 0.04],
-  [0.3, 0.28],
-  [0.19, 0.4],
-  [0.155, 0.46],
-  [0.1683, 0.5],
-  [0.2017, 0.54],
-  [0.245, 0.58],
-  [0.2883, 0.62],
-  [0.3217, 0.66],
-  [0.3286, 0.7654],
-  [0.3095, 0.8282],
-  [0.2785, 0.8861],
-  [0.2369, 0.9369],
-  [0.1861, 0.9785],
-  [0.1282, 1.0095],
-  [0.0654, 1.0286],
-  [0.0, 1.035],
+  [0.32, 0.0],
+  [0.335, 0.02],
+  [0.3, 0.08],
+  [0.24, 0.2],
+  [0.19, 0.33],
+  [0.165, 0.44],
+  [0.155, 0.5],
+  [0.2035, 0.5591],
+  [0.2314, 0.6358],
+  [0.235, 0.6766],
+  [0.2208, 0.757],
+  [0.18, 0.8277],
+  [0.1175, 0.8801],
+  [0.0608, 0.9036],
+  [0.0, 0.9116],
 ]
 export const PIECE_BASE_RADIUS = 0.065
 export const PROFILE_SCALE = PIECE_BASE_RADIUS / Math.max(...PIECE_PROFILE_RAW.map(([r]) => r))
-// Stretches the profile taller without widening the base - requested directly ("peones más
-// alargados", with a reference photo of taller pawns). Applied only to the height axis, not
-// PROFILE_SCALE/PIECE_BASE_RADIUS, so the footprint that was measured against the real yard holes
-// doesn't change - a piece still sits exactly centered in its slot, just stands taller.
-export const PIECE_HEIGHT_SCALE = 1.28
-// Equator of the head ball (y=0.70 in the raw profile, its widest point) - a second, slightly-
+// Stretches the profile taller without widening the base - requested directly, twice now ("peones
+// más alargados" both times), each time with a reference photo of taller pawns. Applied only to
+// the height axis, not PROFILE_SCALE/PIECE_BASE_RADIUS, so the footprint that was measured against
+// the real yard holes doesn't change - a piece still sits exactly centered in its slot, just
+// stands taller. Bumped again (1.28 -> 1.43) alongside this profile re-trace, since "a bit more
+// elongated than the reference photo" was the explicit ask this time.
+export const PIECE_HEIGHT_SCALE = 1.43
+// Equator of the head ball (y=0.6766 in the raw profile, its widest point) - a second, slightly-
 // larger, near-transparent sphere there catches the light as a highlight band, the "glass marble"
 // glint real glossy pawns have instead of flat-shaded plastic.
-const HIGHLIGHT_Y = 0.7 * PROFILE_SCALE * PIECE_HEIGHT_SCALE
-const HIGHLIGHT_RADIUS = 0.2 * PROFILE_SCALE
+const HIGHLIGHT_Y = 0.6766 * PROFILE_SCALE * PIECE_HEIGHT_SCALE
+// Same proportion of the ball's own equator radius (0.235 raw) as before, just carried over to
+// the new, narrower ball so the highlight band doesn't end up oversized relative to it.
+const HIGHLIGHT_RADIUS = 0.145 * PROFILE_SCALE
 
 // Fixed regardless of how many squares a move covers - a previous version sped up per-hop
 // duration for long reward moves so total playback wouldn't drag, but that meant two moves of
