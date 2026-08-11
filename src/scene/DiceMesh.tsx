@@ -80,7 +80,9 @@ function pipPositions(value: number): [number, number][] {
 
 // A real die's pips are small punched-in hemispheres, not flat printed dots - fake that with a
 // tight radial shadow ring around each one so it reads as a dimple even under flat ambient light.
-function createDiceFaceTexture(value: number): THREE.CanvasTexture {
+// Colors are parameterized so the same drawing logic produces both the white dice (white body,
+// black pips) and the Parkiller's own "black die with white dots" (PK2) from one function.
+function createDiceFaceTexture(value: number, bodyColors: [string, string], pipColor: string): THREE.CanvasTexture {
   const size = 256
   const canvas = document.createElement('canvas')
   canvas.width = size
@@ -90,34 +92,36 @@ function createDiceFaceTexture(value: number): THREE.CanvasTexture {
   // Soft radial vignette instead of a flat fill, closer to glossy injection-molded plastic than a
   // flat card face.
   const bg = ctx.createRadialGradient(size * 0.4, size * 0.35, size * 0.1, size * 0.5, size * 0.5, size * 0.75)
-  bg.addColorStop(0, '#ffffff')
-  bg.addColorStop(1, '#e9e7e2')
+  bg.addColorStop(0, bodyColors[0])
+  bg.addColorStop(1, bodyColors[1])
   ctx.fillStyle = bg
   ctx.fillRect(0, 0, size, size)
 
   const pipRadius = size * 0.1
   const margin = size * 0.24
+  const shadowColor = pipColor === '#1c1c1c' ? '0,0,0' : '255,255,255'
+  const highlightColor = pipColor === '#1c1c1c' ? '255,255,255' : '0,0,0'
   for (const [px, py] of pipPositions(value)) {
     const cx = size / 2 + px * margin
     const cy = size / 2 + py * margin
 
     const shadow = ctx.createRadialGradient(cx, cy, pipRadius * 0.2, cx, cy, pipRadius * 1.35)
-    shadow.addColorStop(0, 'rgba(0,0,0,0.0)')
-    shadow.addColorStop(0.7, 'rgba(0,0,0,0.0)')
-    shadow.addColorStop(0.85, 'rgba(0,0,0,0.18)')
-    shadow.addColorStop(1, 'rgba(0,0,0,0)')
+    shadow.addColorStop(0, `rgba(${shadowColor},0.0)`)
+    shadow.addColorStop(0.7, `rgba(${shadowColor},0.0)`)
+    shadow.addColorStop(0.85, `rgba(${shadowColor},0.18)`)
+    shadow.addColorStop(1, `rgba(${shadowColor},0)`)
     ctx.fillStyle = shadow
     ctx.beginPath()
     ctx.arc(cx, cy, pipRadius * 1.35, 0, Math.PI * 2)
     ctx.fill()
 
-    ctx.fillStyle = '#1c1c1c'
+    ctx.fillStyle = pipColor
     ctx.beginPath()
     ctx.arc(cx, cy, pipRadius, 0, Math.PI * 2)
     ctx.fill()
 
     // Tiny offset highlight so each pip reads as a rounded bead rather than a flat disc.
-    ctx.fillStyle = 'rgba(255,255,255,0.35)'
+    ctx.fillStyle = `rgba(${highlightColor},0.35)`
     ctx.beginPath()
     ctx.arc(cx - pipRadius * 0.3, cy - pipRadius * 0.35, pipRadius * 0.3, 0, Math.PI * 2)
     ctx.fill()
@@ -132,19 +136,34 @@ export function DiceMesh({
   value,
   rolling,
   onClick,
-  stackIndex = 0,
+  column,
+  row = 0,
+  black = false,
 }: {
   value: number | null
   rolling: boolean
   onClick: () => void
-  /** Front-to-back placement for the second white die - the rulebook's two dice are rolled together. */
-  stackIndex?: number
+  /** Horizontal slot among however many dice are laid out together, centered on 0 (e.g. -0.5/0.5
+   * for 2 dice) - the caller works out the exact layout since it knows how many dice are on the
+   * table at once. */
+  column: number
+  /** Front-to-back slot, same units as column - 0 keeps the original single-row layout; used to
+   * sit the Parkiller's black die just behind the two white dice instead of widening the row (the
+   * row's own X range was already tuned to clear the board's real track/artwork at this corner -
+   * see CORNER_X/CORNER_Z - so this avoids re-tuning that for a 3rd die). */
+  row?: number
+  /** PK2's own die - a black body with white dots, rolled and resolved separately from the two
+   * white dice. */
+  black?: boolean
 }) {
   const meshRef = useRef<Mesh>(null)
   const wasRolling = useRef(rolling)
 
+  const bodyColors: [string, string] = black ? ['#3a3a3a', '#161616'] : ['#ffffff', '#e9e7e2']
+  const pipColor = black ? '#f5f5f5' : '#1c1c1c'
+
   // Six canvas-drawn pip textures, generated once and reused across rolls.
-  const faceTextures = useMemo(() => [1, 2, 3, 4, 5, 6].map(createDiceFaceTexture), [])
+  const faceTextures = useMemo(() => [1, 2, 3, 4, 5, 6].map((n) => createDiceFaceTexture(n, bodyColors, pipColor)), [black])
 
   // Box face order is [+x, -x, +y (top), -y (bottom), +z, -z]. The current value always sits on
   // top with its real-die complement (sums to 7) on the bottom; the sides just take whatever's
@@ -185,7 +204,7 @@ export function DiceMesh({
   }, [rolling])
 
   return (
-    <group position={[CORNER_X + (stackIndex - 0.5) * DIE_SPACING, DIE_REST_Y, CORNER_Z]}>
+    <group position={[CORNER_X + column * DIE_SPACING, DIE_REST_Y, CORNER_Z + row * DIE_SPACING]}>
       <mesh ref={meshRef} castShadow onClick={onClick}>
         {/* Rounded corners/edges (not a sharp cardboard cube) to match the reference die photo -
             RoundedBoxGeometry extends BoxGeometry so it keeps the same 6 face-material groups. */}

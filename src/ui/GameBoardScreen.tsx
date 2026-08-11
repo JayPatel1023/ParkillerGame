@@ -33,16 +33,22 @@ export function GameBoardScreen({
     pendingMoves,
     winner,
     moveAnimation,
+    parkillerAnimation,
     eliminatedByDoubles,
     pendingReward,
     forfeitedReward,
     rollDice,
     chooseMove,
     clearMoveAnimation,
+    clearParkillerAnimation,
   } = useTurnManager(session.turnManager)
 
   const canRoll = pendingMoves.length === 0 && !winner && !rolling && !moveAnimation
-  const diceValues: [number | null, number | null] = [lastRoll?.dieA ?? null, lastRoll?.dieB ?? null]
+  const diceValues: [number | null, number | null, number | null] = [
+    lastRoll?.dieA ?? null,
+    lastRoll?.dieB ?? null,
+    lastRoll?.blackDie ?? null,
+  ]
   const isDouble = lastRoll !== null && lastRoll.dieA === lastRoll.dieB
 
   return (
@@ -58,6 +64,8 @@ export function GameBoardScreen({
         onRollDice={() => canRoll && rollDice()}
         moveAnimation={moveAnimation}
         onAnimationComplete={clearMoveAnimation}
+        parkillerAnimation={parkillerAnimation}
+        onParkillerAnimationComplete={clearParkillerAnimation}
       />
 
       <div style={hudPanelStyle}>
@@ -68,7 +76,7 @@ export function GameBoardScreen({
         {lastRoll && !rolling && (
           <div style={hintTextStyle}>
             Dados: {lastRoll.dieA} y {lastRoll.dieB}
-            {isDouble && ' (dobles)'}
+            {isDouble && ' (dobles)'} · Parkiller: {lastRoll.blackDie}
           </div>
         )}
         {eliminatedByDoubles && (

@@ -49,14 +49,14 @@ function buildBigTestBoard(): BoardData {
 describe('TurnManager - two-dice rulebook flow', () => {
   it('offers a die-A move and a die-B move for two different pieces on the same roll', () => {
     const board = buildTestBoard()
-    const red = createPlayerState('Red')
-    const blue = createPlayerState('Blue')
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
     red.pieces[0].state = 'InHomeCorridor'
     red.pieces[0].corridorPosition = 1 // +4 (die A) lands exactly on the finish square (index 5)
     red.pieces[1].state = 'InHomeCorridor'
     red.pieces[1].corridorPosition = 3 // +2 (die B) lands exactly on the finish square; +4 overshoots
 
-    const dice = new ScriptedDice([4, 2])
+    const dice = new ScriptedDice([4, 2, 1])
     const settings = defaultRuleSettings()
     const manager = new TurnManager(board, [red, blue], settings, dice)
 
@@ -67,7 +67,7 @@ describe('TurnManager - two-dice rulebook flow', () => {
 
     manager.requestRoll()
 
-    expect(offered).toEqual({ dieA: 4, dieB: 2 })
+    expect(offered).toEqual({ dieA: 4, dieB: 2, blackDie: 1 })
     expect(latestMoves).toHaveLength(2)
     const forPiece0 = latestMoves.find((m) => m.piece === red.pieces[0])
     const forPiece1 = latestMoves.find((m) => m.piece === red.pieces[1])
@@ -89,9 +89,9 @@ describe('TurnManager - two-dice rulebook flow', () => {
 
   it('exits the yard on a single die showing the exit roll', () => {
     const board = buildTestBoard()
-    const red = createPlayerState('Red')
-    const blue = createPlayerState('Blue')
-    const dice = new ScriptedDice([5, 1])
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    const dice = new ScriptedDice([5, 1, 1])
     const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
 
     let latestMoves: import('../src/core/rules/moveOption').MoveOption[] = []
@@ -106,9 +106,9 @@ describe('TurnManager - two-dice rulebook flow', () => {
 
   it('exits the yard on the sum of both dice when neither die alone shows the exit roll', () => {
     const board = buildTestBoard()
-    const red = createPlayerState('Red')
-    const blue = createPlayerState('Blue')
-    const dice = new ScriptedDice([2, 3]) // neither die is 5, but 2+3=5
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    const dice = new ScriptedDice([2, 3, 1]) // neither die is 5, but 2+3=5
     const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
 
     let latestMoves: import('../src/core/rules/moveOption').MoveOption[] = []
@@ -123,12 +123,12 @@ describe('TurnManager - two-dice rulebook flow', () => {
 
   it('grants an extra turn on doubles without advancing to the next player', () => {
     const board = buildTestBoard()
-    const red = createPlayerState('Red')
-    const blue = createPlayerState('Blue')
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
     red.pieces[0].state = 'OnTrack'
     red.pieces[0].trackPosition = 0
 
-    const dice = new ScriptedDice([2, 2])
+    const dice = new ScriptedDice([2, 2, 1])
     const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
 
     let currentPlayerColor: string | null = null
@@ -143,12 +143,12 @@ describe('TurnManager - two-dice rulebook flow', () => {
 
   it('a third consecutive double eliminates the last piece moved and ends the turn', () => {
     const board = buildTestBoard()
-    const red = createPlayerState('Red')
-    const blue = createPlayerState('Blue')
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
     red.pieces[0].state = 'OnTrack'
     red.pieces[0].trackPosition = 0
 
-    const dice = new ScriptedDice([2, 2, 3, 3, 4, 4])
+    const dice = new ScriptedDice([2, 2, 1, 3, 3, 1, 4, 4, 1])
     const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
 
     let eliminated: import('../src/core/pieces/piece').Piece | null = null
@@ -167,8 +167,8 @@ describe('TurnManager - two-dice rulebook flow', () => {
 
   it('a piece in the home corridor is exempt from third-double elimination', () => {
     const board = buildTestBoard()
-    const red = createPlayerState('Red')
-    const blue = createPlayerState('Blue')
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
     red.pieces[0].state = 'InHomeCorridor'
     red.pieces[0].corridorPosition = 0
 
@@ -176,7 +176,7 @@ describe('TurnManager - two-dice rulebook flow', () => {
     // finish at index 5), so it's still InHomeCorridor - not Finished - when the third double
     // (1,1 again) hits the elimination check. What that third roll's dice do afterward isn't the
     // point of this test, only that the exemption fires instead of sending the piece to the yard.
-    const dice = new ScriptedDice([1, 1, 1, 1, 1, 1])
+    const dice = new ScriptedDice([1, 1, 1, 1, 1, 1, 1, 1, 1])
     const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
 
     let eliminated = false
@@ -197,8 +197,8 @@ describe('TurnManager - two-dice rulebook flow', () => {
 describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
   it('capturing an opponent grants a 20-square reward, offered ahead of the remaining die', () => {
     const board = buildTestBoard()
-    const red = createPlayerState('Red')
-    const blue = createPlayerState('Blue')
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
     red.pieces[0].state = 'OnTrack'
     red.pieces[0].trackPosition = 5
     red.pieces[1].state = 'OnTrack'
@@ -206,7 +206,7 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     blue.pieces[0].state = 'OnTrack'
     blue.pieces[0].trackPosition = 8
 
-    const dice = new ScriptedDice([3, 1])
+    const dice = new ScriptedDice([3, 1, 1])
     const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
 
     let rewardGrant: RewardGrant | null = null
@@ -234,14 +234,14 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
 
   it('finishing a piece grants a 10-square reward', () => {
     const board = buildTestBoard()
-    const red = createPlayerState('Red')
-    const blue = createPlayerState('Blue')
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
     red.pieces[0].state = 'InHomeCorridor'
     red.pieces[0].corridorPosition = 3 // +2 lands exactly on the finish square (corridor index 5)
     red.pieces[1].state = 'OnTrack'
     red.pieces[1].trackPosition = 0
 
-    const dice = new ScriptedDice([2, 1])
+    const dice = new ScriptedDice([2, 1, 1])
     const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
 
     let rewardGrant: RewardGrant | null = null
@@ -256,8 +256,8 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
 
   it('a reward move that itself captures chains another reward on top (PC 5)', () => {
     const board = buildBigTestBoard()
-    const red = createPlayerState('Red')
-    const blue = createPlayerState('Blue')
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
     red.pieces[0].state = 'OnTrack'
     red.pieces[0].trackPosition = 5
     red.pieces[1].state = 'OnTrack'
@@ -267,7 +267,7 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     blue.pieces[1].state = 'OnTrack'
     blue.pieces[1].trackPosition = 21
 
-    const dice = new ScriptedDice([3, 1])
+    const dice = new ScriptedDice([3, 1, 1])
     const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
 
     const grants: RewardGrant[] = []
@@ -288,8 +288,8 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
 
   it('forfeits the reward when no piece already in play can use it (PC 5)', () => {
     const board = buildTestBoard()
-    const red = createPlayerState('Red')
-    const blue = createPlayerState('Blue')
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
     red.pieces[0].state = 'OnTrack'
     red.pieces[0].trackPosition = 5
     blue.pieces[0].state = 'OnTrack'
@@ -297,7 +297,7 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     // red.pieces[1..3] stay InYard - a reward can never move a piece out of the shelter (PC 5),
     // and red.pieces[0] itself would overshoot its own finish with 20, so nothing qualifies.
 
-    const dice = new ScriptedDice([3, 1])
+    const dice = new ScriptedDice([3, 1, 1])
     const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
 
     let forfeited: RewardGrant | null = null

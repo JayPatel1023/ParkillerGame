@@ -1,3 +1,4 @@
+import type { PieceColor } from '../pieceColor'
 import type { Piece } from '../pieces/piece'
 
 export type MoveKind = 'ExitYard' | 'TrackMove' | 'CorridorMove' | 'FinishMove'
@@ -22,5 +23,9 @@ export interface MoveOption {
 export interface MoveResult {
   movedPiece: Piece
   capturedPiece: Piece | null
+  /** Set when this move landed exactly on an opposing color's Parkiller piece (PK6) - eliminating
+   * it permanently, same as capturing a regular piece but tracked separately since a Parkiller has
+   * no yard to return to. */
+  capturedParkillerColor: PieceColor | null
   pieceFinished: boolean
 }

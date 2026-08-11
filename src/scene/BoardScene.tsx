@@ -3,15 +3,17 @@ import { Canvas, useThree } from '@react-three/fiber'
 import { Line, OrbitControls, PerspectiveCamera, Text } from '@react-three/drei'
 import type { BoardDefinition } from '../core/board/boardDefinition'
 import type { PlayerState } from '../core/gameFlow/playerState'
+import type { ParkillerMoveResult } from '../core/gameFlow/turnManager'
 import type { MoveOption } from '../core/rules/moveOption'
 import type { Piece } from '../core/pieces/piece'
 import type { MoveAnimationRequest } from '../hooks/useTurnManager'
 import { BoardMesh } from './BoardMesh'
 import { PieceMesh } from './PieceMesh'
+import { ParkillerMesh } from './ParkillerMesh'
 import { DiceMesh } from './DiceMesh'
 import { TrackTile } from './TrackTile'
 import { useBoardColorSampler } from './useBoardColorSampler'
-import { getHopWaypoints, getPieceWaypoint } from './piecePosition'
+import { getHopWaypoints, getParkillerHopWaypoints, getParkillerWaypoint, getPieceWaypoint } from './piecePosition'
 import { toWorldPosition, estimateSquareSize, computeTileCorners, BASE_HEIGHT, FLAT_SURFACE_HEIGHT } from './boardGeometry'
 import { getColor } from '../core/colorPalette'
 
@@ -171,12 +173,14 @@ interface BoardSceneProps {
   pendingMoves: MoveOption[]
   onSelectPiece: (piece: Piece) => void
   currentPlayerColor: Piece['color']
-  /** The rulebook's two white dice, rolled together each turn. */
-  diceValues: [number | null, number | null]
+  /** The rulebook's two white dice plus the Parkiller's own black die (PK2), all rolled together. */
+  diceValues: [number | null, number | null, number | null]
   rolling: boolean
   onRollDice: () => void
   moveAnimation: MoveAnimationRequest | null
   onAnimationComplete: () => void
+  parkillerAnimation: ParkillerMoveResult | null
+  onParkillerAnimationComplete: () => void
 }
 
 export function BoardScene({
@@ -190,6 +194,8 @@ export function BoardScene({
   onRollDice,
   moveAnimation,
   onAnimationComplete,
+  parkillerAnimation,
+  onParkillerAnimationComplete,
 }: BoardSceneProps) {
   // While a move is still animating, its `hops` reconstruction runs against the piece's already-
   // fully-updated logical state (game rules apply moves instantly; only the visual hop-by-hop
@@ -245,6 +251,18 @@ export function BoardScene({
     moveAnimation?.after.corridorPosition,
     definition,
   ])
+
+  // Same memoization reasoning as animatingHopData above, for the Parkiller's own auto-resolved
+  // move - parkillerAnimation is a stable object for one move's whole duration (see useTurnManager),
+  // so this only recomputes when the move itself changes, not on every unrelated re-render.
+  const parkillerHopData = useMemo(() => {
+    if (!parkillerAnimation) return null
+    return {
+      hopFrom: toWorldPosition(definition.trackWaypoints[parkillerAnimation.before]),
+      hops: getParkillerHopWaypoints(parkillerAnimation.before, parkillerAnimation.after, definition).map(toWorldPosition),
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parkillerAnimation?.color, parkillerAnimation?.before, parkillerAnimation?.after, definition])
 
   const stackGroups = new Map<string, Piece[]>()
   for (const piece of allPieces) {
@@ -337,8 +355,30 @@ export function BoardScene({
         )
       })}
 
-      <DiceMesh value={diceValues[0]} rolling={rolling} onClick={onRollDice} stackIndex={0} />
-      <DiceMesh value={diceValues[1]} rolling={rolling} onClick={onRollDice} stackIndex={1} />
+      {players.map((player, index) => {
+        const waypoint = getParkillerWaypoint(player.parkiller.trackPosition, player.parkiller.state, definition)
+        if (!waypoint) return null
+        const restPosition = toWorldPosition(waypoint, BASE_HEIGHT)
+        const isAnimating = parkillerAnimation?.color === player.color
+        const hopFrom = isAnimating ? (parkillerHopData?.hopFrom ?? null) : null
+        const hops = isAnimating ? (parkillerHopData?.hops ?? []) : []
+
+        return (
+          <ParkillerMesh
+            key={`parkiller-${player.color}`}
+            color={player.color}
+            restPosition={restPosition}
+            hopFrom={hopFrom}
+            hops={hops}
+            onHopsComplete={isAnimating ? onParkillerAnimationComplete : undefined}
+            introDelay={(allPieces.length + index) * INTRO_STAGGER}
+          />
+        )
+      })}
+
+      <DiceMesh value={diceValues[0]} rolling={rolling} onClick={onRollDice} column={-0.5} />
+      <DiceMesh value={diceValues[1]} rolling={rolling} onClick={onRollDice} column={0.5} />
+      <DiceMesh value={diceValues[2]} rolling={rolling} onClick={onRollDice} column={0} row={1} black />
       {TRACK_DEBUG_PLAYER_COUNTS.has(definition.playerCount) && (
         <TrackDebugPath trackWaypoints={definition.trackWaypoints} safeTrackIndices={definition.safeTrackIndices} />
       )}

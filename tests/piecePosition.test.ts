@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { BoardDefinition } from '../src/core/board/boardDefinition'
-import { getHopWaypoints } from '../src/scene/piecePosition'
+import { getHopWaypoints, getParkillerHopWaypoints, getParkillerWaypoint } from '../src/scene/piecePosition'
 
 // Mirrors CAPTURE_REWARD (20) in turnManager.ts plus a few corridor squares, to reproduce a
 // legitimate reward move that must NOT collapse to a single instant hop.
@@ -129,6 +129,38 @@ describe('getHopWaypoints', () => {
       [100, 1],
       [100, 2],
       [100, 3],
+    ])
+  })
+})
+
+describe('getParkillerWaypoint', () => {
+  it('resolves the track waypoint at its current position while InPlay', () => {
+    const definition = buildTestDefinition()
+    expect(getParkillerWaypoint(5, 'InPlay', definition)).toEqual([5, 5])
+  })
+
+  it('is null once Eliminated, regardless of its last position', () => {
+    const definition = buildTestDefinition()
+    expect(getParkillerWaypoint(5, 'Eliminated', definition)).toBeNull()
+  })
+})
+
+describe('getParkillerHopWaypoints', () => {
+  it('walks backward (decreasing index) one square at a time', () => {
+    const definition = buildTestDefinition()
+    expect(getParkillerHopWaypoints(8, 5, definition)).toEqual([
+      [7, 7],
+      [6, 6],
+      [5, 5],
+    ])
+  })
+
+  it('wraps around the end of the track when it decrements past index 0', () => {
+    const definition = buildTestDefinition() // trackLength 20
+    expect(getParkillerHopWaypoints(1, 18, definition)).toEqual([
+      [0, 0],
+      [19, 19],
+      [18, 18],
     ])
   })
 })

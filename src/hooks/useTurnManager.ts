@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { PlayerState } from '../core/gameFlow/playerState'
-import type { DiceRoll, RewardGrant, TurnManager } from '../core/gameFlow/turnManager'
+import type { DiceRoll, ParkillerMoveResult, RewardGrant, TurnManager } from '../core/gameFlow/turnManager'
 import type { Piece } from '../core/pieces/piece'
 import type { MoveOption } from '../core/rules/moveOption'
 import { snapshotPiece, type PieceSnapshot } from '../scene/piecePosition'
@@ -26,6 +26,7 @@ export function useTurnManager(turnManager: TurnManager) {
   const [pendingMoves, setPendingMoves] = useState<MoveOption[]>([])
   const [winner, setWinner] = useState<PlayerState | null>(null)
   const [moveAnimation, setMoveAnimation] = useState<MoveAnimationRequest | null>(null)
+  const [parkillerAnimation, setParkillerAnimation] = useState<ParkillerMoveResult | null>(null)
   const [eliminatedByDoubles, setEliminatedByDoubles] = useState<Piece | null>(null)
   const [pendingReward, setPendingReward] = useState<RewardGrant | null>(null)
   const [forfeitedReward, setForfeitedReward] = useState<RewardGrant | null>(null)
@@ -43,6 +44,7 @@ export function useTurnManager(turnManager: TurnManager) {
         setPendingReward(null)
         setForfeitedReward(null)
       }),
+      turnManager.parkillerMoved.on((result) => setParkillerAnimation(result)),
       turnManager.moveChoicesReady.on((moves) => setPendingMoves(moves)),
       turnManager.moveNotPossible.on(() => setPendingMoves([])),
       turnManager.moveApplied.on(() => {
@@ -82,6 +84,10 @@ export function useTurnManager(turnManager: TurnManager) {
     setMoveAnimation(null)
   }
 
+  function clearParkillerAnimation() {
+    setParkillerAnimation(null)
+  }
+
   return {
     currentPlayer,
     lastRoll,
@@ -89,11 +95,13 @@ export function useTurnManager(turnManager: TurnManager) {
     pendingMoves,
     winner,
     moveAnimation,
+    parkillerAnimation,
     eliminatedByDoubles,
     pendingReward,
     forfeitedReward,
     rollDice,
     chooseMove,
     clearMoveAnimation,
+    clearParkillerAnimation,
   }
 }
