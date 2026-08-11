@@ -43,8 +43,11 @@ export class HostTurnManagerBridge implements TurnManagerLike {
   private readonly transport: RoomTransport
   /** Which color each room seat (actor number) controls - fixed once the game starts (see
    * OnlineLobbyScreen for how seats are assigned before that). Bot-controlled colors have no
-   * entry here at all; BotController drives those directly via requestRoll()/submitMove() on this
-   * same bridge, same as the Master's own human input. */
+   * entry here at all - a bot isn't tied to any connected actor, so it can't go through
+   * requestRoll()/submitMove() (those always validate against transport.localActorNr, the
+   * Master's own seat). BotController instead calls rollForBot()/submitMoveForBot() below, which
+   * skip actor-ownership validation entirely - appropriate since a bot's decision is inherently
+   * host-local and trusted, not a network intent that could be stale or spoofed. */
   private readonly actorColors: Map<number, PieceColor>
   private readonly unsubscribeMessage: () => void
 
@@ -88,6 +91,18 @@ export class HostTurnManagerBridge implements TurnManagerLike {
     return this.handleMoveIntent(this.transport.localActorNr, chosenPiece.color, chosenPiece.pieceIndex)
   }
 
+  /** For BotController only - a bot seat has no connected actor to validate ownership against,
+   * so this bypasses that check entirely and goes straight to the same roll+broadcast this
+   * bridge already does for validated human input. */
+  rollForBot(): void {
+    this.performRoll()
+  }
+
+  /** For BotController only - see rollForBot(). */
+  submitMoveForBot(piece: Piece): MoveResult | null {
+    return this.performMove(piece)
+  }
+
   dispose(): void {
     this.unsubscribeMessage()
   }
@@ -108,17 +123,25 @@ export class HostTurnManagerBridge implements TurnManagerLike {
   private handleRollIntent(actorNr: number): void {
     const seatColor = this.actorColors.get(actorNr)
     if (!seatColor || seatColor !== this.inner.currentPlayer.color) return
-    this.inner.requestRoll()
-    const [dieA, dieB, blackDie] = this.dice.drain()
-    this.transport.broadcast({ type: 'diceRolled', dieA, dieB, blackDie })
+    this.performRoll()
   }
 
   private handleMoveIntent(actorNr: number, color: PieceColor, pieceIndex: number): MoveResult | null {
     if (!this.isValidActor(actorNr, color)) return null
     const piece = findPiece(this.players, color, pieceIndex)
     if (!piece) return null
+    return this.performMove(piece)
+  }
+
+  private performRoll(): void {
+    this.inner.requestRoll()
+    const [dieA, dieB, blackDie] = this.dice.drain()
+    this.transport.broadcast({ type: 'diceRolled', dieA, dieB, blackDie })
+  }
+
+  private performMove(piece: Piece): MoveResult | null {
     const result = this.inner.submitMove(piece)
-    if (result) this.transport.broadcast({ type: 'moveChosen', color, pieceIndex })
+    if (result) this.transport.broadcast({ type: 'moveChosen', color: piece.color, pieceIndex: piece.pieceIndex })
     return result
   }
 }
