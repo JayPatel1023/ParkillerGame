@@ -28,11 +28,16 @@ declare global {
 const CORNER_X = 2.37
 const CORNER_Z = 1.98
 const DIE_SPACING = 0.55
+// The black die sits on its own row behind the two white ones (see `row` below) - a taller row
+// gap than the plain column spacing, since the black die is now physically bigger and would
+// otherwise overlap the white dice's row.
+const ROW_SPACING = 0.66
 const DIE_SIZE = 0.5
-// The die's own geometry is centered on its local origin, so resting it on the flat board plane
-// (y=0) means lifting that center by half the die's height - was a flat 0.35, well above the
-// die's own 0.25 half-height, leaving a visible gap/shadow between the die and the board.
-const DIE_REST_Y = DIE_SIZE / 2
+// Reference photos (reported directly, twice) show the black die - the one that moves the
+// Parkiller - is noticeably bigger than the two white dice, not the same size with just a
+// different color. 30% bigger reads as clearly larger without dwarfing the white pair.
+const BLACK_DIE_SCALE = 1.3
+const BLACK_DIE_SIZE = DIE_SIZE * BLACK_DIE_SCALE
 
 function pipPositions(value: number): [number, number][] {
   switch (value) {
@@ -159,6 +164,12 @@ export function DiceMesh({
   const meshRef = useRef<Mesh>(null)
   const wasRolling = useRef(rolling)
 
+  const size = black ? BLACK_DIE_SIZE : DIE_SIZE
+  // The die's own geometry is centered on its local origin, so resting it on the flat board plane
+  // (y=0) means lifting that center by half the die's own height - was a flat 0.35, well above the
+  // white die's 0.25 half-height, leaving a visible gap/shadow between the die and the board.
+  const restY = size / 2
+
   const bodyColors: [string, string] = black ? ['#3a3a3a', '#161616'] : ['#ffffff', '#e9e7e2']
   const pipColor = black ? '#f5f5f5' : '#1c1c1c'
 
@@ -204,11 +215,11 @@ export function DiceMesh({
   }, [rolling])
 
   return (
-    <group position={[CORNER_X + column * DIE_SPACING, DIE_REST_Y, CORNER_Z + row * DIE_SPACING]}>
+    <group position={[CORNER_X + column * DIE_SPACING, restY, CORNER_Z + row * ROW_SPACING]}>
       <mesh ref={meshRef} castShadow onClick={onClick}>
         {/* Rounded corners/edges (not a sharp cardboard cube) to match the reference die photo -
             RoundedBoxGeometry extends BoxGeometry so it keeps the same 6 face-material groups. */}
-        <roundedBoxGeometry args={[DIE_SIZE, DIE_SIZE, DIE_SIZE, 4, DIE_SIZE * 0.16]} />
+        <roundedBoxGeometry args={[size, size, size, 4, size * 0.16]} />
         {materials.map((mat, i) => (
           <primitive key={i} object={mat} attach={`material-${i}`} />
         ))}
