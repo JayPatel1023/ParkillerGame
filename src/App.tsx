@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { PieceColor } from './core/pieceColor'
+import { beginLocalGame } from './core/gameFlow/localGameSession'
 import { BOARD_DEFINITIONS } from './data/boards'
 import { GameBoardScreen } from './ui/GameBoardScreen'
 import { PlayerCountSelector } from './ui/PlayerCountSelector'
@@ -22,6 +23,13 @@ type Screen = 'start' | 'selectCount' | 'game'
 export default function App() {
   const [screen, setScreen] = useState<Screen>('start')
   const [playerCount, setPlayerCount] = useState(4)
+  // Only actually used once screen === 'game', but built unconditionally here (not inside that
+  // conditional branch below) since hooks can't be called conditionally - cheap to construct
+  // early, and beginLocalGame's own turnStarted emit is harmless before anything's listening.
+  const localSession = useMemo(
+    () => beginLocalGame(BOARD_DEFINITIONS[playerCount], TURN_ORDER_BY_COUNT[playerCount]),
+    [playerCount],
+  )
 
   // Dev-only route: open with #editor to trace board waypoints. See src/tools/WaypointEditor.tsx.
   if (window.location.hash === '#editor') {
@@ -47,7 +55,7 @@ export default function App() {
       {screen === 'game' && (
         <GameBoardScreen
           definition={BOARD_DEFINITIONS[playerCount]}
-          colors={TURN_ORDER_BY_COUNT[playerCount]}
+          session={localSession}
           onExit={() => setScreen('start')}
         />
       )}
