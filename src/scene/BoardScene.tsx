@@ -32,7 +32,10 @@ const TRACK_DEBUG_PLAYER_COUNTS = new Set<number>()
 
 const FOV_DEGREES = 45
 const DEFAULT_POLAR_ANGLE = 0.85 // ~49° off vertical - shallower than before so more of the board's far side stays in frame
-const CAMERA_DISTANCE = 6.6
+// Reported directly: the default view was too zoomed in - the board (and the dice past its edge)
+// were getting cropped at real window sizes instead of sitting comfortably inside the frame with
+// margin. Pulled back from 6.6.
+const CAMERA_DISTANCE = 9.5
 // Calibrated (not derived) against BOARD_SIZE=6 at a ~1.6:1 viewport aspect - see FitBoardCamera.
 const REFERENCE_MIN_DIMENSION_FACTOR = 620
 
@@ -315,10 +318,16 @@ export function BoardScene({
         // submitted, same as every other rule - only the capturing piece's hop animation takes
         // real time. Render the captured piece frozen at the square it was captured on (the
         // capturing piece's own destination) for as long as that animation is in flight, instead
-        // of letting it jump home before the capturing piece has visually arrived.
-        const isBeingCaptured = moveAnimation?.capturedPiece === piece
+        // of letting it jump home before the capturing piece has visually arrived. A pawn can be
+        // captured by another pawn's move (moveAnimation) or by an opposing Parkiller's own move
+        // (parkillerAnimation, PK5) - reported directly that the latter was missing this treatment
+        // entirely, so the eaten piece vanished before the Parkiller's hop visually arrived.
+        const capturedByPawnMove = moveAnimation?.capturedPiece === piece
+        const capturedByParkiller = parkillerAnimation?.capturedPawn === piece
+        const isBeingCaptured = capturedByPawnMove || capturedByParkiller
+        const captureTrackPosition = capturedByPawnMove ? moveAnimation!.after.trackPosition : parkillerAnimation?.after
         const waypoint = isBeingCaptured
-          ? (definition.trackWaypoints[moveAnimation!.after.trackPosition] ?? null)
+          ? (definition.trackWaypoints[captureTrackPosition!] ?? null)
           : getPieceWaypoint(piece, definition)
         if (!waypoint) return null
 
@@ -352,7 +361,17 @@ export function BoardScene({
       })}
 
       {players.map((player, index) => {
-        const waypoint = getParkillerWaypoint(player.parkiller.trackPosition, player.parkiller.state, definition)
+        // A Parkiller can be eliminated by a pawn's move (moveAnimation, PK6) or by another
+        // Parkiller's own move (parkillerAnimation, PK6) - its trackPosition is preserved even
+        // after state flips to Eliminated (see captureParkillerAt/resolveParkillerMove), so it
+        // can render frozen there for as long as the capturing animation is in flight, same
+        // treatment a captured pawn gets above. Reported directly that this was missing entirely,
+        // so an eliminated Parkiller vanished before the capturing piece had visually arrived.
+        const isBeingCaptured =
+          moveAnimation?.capturedParkillerColor === player.color || parkillerAnimation?.capturedParkillerColor === player.color
+        const waypoint = isBeingCaptured
+          ? (definition.trackWaypoints[player.parkiller.trackPosition] ?? null)
+          : getParkillerWaypoint(player.parkiller.trackPosition, player.parkiller.state, definition)
         if (!waypoint) return null
         const restPosition = toWorldPosition(waypoint, BASE_HEIGHT)
         const isAnimating = parkillerAnimation?.color === player.color
