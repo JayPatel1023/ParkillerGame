@@ -45,9 +45,7 @@ function yawTowards(from: [number, number, number], to: [number, number, number]
 const PARKILLER_BASE_RADIUS = 0.1
 
 // Re-measured against a clean, isolated front-on reference shot (no background clutter) - the
-// hood reads noticeably rounder/more bulbous than a sharp cone, is proportionally larger than the
-// first attempt (close to half the total height), and the hands come together near the front
-// center (a clasped pose), not out at the sides.
+// hands come together near the front center (a clasped pose), not out at the sides.
 const ROBE_PROFILE_RAW: [number, number][] = [
   [0.0, 0.0],
   [0.36, 0.0],
@@ -61,13 +59,17 @@ const ROBE_PROFILE_RAW: [number, number][] = [
 const ROBE_SCALE = PARKILLER_BASE_RADIUS / Math.max(...ROBE_PROFILE_RAW.map(([r]) => r))
 const ROBE_TOP_Y = 0.55 * ROBE_SCALE // where the hood sits, in world units
 
+// Reported directly against a clearer multi-color reference photo: the previous hood profile had
+// a wide mid-height bulge (0.32 max radius around a third of the way up) that read as round/
+// bulbous once lathed - the photo's hood is a much steadier taper, angular/pointed rather than a
+// dome, with only a small flare right at the base where it drapes over the shoulders before
+// narrowing continuously to the tip.
 const HOOD_PROFILE_RAW: [number, number][] = [
-  [0.21, 0.0],
-  [0.29, 0.05],
-  [0.32, 0.14],
-  [0.3, 0.24],
-  [0.24, 0.34],
-  [0.15, 0.42],
+  [0.22, 0.0],
+  [0.26, 0.06],
+  [0.23, 0.17],
+  [0.17, 0.29],
+  [0.1, 0.4],
   [0.06, 0.48],
   [0.0, 0.51],
 ]
