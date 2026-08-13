@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { PlayerState } from '../core/gameFlow/playerState'
 import type { DiceRoll, ParkillerMoveResult, RewardGrant, TurnManager } from '../core/gameFlow/turnManager'
+import type { PieceColor } from '../core/pieceColor'
 import type { Piece } from '../core/pieces/piece'
 import type { MoveOption } from '../core/rules/moveOption'
 import { snapshotPiece, type PieceSnapshot } from '../scene/piecePosition'
@@ -17,6 +18,10 @@ export interface MoveAnimationRequest {
    * as `moveAnimation` names it here, only letting it snap home once the animation completes.
    */
   capturedPiece: Piece | null
+  /** Same idea as capturedPiece, but for an opposing Parkiller (PK6) this move eliminated - see
+   * BoardScene, which keeps rendering that Parkiller at the capture square until this animation
+   * completes instead of letting it vanish the instant its state flips to Eliminated. */
+  capturedParkillerColor: PieceColor | null
 }
 
 export function useTurnManager(turnManager: TurnManager) {
@@ -77,7 +82,13 @@ export function useTurnManager(turnManager: TurnManager) {
     const before = snapshotPiece(piece)
     const result = turnManager.submitMove(piece) // mutates `piece` synchronously - after-snapshot below is post-move
     const after = snapshotPiece(piece)
-    setMoveAnimation({ piece, before, after, capturedPiece: result?.capturedPiece ?? null })
+    setMoveAnimation({
+      piece,
+      before,
+      after,
+      capturedPiece: result?.capturedPiece ?? null,
+      capturedParkillerColor: result?.capturedParkillerColor ?? null,
+    })
   }
 
   function clearMoveAnimation() {
