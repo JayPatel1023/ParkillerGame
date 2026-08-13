@@ -111,15 +111,24 @@ interface PieceMeshProps {
   isCurrentTurn: boolean
 }
 
-const RING_PULSE_SPEED = 1.5 // radians/sec - slower, gentler "breathing" rather than a mechanical blink
-// Was 0.16 base / 0.16 amplitude in a pale cream (#fff4c2) - reported directly as not noticeable
-// enough to actually tell whose turn it is at a glance. Raised well past "subtle glow" into
-// "obviously highlighted", plus a punchier gold instead of near-white-cream so it reads distinctly
-// from the piece's own highlight band and from light-colored board tiles behind it.
+// Whose-turn cue, take 2 - the first version (a single flat pulsing ring on the ground) was
+// reported directly as unsatisfying ("한심하다", not just "make it more visible" like the first
+// round of feedback). Replaced entirely rather than re-tuned: a counter-rotating double ring at
+// the base (reads as an active energy field, not a static blink) plus a small spinning gold
+// marker gem bobbing above the piece's head - a floating indicator is a much more common and
+// immediately legible "this is yours, act on it" language in board/mobile games than a ground
+// decal alone, and having motion at two different heights (base + overhead) reads as more alive.
+const RING_OUTER_SPIN_SPEED = 0.9 // radians/sec
+const RING_INNER_SPIN_SPEED = -1.3 // opposite direction from the outer ring, on purpose
+const RING_PULSE_SPEED = 1.5
 const RING_BASE_OPACITY = 0.55
-const RING_PULSE_AMPLITUDE = 0.35
-const RING_BASE_SCALE = 1
-const RING_PULSE_SCALE_AMPLITUDE = 0.18 // grows/shrinks along with the fade, instead of just the opacity flickering in place
+const RING_PULSE_AMPLITUDE = 0.3
+
+const MARKER_BOB_SPEED = 2.2
+const MARKER_BOB_AMPLITUDE = 0.05
+const MARKER_SPIN_SPEED = 2.0
+const MARKER_BASE_Y = 0.4 // world units above the piece's own base - clears the head with margin
+const MARKER_SIZE = 0.024
 
 // Renders as a small bouncing peg-pawn rather than a flat token: at board scale a flat disc barely
 // shows how far it travelled between rolls, but a shape that visibly arcs once per square makes
@@ -140,8 +149,11 @@ export function PieceMesh({
   const elapsedRef = useRef(0)
   const notifiedRef = useRef(true)
   const introRef = useRef({ done: false, elapsed: 0 })
-  const ringRef = useRef<Mesh>(null)
-  const ringElapsedRef = useRef(0)
+  const indicatorGroupRef = useRef<Group>(null)
+  const ringOuterRef = useRef<Mesh>(null)
+  const ringInnerRef = useRef<Mesh>(null)
+  const markerRef = useRef<Group>(null)
+  const indicatorElapsedRef = useRef(0)
 
   useEffect(() => {
     hopIndexRef.current = 0
@@ -154,20 +166,28 @@ export function PieceMesh({
     if (!mesh) return
     const delta = Math.min(rawDelta, MAX_FRAME_DELTA)
 
-    if (ringRef.current) {
+    if (indicatorGroupRef.current) {
       if (isCurrentTurn) {
-        ringElapsedRef.current += delta
+        indicatorGroupRef.current.visible = true
+        indicatorElapsedRef.current += delta
+        const t = indicatorElapsedRef.current
+
+        if (ringOuterRef.current) ringOuterRef.current.rotation.z += delta * RING_OUTER_SPIN_SPEED
+        if (ringInnerRef.current) ringInnerRef.current.rotation.z += delta * RING_INNER_SPIN_SPEED
         // Smoothed 0..1..0 rather than a raw sine, so the breathing lingers softly at each extreme
         // instead of moving fastest exactly where it's most visible (a plain sine's own shape).
-        const raw = Math.sin(ringElapsedRef.current * RING_PULSE_SPEED) * 0.5 + 0.5
+        const raw = Math.sin(t * RING_PULSE_SPEED) * 0.5 + 0.5
         const pulse = raw * raw * (3 - 2 * raw)
-        const material = ringRef.current.material as THREE.MeshBasicMaterial
-        material.opacity = RING_BASE_OPACITY + pulse * RING_PULSE_AMPLITUDE
-        const scale = RING_BASE_SCALE + pulse * RING_PULSE_SCALE_AMPLITUDE
-        ringRef.current.scale.set(scale, scale, 1)
-        ringRef.current.visible = true
+        const ringOpacity = RING_BASE_OPACITY + pulse * RING_PULSE_AMPLITUDE
+        if (ringOuterRef.current) (ringOuterRef.current.material as THREE.MeshBasicMaterial).opacity = ringOpacity
+        if (ringInnerRef.current) (ringInnerRef.current.material as THREE.MeshBasicMaterial).opacity = ringOpacity
+
+        if (markerRef.current) {
+          markerRef.current.position.y = MARKER_BASE_Y + Math.sin(t * MARKER_BOB_SPEED) * MARKER_BOB_AMPLITUDE
+          markerRef.current.rotation.y += delta * MARKER_SPIN_SPEED
+        }
       } else {
-        ringRef.current.visible = false
+        indicatorGroupRef.current.visible = false
       }
     }
 
@@ -255,14 +275,35 @@ export function PieceMesh({
         <sphereGeometry args={[HIGHLIGHT_RADIUS, 16, 16]} />
         <meshPhysicalMaterial color="#ffffff" transparent opacity={0.18} roughness={0.15} metalness={0} />
       </mesh>
-      {/* Whose-turn cue: a soft pulsing ring at the base, visible on every piece belonging to the
-          current player for their whole turn - not just the one(s) selectable right now. Flat
-          (rotated onto the board plane) and unlit (MeshBasicMaterial) so it reads as a glow rather
-          than a lit disc, and just outside the piece's own footprint so it doesn't hide the base. */}
-      <mesh ref={ringRef} position={[0, 0.004, 0]} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
-        <ringGeometry args={[PIECE_BASE_RADIUS * 1.7, PIECE_BASE_RADIUS * 2.3, 40]} />
-        <meshBasicMaterial color="#ffcc00" transparent opacity={RING_BASE_OPACITY} side={THREE.DoubleSide} />
-      </mesh>
+      {/* Whose-turn cue: visible on every piece belonging to the current player for their whole
+          turn - not just the one(s) selectable right now. */}
+      <group ref={indicatorGroupRef} visible={false}>
+        {/* Counter-rotating double ring at the base - flat (rotated onto the board plane) and
+            unlit (MeshBasicMaterial) so it reads as a glow rather than a lit disc, just outside
+            the piece's own footprint so it doesn't hide the base. The outer group applies the
+            "lay flat" rotation once; each ring's own rotation.z then spins it within that already-
+            flattened plane, independent of the other ring. */}
+        <group position={[0, 0.004, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <mesh ref={ringOuterRef}>
+            <ringGeometry args={[PIECE_BASE_RADIUS * 1.55, PIECE_BASE_RADIUS * 1.8, 40]} />
+            <meshBasicMaterial color="#ffcc00" transparent opacity={RING_BASE_OPACITY} side={THREE.DoubleSide} />
+          </mesh>
+          <mesh ref={ringInnerRef}>
+            {/* Low segment count on purpose - reads as a faceted/angular ring, distinct from the
+                smooth outer one, rather than two identical circles just spinning oppositely. */}
+            <ringGeometry args={[PIECE_BASE_RADIUS * 2.0, PIECE_BASE_RADIUS * 2.2, 6]} />
+            <meshBasicMaterial color="#fff4c2" transparent opacity={RING_BASE_OPACITY} side={THREE.DoubleSide} />
+          </mesh>
+        </group>
+        {/* Floating gem marker above the piece's head - the clearer, more game-familiar "this is
+            yours, act on it" cue (bob + spin), on top of the base ring rather than instead of it. */}
+        <group ref={markerRef} position={[0, MARKER_BASE_Y, 0]}>
+          <mesh>
+            <octahedronGeometry args={[MARKER_SIZE, 0]} />
+            <meshBasicMaterial color="#ffcc00" transparent opacity={0.9} />
+          </mesh>
+        </group>
+      </group>
     </group>
   )
 }

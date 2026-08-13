@@ -3,15 +3,11 @@ import type { BoardDefinition } from '../core/board/boardDefinition'
 import { beginLocalGame } from '../core/gameFlow/localGameSession'
 import type { PieceColor } from '../core/pieceColor'
 import { getColor } from '../core/colorPalette'
-import type { RewardReason } from '../core/gameFlow/turnManager'
 import { useTurnManager } from '../hooks/useTurnManager'
 import { BoardScene } from '../scene/BoardScene'
+import { RewardToast } from './RewardToast'
 
 const BRAND_GOLD = '#ccb154'
-
-function rewardReasonLabel(reason: RewardReason): string {
-  return reason === 'capture' ? 'captura' : 'llegada a meta'
-}
 
 export function GameBoardScreen({
   definition,
@@ -68,6 +64,8 @@ export function GameBoardScreen({
         onParkillerAnimationComplete={clearParkillerAnimation}
       />
 
+      <RewardToast pendingReward={pendingReward} forfeitedReward={forfeitedReward} />
+
       <div style={hudPanelStyle}>
         <div style={turnRowStyle}>
           <span style={{ ...turnDotStyle, background: getColor(currentPlayer.color) }} />
@@ -84,16 +82,10 @@ export function GameBoardScreen({
             Tercer dobles seguido: {eliminatedByDoubles.color} pierde una ficha
           </div>
         )}
-        {pendingReward && (
-          <div style={{ ...hintTextStyle, color: '#7fd88f' }}>
-            Recompensa: {pendingReward.amount} casillas ({rewardReasonLabel(pendingReward.reason)}) - elegí una ficha
-          </div>
-        )}
-        {forfeitedReward && !pendingReward && (
-          <div style={{ ...hintTextStyle, color: '#e8a15c' }}>
-            Recompensa de {forfeitedReward.amount} casillas perdida (sin ficha disponible)
-          </div>
-        )}
+        {/* The reward amount/reason itself is now the celebratory RewardToast (center-stage,
+            animated) instead of a small status line here - this just keeps the player moving
+            forward with what to actually click next. */}
+        {pendingReward && <div style={{ ...hintTextStyle, color: '#7fd88f' }}>Elegí una ficha para tu recompensa</div>}
         {pendingMoves.length > 0 && !pendingReward && <div style={hintTextStyle}>Elegí una ficha para mover</div>}
         <button onClick={() => canRoll && rollDice()} disabled={!canRoll} style={rollButtonStyle(canRoll)}>
           {rolling ? 'Rodando...' : 'Tirar dados'}
@@ -141,6 +133,9 @@ const screenWrapperStyle: React.CSSProperties = {
   background: 'radial-gradient(ellipse at center, rgba(181, 203, 184, 0.16) 0%, rgba(28, 31, 29, 0) 62%)',
 }
 
+// Reported directly: the whole game felt too serious/stiff, not the "relajado, divertido" feel a
+// casual board game should have - warmer panel tone (a soft brown instead of flat near-black) and
+// rounder corners are a first, low-risk step in that direction alongside the new RewardToast.
 const hudPanelStyle: React.CSSProperties = {
   position: 'absolute',
   top: 16,
@@ -148,13 +143,13 @@ const hudPanelStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: 10,
-  background: 'rgba(30, 34, 30, 0.82)',
+  background: 'linear-gradient(165deg, rgba(58, 46, 30, 0.88), rgba(38, 30, 20, 0.88))',
   border: `1px solid ${BRAND_GOLD}`,
   padding: '14px 18px',
-  borderRadius: 10,
+  borderRadius: 16,
   fontFamily: 'system-ui, sans-serif',
   color: '#f2ede0',
-  boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+  boxShadow: '0 6px 18px rgba(0,0,0,0.35)',
   minWidth: 160,
 }
 
@@ -179,13 +174,14 @@ const hintTextStyle: React.CSSProperties = {
 
 function rollButtonStyle(enabled: boolean): React.CSSProperties {
   return {
-    padding: '9px 16px',
+    padding: '10px 18px',
     fontSize: 15,
-    fontWeight: 600,
-    background: enabled ? BRAND_GOLD : '#5c5c54',
-    color: enabled ? '#2a2a2a' : '#a8a8a0',
+    fontWeight: 700,
+    background: enabled ? 'linear-gradient(165deg, #ffe08a, #ccb154)' : '#5c5c54',
+    color: enabled ? '#2a2210' : '#a8a8a0',
     border: 'none',
-    borderRadius: 8,
+    borderRadius: 14,
+    boxShadow: enabled ? '0 3px 10px rgba(204, 177, 84, 0.35)' : 'none',
     cursor: enabled ? 'pointer' : 'default',
   }
 }
