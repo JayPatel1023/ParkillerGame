@@ -118,7 +118,7 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     expect(latestMoves.every((m) => m.diceSource === 'reward' && m.amount === 20)).toBe(true)
   })
 
-  it('a pawn move landing on an opposing Parkiller eliminates it and grants a reward', () => {
+  it('a pawn move landing on an opposing Parkiller during a doubles roll eliminates it and grants a reward', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)
     const blue = createPlayerState('Blue', board)
@@ -126,7 +126,9 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     red.pieces[0].trackPosition = 0
     blue.parkiller.trackPosition = 5
 
-    const dice = new ScriptedDice([5, 1, 1]) // dieA=5 moves red.pieces[0] 0 -> 5, onto blue's parkiller
+    // PK6/PK8: verified directly against the reference implementation's doblete_mata_parkiller
+    // flag - a common piece only eliminates the Parkiller during the roll that produced doubles.
+    const dice = new ScriptedDice([5, 5, 1]) // dieA=dieB=5 (double) moves red.pieces[0] 0 -> 5, onto blue's parkiller
     const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
 
     const grants: RewardGrant[] = []
@@ -138,6 +140,49 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     expect(result?.capturedParkillerColor).toBe('Blue')
     expect(blue.parkiller.state).toBe('Eliminated')
     expect(grants).toEqual([{ amount: 20, reason: 'capture' }])
+  })
+
+  it('a pawn move landing on an opposing Parkiller without doubles does not eliminate it', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 0
+    blue.parkiller.trackPosition = 5
+
+    const dice = new ScriptedDice([5, 2, 1]) // dieA=5, dieB=2 - not a double, the window never opens
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    manager.requestRoll()
+    const result = manager.submitMove(red.pieces[0])
+
+    expect(result?.capturedParkillerColor).toBeNull()
+    expect(blue.parkiller.state).toBe('InPlay')
+    expect(blue.parkiller.trackPosition).toBe(5)
+  })
+
+  it('skips rolling the black die on the bonus turn granted by doubles', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+
+    // Roll 1: dieA=dieB=2 (double, no legal move for either -> immediate bonus turn), blackDie=3
+    // moves the Parkiller 19 -> 16. Roll 2 (the bonus turn): dieA=1, dieB=1, blackDie=9 - still
+    // rolled (a simple "always three dice" contract), but its effect must be skipped, so the
+    // Parkiller must still be at 16, not moved again.
+    const dice = new ScriptedDice([2, 2, 3, 1, 1, 9])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    const results: ParkillerMoveResult[] = []
+    manager.parkillerMoved.on((r) => results.push(r))
+
+    manager.requestRoll()
+    expect(red.parkiller.trackPosition).toBe(16)
+    manager.requestRoll()
+
+    expect(results).toHaveLength(2)
+    expect(results[1]).toEqual({ color: 'Red', before: 16, after: 16, capturedPawn: null, capturedParkillerColor: null })
+    expect(red.parkiller.trackPosition).toBe(16)
   })
 
   it('an eliminated Parkiller stays out of play on later rolls', () => {

@@ -312,4 +312,28 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     expect(offered).toBeNull()
     expect(forfeited).toEqual({ amount: 20, reason: 'capture' })
   })
+
+  it('forces a capturing move when one is available, even though a different piece also has a legal move (PC3/PK8)', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 0
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 10
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 3 // dieA=3 moves red.pieces[0] 0 -> 3, capturing it
+
+    const dice = new ScriptedDice([3, 2, 1]) // dieB=2 would just move red.pieces[1] 10 -> 12, no capture
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let offered: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((moves) => (offered = moves))
+
+    manager.requestRoll()
+
+    expect(offered).toHaveLength(1)
+    expect(offered[0].piece).toBe(red.pieces[0])
+    expect(offered[0].resultingTrackPosition).toBe(3)
+  })
 })
