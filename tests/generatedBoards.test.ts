@@ -68,10 +68,10 @@ describe('generated board data', () => {
       const mover = players[0]
 
       // exit the yard (rulebook: 2 white dice, a 5 on either die exits - not the classic six)
-      let moves = getValidMoves(board, mover, 5, settings)
+      let moves = getValidMoves(board, mover, players, 5, settings)
       const exitMove = moves.find((m) => m.kind === 'ExitYard')
       expect(exitMove).toBeTruthy()
-      applyMove(board, exitMove!, players, settings)
+      applyMove(board, exitMove!, players, settings, true)
       expect(mover.pieces[0].state).toBe('OnTrack')
 
       // walk it all the way home, one step at a time, so every intermediate index gets exercised
@@ -80,10 +80,10 @@ describe('generated board data', () => {
         safety++
         expect(safety).toBeLessThan(1000) // guards against an infinite loop if the data is broken
 
-        moves = getValidMoves(board, mover, 1, settings)
+        moves = getValidMoves(board, mover, players, 1, settings)
         const move = moves.find((m) => m.piece === mover.pieces[0])
         expect(move).toBeTruthy()
-        applyMove(board, move!, players, settings)
+        applyMove(board, move!, players, settings, true)
       }
 
       expect(mover.pieces[0].state).toBe('Finished')

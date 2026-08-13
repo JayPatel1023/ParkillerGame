@@ -2,7 +2,7 @@ import type { BoardData } from '../board/boardData'
 import { Dice, type DiceLike } from '../dice'
 import type { PieceColor } from '../pieceColor'
 import type { Piece } from '../pieces/piece'
-import { applyMove, getValidMoves } from '../rules/parchisRules'
+import { applyMove, getValidMoves, wouldCapture } from '../rules/parchisRules'
 import type { DiceSource, MoveOption, MoveResult } from '../rules/moveOption'
 import type { RuleSettings } from '../rules/ruleSettings'
 import { hasWon, type PlayerState } from './playerState'
@@ -90,6 +90,15 @@ export class TurnManager {
   private lastMovedPiece: Piece | null = null
   private diceState: DiceState | null = null
   private pendingMoves: MoveOption[] | null = null
+  // PK2/PK6a: the black die only rolls once per actual turn - skipped on the bonus turn granted by
+  // a double, verified directly against the reference implementation's turn controller
+  // ("if (!obj_dado.tiene_otro_turno && parkiSigueVivo(...))"). Set by endTurn() for the *next*
+  // requestRoll() to read.
+  private nextRollIsBonusTurn = false
+  // PK6/PK8: a common piece can only eliminate the Parkiller during the roll that just produced
+  // doubles - verified directly against the reference's doblete_mata_parkiller flag, which opens on
+  // any double and closes again after the very first subsequent piece move (capture or not).
+  private parkillerCapturableThisRoll = false
 
   // `dice` accepts anything roll()-shaped, not just the real Dice class - tests inject an exact
   // roll queue instead of a seed, since a seed's resulting face values aren't hand-pickable.
@@ -114,14 +123,22 @@ export class TurnManager {
     const blackDie = this.dice.roll()
     this.diceRolled.emit({ dieA, dieB, blackDie })
 
-    // PK2: the Parkiller's black die is resolved first, every turn, regardless of what the white
-    // dice end up doing - it isn't a move the player chooses, so it's applied here immediately
-    // rather than waiting on a pendingMoves selection. The UI plays its hop animation off this
-    // event on its own; resolution here doesn't wait on that animation actually finishing, same as
-    // every other move in this engine (game state always advances synchronously - only the visual
-    // playback takes real time).
-    const parkillerResult = this.resolveParkillerMove(blackDie)
+    // PK2/PK6a: the black die's *effect* is only applied once per actual turn - a bonus turn
+    // granted by a double is still the same turn's continuation for this purpose, so the Parkiller
+    // doesn't actually move or capture anything on it, verified directly against the reference
+    // implementation's turn controller (still rolled/shown every time, for a simple, predictable
+    // "always three dice per roll" contract - only its effect on the Parkiller is gated). It isn't
+    // a move the player chooses, so it's applied here immediately rather than waiting on a
+    // pendingMoves selection. The UI plays its hop animation off this event on its own; resolution
+    // here doesn't wait on that animation actually finishing, same as every other move in this
+    // engine (game state always advances synchronously - only the visual playback takes time).
+    const isBonusTurn = this.nextRollIsBonusTurn
+    const parkillerResult = isBonusTurn ? this.noopParkillerResult() : this.resolveParkillerMove(blackDie)
     this.parkillerMoved.emit(parkillerResult)
+
+    // PK6/PK8: every double re-opens the window for a common piece to eliminate the Parkiller on
+    // its very next move, regardless of whether the black die itself moved this roll.
+    this.parkillerCapturableThisRoll = dieA === dieB
 
     if (dieA === dieB) {
       this.consecutiveDoubles++
@@ -155,6 +172,14 @@ export class TurnManager {
     }
 
     this.offerMoves()
+  }
+
+  // Reported when the black die is skipped on a bonus turn (see requestRoll) - the Parkiller
+  // simply didn't move, so before === after gives the animation system zero hops for free.
+  private noopParkillerResult(): ParkillerMoveResult {
+    const player = this.currentPlayer
+    const before = player.parkiller.trackPosition
+    return { color: player.color, before, after: before, capturedPawn: null, capturedParkillerColor: null }
   }
 
   // PK2/PK3: moves the current player's Parkiller by the black die's value, opposite direction
@@ -215,13 +240,20 @@ export class TurnManager {
     // doesn't silently swallow both dice when the player could've moved two separate pieces.
     const bestPerPiece = new Map<Piece, MoveOption>()
     for (const candidate of candidates) {
-      const moves = getValidMoves(this.board, this.currentPlayer, candidate.amount, this.settings, candidate.source)
+      const moves = getValidMoves(this.board, this.currentPlayer, this.players, candidate.amount, this.settings, candidate.source)
       for (const move of moves) {
         if (!bestPerPiece.has(move.piece)) bestPerPiece.set(move.piece, move)
       }
     }
 
-    this.pendingMoves = [...bestPerPiece.values()]
+    let options = [...bestPerPiece.values()]
+
+    // PC3/PK8: capturing is mandatory whenever it's available - a player can't sidestep an
+    // available capture by choosing to move a different, non-capturing piece instead.
+    const capturingOptions = options.filter((m) => wouldCapture(this.board, m, this.players, this.parkillerCapturableThisRoll))
+    if (capturingOptions.length > 0) options = capturingOptions
+
+    this.pendingMoves = options
 
     if (this.pendingMoves.length === 0) {
       this.moveNotPossible.emit()
@@ -244,7 +276,10 @@ export class TurnManager {
     if (!move) return null
     const isRewardMove = move.diceSource === 'reward'
 
-    const result = applyMove(this.board, move, this.players, this.settings)
+    const result = applyMove(this.board, move, this.players, this.settings, this.parkillerCapturableThisRoll)
+    // PK6/PK8: the window to kill the Parkiller with a common piece closes after this roll's first
+    // move, whether or not it was actually used for that.
+    this.parkillerCapturableThisRoll = false
     this.lastMovedPiece = chosenPiece
     this.pendingMoves = null
 
@@ -281,8 +316,10 @@ export class TurnManager {
   // Offers a bonus move for an earned reward - restricted (via getValidMoves' own exitRoll check)
   // to pieces already in play, per PC 5 ("you cannot remove a pawn from the shelter... and then
   // claim it"). If nothing can use it, PC 5 forfeits it outright rather than holding it for later.
+  // Deliberately not subject to mandatory capture (verified against the reference: reward moves
+  // let the player pick freely which piece to advance, capture available or not).
   private offerReward(grant: RewardGrant) {
-    const moves = getValidMoves(this.board, this.currentPlayer, grant.amount, this.settings, 'reward')
+    const moves = getValidMoves(this.board, this.currentPlayer, this.players, grant.amount, this.settings, 'reward')
     if (moves.length === 0) {
       this.rewardForfeited.emit(grant)
       this.continueAfterMove()
@@ -310,6 +347,7 @@ export class TurnManager {
   }
 
   private endTurn(grantExtraTurn: boolean) {
+    this.nextRollIsBonusTurn = grantExtraTurn
     if (!grantExtraTurn) {
       this.consecutiveDoubles = 0
       this.lastMovedPiece = null
