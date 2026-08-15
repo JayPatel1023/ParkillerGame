@@ -45,36 +45,41 @@ function yawTowards(from: [number, number, number], to: [number, number, number]
 // (0.9116 raw * PROFILE_SCALE * PIECE_HEIGHT_SCALE, see PieceMesh.tsx) over this model's own total
 // raw height (hood tip at y=2.9).
 const PAWN_HEIGHT = 0.9116 * (0.065 / 0.335) * 1.43
-const MODEL_RAW_HEIGHT = 2.9
+const MODEL_RAW_HEIGHT = 2.92
 const MODEL_SCALE = (PAWN_HEIGHT * 1.4) / MODEL_RAW_HEIGHT
 
 const BODY_PROFILE_RAW: [number, number][] = [
   [0.03, 0.0],
-  [0.38, 0.02],
-  [0.48, 0.1],
-  [0.5, 0.25],
-  [0.48, 0.55],
-  [0.44, 0.85],
-  [0.38, 1.15],
-  [0.4, 1.38],
-  [0.48, 1.55],
-  [0.42, 1.65],
-  [0.28, 1.72],
-  [0.03, 1.75],
+  [0.4, 0.0],
+  [0.48, 0.05],
+  [0.52, 0.12],
+  [0.53, 0.25],
+  [0.52, 0.45],
+  [0.49, 0.7],
+  [0.45, 0.95],
+  [0.4, 1.18],
+  [0.42, 1.38],
+  [0.49, 1.52],
+  [0.52, 1.6],
+  [0.45, 1.68],
+  [0.32, 1.73],
+  [0.05, 1.75],
 ]
 
 const HOOD_PROFILE_RAW: [number, number][] = [
-  [0.03, 1.66],
-  [0.25, 1.69],
-  [0.36, 1.8],
-  [0.42, 1.96],
-  [0.43, 2.12],
-  [0.4, 2.3],
-  [0.34, 2.46],
-  [0.26, 2.61],
-  [0.16, 2.75],
-  [0.07, 2.85],
-  [0.01, 2.9],
+  [0.04, 1.63],
+  [0.28, 1.64],
+  [0.38, 1.7],
+  [0.43, 1.82],
+  [0.46, 1.98],
+  [0.45, 2.13],
+  [0.42, 2.28],
+  [0.37, 2.43],
+  [0.3, 2.57],
+  [0.21, 2.7],
+  [0.12, 2.81],
+  [0.04, 2.89],
+  [0.01, 2.92],
 ]
 
 export function ParkillerMesh({ color, restPosition, facingTarget, hopFrom, hops, onHopsComplete, introDelay }: ParkillerMeshProps) {
@@ -215,50 +220,56 @@ export function ParkillerMesh({ color, restPosition, facingTarget, hopFrom, hops
             cavity sphere poke past the hood's own silhouette as a stray fin/petal shape from other
             viewing angles - reported directly, with photos. Untilted, it reads correctly (if more
             subtly) from every angle instead of correctly from one and broken from others. */}
-        <mesh position={[0, 2.05, 0.39]} scale={[0.29, 0.37, 0.1]} castShadow>
-          <sphereGeometry args={[1, 32, 24]} />
+        <mesh position={[0, 2.03, 0.31]} scale={[0.29, 0.36, 0.07]} castShadow>
+          <sphereGeometry args={[1, 48, 32]} />
           <primitive object={darkMaterial} attach="material" />
         </mesh>
-        <mesh position={[0, 2.05, 0.455]} scale={[0.22, 0.29, 0.06]} castShadow>
-          <sphereGeometry args={[1, 32, 24]} />
+        <mesh position={[0, 2.04, 0.345]} scale={[0.225, 0.295, 0.045]} castShadow>
+          <sphereGeometry args={[1, 48, 32]} />
           <primitive object={mainMaterial} attach="material" />
         </mesh>
 
-        {/* Left arm */}
-        <mesh position={[-0.43, 1.18, 0]} rotation={[0, 0, -0.32]} scale={[0.21, 0.55, 0.22]} castShadow>
-          <capsuleGeometry args={[1, 1, 8, 16]} />
+        {/* Left sleeve */}
+        <mesh position={[-0.43, 1.25, 0]} rotation={[0, 0, -0.22]} scale={[0.25, 0.62, 0.27]} castShadow receiveShadow>
+          <capsuleGeometry args={[1, 1, 12, 32]} />
           <primitive object={mainMaterial} attach="material" />
         </mesh>
         {/* Left hand */}
-        <mesh position={[-0.58, 0.88, 0.02]} scale={[0.16, 0.22, 0.16]} castShadow>
-          <sphereGeometry args={[1, 24, 16]} />
+        <mesh position={[-0.58, 0.91, 0.02]} scale={[0.16, 0.23, 0.17]} castShadow>
+          <sphereGeometry args={[1, 32, 24]} />
           <primitive object={mainMaterial} attach="material" />
         </mesh>
 
-        {/* Right arm */}
-        <mesh position={[0.43, 1.18, 0]} rotation={[0, 0, 0.32]} scale={[0.21, 0.55, 0.22]} castShadow>
-          <capsuleGeometry args={[1, 1, 8, 16]} />
+        {/* Right sleeve */}
+        <mesh position={[0.43, 1.25, 0]} rotation={[0, 0, 0.22]} scale={[0.25, 0.62, 0.27]} castShadow receiveShadow>
+          <capsuleGeometry args={[1, 1, 12, 32]} />
           <primitive object={mainMaterial} attach="material" />
         </mesh>
         {/* Right hand */}
-        <mesh position={[0.58, 0.88, 0.02]} scale={[0.16, 0.22, 0.16]} castShadow>
+        <mesh position={[0.58, 0.91, 0.02]} scale={[0.16, 0.23, 0.17]} castShadow>
+          <sphereGeometry args={[1, 32, 24]} />
+          <primitive object={mainMaterial} attach="material" />
+        </mesh>
+
+        {/* Center robe fold */}
+        <mesh position={[0, 1.08, 0.43]} scale={[0.075, 0.52, 0.055]} castShadow>
+          <sphereGeometry args={[1, 32, 20]} />
+          <primitive object={mainMaterial} attach="material" />
+        </mesh>
+        {/* Left robe fold */}
+        <mesh position={[-0.22, 0.75, 0.42]} rotation={[0, 0, -0.12]} scale={[0.055, 0.48, 0.045]}>
+          <sphereGeometry args={[1, 24, 16]} />
+          <primitive object={mainMaterial} attach="material" />
+        </mesh>
+        {/* Right robe fold */}
+        <mesh position={[0.22, 0.75, 0.42]} rotation={[0, 0, 0.12]} scale={[0.055, 0.48, 0.045]}>
           <sphereGeometry args={[1, 24, 16]} />
           <primitive object={mainMaterial} attach="material" />
         </mesh>
 
-        {/* Front cloth fold */}
-        <mesh position={[0, 1.05, 0.43]} scale={[0.1, 0.48, 0.065]} castShadow>
-          <sphereGeometry args={[1, 24, 16]} />
-          <primitive object={mainMaterial} attach="material" />
-        </mesh>
-        {/* Left cloth fold */}
-        <mesh position={[-0.22, 0.78, 0.4]} rotation={[0, 0, -0.18]} scale={[0.055, 0.5, 0.045]}>
-          <sphereGeometry args={[1, 20, 12]} />
-          <primitive object={mainMaterial} attach="material" />
-        </mesh>
-        {/* Right cloth fold */}
-        <mesh position={[0.22, 0.78, 0.4]} rotation={[0, 0, 0.18]} scale={[0.055, 0.5, 0.045]}>
-          <sphereGeometry args={[1, 20, 12]} />
+        {/* Base/foot */}
+        <mesh position={[0, 0.025, 0]} scale={[0.5, 0.07, 0.5]} castShadow>
+          <cylinderGeometry args={[1, 1, 1, 64]} />
           <primitive object={mainMaterial} attach="material" />
         </mesh>
       </group>

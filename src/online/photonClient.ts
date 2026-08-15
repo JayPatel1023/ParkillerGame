@@ -5,6 +5,16 @@ import type { RoomTransport } from './roomTransport'
 // (bot-blocked), so every method/property name below was confirmed by reading the actual shipped
 // module source (node_modules/photon-realtime/photon-realtime-module.js, v4.4.0) rather than
 // assumed from memory - grep for the literal name there before changing any of these calls.
+// Confirmed live (real Photon connection, not the fake test transport): the SDK's own bundled
+// module already has correct browser detection buried in it (PhotonPeer.webSocketImpl defaults to
+// the native WebSocket when `typeof WebSocket !== 'undefined'`) - but a later line in that exact
+// same file unconditionally overwrites it with a Node-only wrapper that does `require("ws")`,
+// which throws immediately in a browser ("ws does not work in the browser..."). Restoring the
+// native implementation here, after the module has finished loading (and so after its own
+// override already ran), undoes that - the browser's WebSocket already satisfies the shape
+// PhotonPeer expects (onopen/onmessage/onerror/onclose, send()/close()), no wrapper class needed.
+Photon.PhotonPeer.setWebSocketImpl(WebSocket)
+
 const LBC = Photon.LoadBalancing.LoadBalancingClient
 const APP_VERSION = '1.0'
 // Event codes 0-199 are available for game-defined events (200+ are reserved by Photon itself) -
