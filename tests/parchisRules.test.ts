@@ -222,11 +222,31 @@ describe('parchisRules', () => {
 
       const settings = defaultRuleSettings()
       const safeMove = getValidMoves(board, attacker, [attacker, defender], 3, settings).find((m) => m.piece === attacker.pieces[0])!
-      const parkillerMove = getValidMoves(board, attacker, [attacker, defender], 3, settings).find((m) => m.piece === attacker.pieces[1])!
+      // A single die's own value, not the sum - PK6 only allows a single-die move to kill the
+      // Parkiller ("se mueve con la cifra de un dado"), even during the doubles window.
+      const parkillerMove = getValidMoves(board, attacker, [attacker, defender], 3, settings, 'dieA').find(
+        (m) => m.piece === attacker.pieces[1],
+      )!
 
       expect(wouldCapture(board, safeMove, [attacker, defender], true)).toBe(false)
       expect(wouldCapture(board, parkillerMove, [attacker, defender], false)).toBe(false)
       expect(wouldCapture(board, parkillerMove, [attacker, defender], true)).toBe(true)
+    })
+
+    it('does not flag a Parkiller capture when the move spends the sum of both dice, even during the doubles window', () => {
+      // PK6: "Se mueve con la cifra de un dado el peón que elimina al Parkiller" - only a single
+      // die's own face value counts, never the combined sum, even on the double that opens the window.
+      const board = buildTestBoard()
+      const attacker = createPlayerState('Red', board)
+      const defender = createPlayerState('Blue', board)
+      attacker.pieces[0].state = 'OnTrack'
+      attacker.pieces[0].trackPosition = 7
+      defender.parkiller.trackPosition = 10
+
+      const settings = defaultRuleSettings()
+      const sumMove = getValidMoves(board, attacker, [attacker, defender], 3, settings, 'sum').find((m) => m.piece === attacker.pieces[0])!
+
+      expect(wouldCapture(board, sumMove, [attacker, defender], true)).toBe(false)
     })
   })
 })
