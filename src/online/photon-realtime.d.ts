@@ -8,6 +8,12 @@ declare module 'photon-realtime' {
     Wss: number
   }
 
+  /** The constructor shape PhotonPeer.setWebSocketImpl expects - the browser's native WebSocket
+   * already satisfies this exactly, see photonClient.ts's own comment on why this is needed. */
+  export const PhotonPeer: {
+    setWebSocketImpl(impl: typeof WebSocket): void
+  }
+
   export namespace LoadBalancing {
     interface RoomOptions {
       createIfNotExists?: boolean
