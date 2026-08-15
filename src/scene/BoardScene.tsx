@@ -40,10 +40,11 @@ const TRACK_DEBUG_PLAYER_COUNTS = new Set<number>()
 
 const FOV_DEGREES = 45
 const DEFAULT_POLAR_ANGLE = 0.85 // ~49° off vertical - shallower than before so more of the board's far side stays in frame
-// Reported directly: the default view was too zoomed in - the board (and the dice past its edge)
-// were getting cropped at real window sizes instead of sitting comfortably inside the frame with
-// margin. Pulled back from 6.6.
-const CAMERA_DISTANCE = 9.5
+// Reported directly (twice now): the default view was too zoomed in - the board (and the dice
+// past its edge) were getting cropped at real window sizes instead of sitting comfortably inside
+// the frame with margin. Pulled back from 6.6, then again from 9.5 once that still wasn't enough
+// margin on an actual wide desktop window.
+const CAMERA_DISTANCE = 12.5
 // Calibrated (not derived) against BOARD_SIZE=6 at a ~1.6:1 viewport aspect - see FitBoardCamera.
 const REFERENCE_MIN_DIMENSION_FACTOR = 620
 
