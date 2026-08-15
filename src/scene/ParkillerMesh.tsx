@@ -170,12 +170,33 @@ export function ParkillerMesh({ color, restPosition, facingTarget, hopFrom, hops
   // own color, dark is the same hue at roughly the reference's own brightness ratio (#700018 is
   // ~0.5x #e0002b) rather than a fixed independent color, so it reads as this piece's own material
   // in shadow instead of a separately-colored part.
+  //
+  // Reported directly: against this board's actual lighting, the reference's own plain
+  // MeshStandardMaterial recipe (roughness 0.18, no clearcoat) read noticeably flatter/more matte
+  // than the reference photo's own glossy, lacquered-ceramic look - and flatter than every other
+  // piece already on the board, which all use PieceMesh's clearcoat recipe. Switched to that same
+  // MeshPhysicalMaterial + clearcoat combination so the Parkiller reads as the same material as
+  // every pawn next to it, not a differently-finished piece.
   const mainMaterial = useMemo(
-    () => new THREE.MeshStandardMaterial({ color: getColor(color), roughness: 0.18, metalness: 0 }),
+    () =>
+      new THREE.MeshPhysicalMaterial({
+        color: getColor(color),
+        roughness: 0.25,
+        metalness: 0.1,
+        clearcoat: 0.7,
+        clearcoatRoughness: 0.2,
+      }),
     [color],
   )
   const darkMaterial = useMemo(
-    () => new THREE.MeshStandardMaterial({ color: new THREE.Color(getColor(color)).multiplyScalar(0.5), roughness: 0.25, metalness: 0 }),
+    () =>
+      new THREE.MeshPhysicalMaterial({
+        color: new THREE.Color(getColor(color)).multiplyScalar(0.5),
+        roughness: 0.3,
+        metalness: 0.1,
+        clearcoat: 0.5,
+        clearcoatRoughness: 0.25,
+      }),
     [color],
   )
 
