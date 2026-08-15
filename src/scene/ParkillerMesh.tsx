@@ -34,12 +34,19 @@ function yawTowards(from: [number, number, number], to: [number, number, number]
 // Body/hood profiles and every mesh position/rotation/scale below are supplied as-is from a
 // modeler's own reference build (matched directly against the studio turnaround sheet) - kept
 // verbatim in the model's own unit system rather than hand-converted, so it can be diffed directly
-// against the source if it ever needs re-syncing. MODEL_SCALE is the only conversion applied,
-// wrapping the whole group so it lands at the same footprint radius (PARKILLER_BASE_RADIUS, below)
-// the rest of the board's sizing already assumes - it does not touch any of the modeler's own numbers.
-const PARKILLER_BASE_RADIUS = 0.1
-const MODEL_MAX_RADIUS = 0.5 // the body profile's own widest point, in the modeler's unit system
-const MODEL_SCALE = PARKILLER_BASE_RADIUS / MODEL_MAX_RADIUS
+// against the source if it ever needs re-syncing. MODEL_SCALE is the only conversion applied.
+//
+// Reported directly: scaling by the model's own footprint radius (its widest point, 0.5, matched
+// to PARKILLER_BASE_RADIUS the way a regular pawn's profile is matched to its own base radius)
+// put the whole figure at roughly 2.3x a regular pawn's height - the model's own proportions are
+// much more slender (height:radius ~5.8:1) than a pawn's, so matching the footprint overscales
+// the height. Matched to height instead - "clearly bigger than a pawn, not just slightly wider"
+// was always about height, not footprint - targeting ~1.4x PieceMesh's own total pawn height
+// (0.9116 raw * PROFILE_SCALE * PIECE_HEIGHT_SCALE, see PieceMesh.tsx) over this model's own total
+// raw height (hood tip at y=2.9).
+const PAWN_HEIGHT = 0.9116 * (0.065 / 0.335) * 1.43
+const MODEL_RAW_HEIGHT = 2.9
+const MODEL_SCALE = (PAWN_HEIGHT * 1.4) / MODEL_RAW_HEIGHT
 
 const BODY_PROFILE_RAW: [number, number][] = [
   [0.03, 0.0],
