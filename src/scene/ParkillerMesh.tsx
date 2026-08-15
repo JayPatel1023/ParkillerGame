@@ -36,17 +36,13 @@ function yawTowards(from: [number, number, number], to: [number, number, number]
 // 40mm-tall/22mm-wide front elevation), not hand-copied from anyone's code. The back-view
 // turntable panel (cleanest silhouette - no face-cavity hole and the near-symmetric pose keeps
 // both arms mostly out of frame) was traced pixel-row-by-pixel and converted to normalized
-// (radius, height) pairs at this same MODEL_RAW_HEIGHT scale - see the analysis this replaced for
-// the arithmetic. Two real structural corrections came out of that measurement, both invisible
-// from code alone:
-//   1. The body is a nearly straight-sided cone/bell from hem to shoulder (radius holds close to
-//      its max, ~0.567, all the way up) - every prior version instead bulged out mid-body and
-//      pinched back in before flaring at the hem, which the reference photo does not show at all.
-//   2. The hood is proportionally SHORTER than every prior version assumed - the neck seam sits
-//      at roughly 69% of total height (raw y=2.0 of 2.9), not ~57% - so more of the model's own
-//      height belongs to the robe, not the hood.
-// A small hood-rim bulge where the hood drapes onto the shoulders, then a neck pinch just below
-// it, were both visible in the traced data and are kept here as the seam between the two profiles.
+// (radius, height) pairs at this same MODEL_RAW_HEIGHT scale.
+//
+// Still reported as not matching after that pass - hand-guessing a sculptural profile from a
+// static photo, screenshot-then-reason, has hit diminishing returns across several rounds. See
+// ParkillerEditor.tsx (#parkiller-editor) for a click-to-trace tool against the same reference
+// photo with a live 3D preview, the same fix the board waypoints got once smooth-curve
+// approximation stopped being good enough for them either.
 //
 // Reported directly (in an earlier round, kept for context): scaling by the model's own footprint
 // radius (its widest point, matched to PARKILLER_BASE_RADIUS the way a regular pawn's profile is
@@ -84,6 +80,160 @@ const HOOD_PROFILE_RAW: [number, number][] = [
   [0.08, 2.85],
   [0.0, 2.9],
 ]
+
+export interface SphereMeshConfig {
+  position: [number, number, number]
+  scale: [number, number, number]
+}
+
+export interface CapsuleMeshConfig {
+  position: [number, number, number]
+  rotation: [number, number, number]
+  scale: [number, number, number]
+}
+
+export interface ParkillerArmConfig {
+  arm: CapsuleMeshConfig
+  hand: SphereMeshConfig
+}
+
+/** Every number that shapes the model, gathered in one place so ParkillerEditor.tsx (a dev tool,
+ * not shipped in the game flow) can drive the exact same geometry live against the reference
+ * photo instead of a hand-maintained re-implementation that could quietly drift from what
+ * actually ships. */
+export interface ParkillerGeometryConfig {
+  bodyProfile: [number, number][]
+  hoodProfile: [number, number][]
+  cavity: SphereMeshConfig
+  face: SphereMeshConfig
+  arms: [ParkillerArmConfig, ParkillerArmConfig]
+  fold: SphereMeshConfig
+  modelScale: number
+}
+
+export const DEFAULT_PARKILLER_CONFIG: ParkillerGeometryConfig = {
+  bodyProfile: BODY_PROFILE_RAW,
+  hoodProfile: HOOD_PROFILE_RAW,
+  // Dark hollow inside the hood, and a hint of a face just forward of it. No tilt: an upward tilt
+  // was tried in an earlier round to keep this visible from the board's own steep (~49° off
+  // vertical) camera angle, but it made the flattened cavity sphere poke past the hood's own
+  // silhouette as a stray fin/petal shape from other viewing angles - reported directly, with
+  // photos.
+  cavity: { position: [0, 2.28, 0.4], scale: [0.27, 0.19, 0.1] },
+  face: { position: [0, 2.28, 0.47], scale: [0.21, 0.16, 0.07] },
+  // Arms are asymmetric in the reference photo, consistently across every angle of its own
+  // turnaround sheet, not just a pose quirk of one shot: one arm stays tucked close to the body
+  // around chest height, the other hangs all the way down past hip height with a noticeably
+  // larger mitten-shaped hand at the end. Kept as-is rather than symmetrized - it's a real,
+  // repeated feature of the reference, and an asymmetric silhouette also reads as more distinct
+  // from a plain pawn than a mirrored pair would.
+  arms: [
+    {
+      // Right arm - tucked, shorter.
+      arm: { position: [0.62, 1.18, 0.05], rotation: [0, 0, 0.3], scale: [0.2, 0.54, 0.22] },
+      hand: { position: [0.75, 0.88, 0.08], scale: [0.16, 0.22, 0.16] },
+    },
+    {
+      // Left arm - long, hanging past hip height with a larger mitten.
+      arm: { position: [-0.66, 0.95, 0.08], rotation: [0, 0, -0.35], scale: [0.19, 0.75, 0.21] },
+      hand: { position: [-0.82, 0.42, 0.15], scale: [0.19, 0.25, 0.19] },
+    },
+  ],
+  fold: { position: [0, 1.1, 0.46], scale: [0.11, 0.55, 0.07] },
+  modelScale: MODEL_SCALE,
+}
+
+/** Pure geometry/material - no animation, no restPosition offset. Shared by ParkillerMesh (the
+ * animated game piece) and ParkillerEditor.tsx (the #parkiller-editor dev tool), so tuning the
+ * config in the editor and pasting it back here is guaranteed to reproduce exactly what was
+ * tuned, not a close approximation. */
+export function ParkillerModel({ color, config }: { color: PieceColor; config: ParkillerGeometryConfig }) {
+  const bodyGeometry = useMemo(() => {
+    const points = config.bodyProfile.map(([r, y]) => new THREE.Vector2(r, y))
+    const geometry = new THREE.LatheGeometry(points, 64)
+    geometry.computeVertexNormals()
+    return geometry
+  }, [config.bodyProfile])
+
+  const hoodGeometry = useMemo(() => {
+    const points = config.hoodProfile.map(([r, y]) => new THREE.Vector2(r, y))
+    const geometry = new THREE.LatheGeometry(points, 64)
+    geometry.computeVertexNormals()
+    return geometry
+  }, [config.hoodProfile])
+
+  // The reference's own red/dark-red pair, generalized to every piece color: main is this piece's
+  // own color, dark is the same hue at roughly the reference's own brightness ratio (#700018 is
+  // ~0.5x #e0002b) rather than a fixed independent color, so it reads as this piece's own material
+  // in shadow instead of a separately-colored part.
+  //
+  // Reported directly: against this board's actual lighting, the reference's own plain
+  // MeshStandardMaterial recipe (roughness 0.18, no clearcoat) read noticeably flatter/more matte
+  // than the reference photo's own glossy, lacquered-ceramic look - and flatter than every other
+  // piece already on the board, which all use PieceMesh's clearcoat recipe. Switched to that same
+  // MeshPhysicalMaterial + clearcoat combination so the Parkiller reads as the same material as
+  // every pawn next to it, not a differently-finished piece.
+  const mainMaterial = useMemo(
+    () =>
+      new THREE.MeshPhysicalMaterial({
+        color: getColor(color),
+        roughness: 0.25,
+        metalness: 0.1,
+        clearcoat: 0.7,
+        clearcoatRoughness: 0.2,
+      }),
+    [color],
+  )
+  const darkMaterial = useMemo(
+    () =>
+      new THREE.MeshPhysicalMaterial({
+        color: new THREE.Color(getColor(color)).multiplyScalar(0.5),
+        roughness: 0.3,
+        metalness: 0.1,
+        clearcoat: 0.5,
+        clearcoatRoughness: 0.25,
+      }),
+    [color],
+  )
+
+  return (
+    <group scale={config.modelScale}>
+      {/* Body */}
+      <mesh geometry={bodyGeometry} material={mainMaterial} castShadow receiveShadow />
+
+      {/* Pointed hood */}
+      <mesh geometry={hoodGeometry} material={mainMaterial} castShadow receiveShadow />
+
+      <mesh position={config.cavity.position} scale={config.cavity.scale} castShadow>
+        <sphereGeometry args={[1, 32, 24]} />
+        <primitive object={darkMaterial} attach="material" />
+      </mesh>
+      <mesh position={config.face.position} scale={config.face.scale} castShadow>
+        <sphereGeometry args={[1, 32, 24]} />
+        <primitive object={mainMaterial} attach="material" />
+      </mesh>
+
+      {config.arms.map((armConfig, i) => (
+        <group key={i}>
+          <mesh position={armConfig.arm.position} rotation={armConfig.arm.rotation} scale={armConfig.arm.scale} castShadow>
+            <capsuleGeometry args={[1, 1, 8, 16]} />
+            <primitive object={mainMaterial} attach="material" />
+          </mesh>
+          <mesh position={armConfig.hand.position} scale={armConfig.hand.scale} castShadow>
+            <sphereGeometry args={[1, 24, 16]} />
+            <primitive object={mainMaterial} attach="material" />
+          </mesh>
+        </group>
+      ))}
+
+      {/* Front cloth fold */}
+      <mesh position={config.fold.position} scale={config.fold.scale} castShadow>
+        <sphereGeometry args={[1, 24, 16]} />
+        <primitive object={mainMaterial} attach="material" />
+      </mesh>
+    </group>
+  )
+}
 
 export function ParkillerMesh({ color, restPosition, facingTarget, hopFrom, hops, onHopsComplete, introDelay }: ParkillerMeshProps) {
   const meshRef = useRef<Group>(null)
@@ -160,121 +310,9 @@ export function ParkillerMesh({ color, restPosition, facingTarget, hopFrom, hops
     }
   })
 
-  const bodyGeometry = useMemo(() => {
-    const points = BODY_PROFILE_RAW.map(([r, y]) => new THREE.Vector2(r, y))
-    const geometry = new THREE.LatheGeometry(points, 64)
-    geometry.computeVertexNormals()
-    return geometry
-  }, [])
-
-  const hoodGeometry = useMemo(() => {
-    const points = HOOD_PROFILE_RAW.map(([r, y]) => new THREE.Vector2(r, y))
-    const geometry = new THREE.LatheGeometry(points, 64)
-    geometry.computeVertexNormals()
-    return geometry
-  }, [])
-
-  // The reference's own red/dark-red pair, generalized to every piece color: main is this piece's
-  // own color, dark is the same hue at roughly the reference's own brightness ratio (#700018 is
-  // ~0.5x #e0002b) rather than a fixed independent color, so it reads as this piece's own material
-  // in shadow instead of a separately-colored part.
-  //
-  // Reported directly: against this board's actual lighting, the reference's own plain
-  // MeshStandardMaterial recipe (roughness 0.18, no clearcoat) read noticeably flatter/more matte
-  // than the reference photo's own glossy, lacquered-ceramic look - and flatter than every other
-  // piece already on the board, which all use PieceMesh's clearcoat recipe. Switched to that same
-  // MeshPhysicalMaterial + clearcoat combination so the Parkiller reads as the same material as
-  // every pawn next to it, not a differently-finished piece.
-  const mainMaterial = useMemo(
-    () =>
-      new THREE.MeshPhysicalMaterial({
-        color: getColor(color),
-        roughness: 0.25,
-        metalness: 0.1,
-        clearcoat: 0.7,
-        clearcoatRoughness: 0.2,
-      }),
-    [color],
-  )
-  const darkMaterial = useMemo(
-    () =>
-      new THREE.MeshPhysicalMaterial({
-        color: new THREE.Color(getColor(color)).multiplyScalar(0.5),
-        roughness: 0.3,
-        metalness: 0.1,
-        clearcoat: 0.5,
-        clearcoatRoughness: 0.25,
-      }),
-    [color],
-  )
-
   return (
     <group ref={meshRef} position={restPosition}>
-      <group scale={MODEL_SCALE}>
-        {/* Body */}
-        <mesh geometry={bodyGeometry} material={mainMaterial} castShadow receiveShadow />
-
-        {/* Pointed hood */}
-        <mesh geometry={hoodGeometry} material={mainMaterial} castShadow receiveShadow />
-
-        {/* Dark hollow inside the hood, and a hint of a face just forward of it. Repositioned
-            higher than earlier rounds - with the hood now proportionally shorter (neck seam at
-            raw y=2.0, tip at 2.9), the old y=2.05 sat almost at the neck; the reference photo
-            shows the opening well inside the hood's own interior, closer to its midpoint. No
-            tilt: an upward tilt was tried in an earlier round to keep this visible from the
-            board's own steep (~49° off vertical) camera angle, but it made the flattened cavity
-            sphere poke past the hood's own silhouette as a stray fin/petal shape from other
-            viewing angles - reported directly, with photos. */}
-        <mesh position={[0, 2.28, 0.4]} scale={[0.27, 0.19, 0.1]} castShadow>
-          <sphereGeometry args={[1, 32, 24]} />
-          <primitive object={darkMaterial} attach="material" />
-        </mesh>
-        <mesh position={[0, 2.28, 0.47]} scale={[0.21, 0.16, 0.07]} castShadow>
-          <sphereGeometry args={[1, 32, 24]} />
-          <primitive object={mainMaterial} attach="material" />
-        </mesh>
-
-        {/* Arms are asymmetric in the reference photo, consistently across every angle of its own
-            turnaround sheet, not just a pose quirk of one shot: one arm stays tucked close to the
-            body around chest height, the other hangs all the way down past hip height with a
-            noticeably larger mitten-shaped hand at the end. Kept as-is rather than symmetrized -
-            it's a real, repeated feature of the reference, and an asymmetric silhouette also
-            reads as more distinct from a plain pawn than a mirrored pair would. */}
-
-        {/* Right arm - tucked, shorter. Same capsule proportions that read correctly as a limb in
-            the previous round (position/rotation/scale confirmed by screenshot), just pushed
-            further out in x to clear the new, wider body (radius ~0.5-0.55 through this height
-            range, vs ~0.44 before) - a shorter Y-scale tried here first collapsed the capsule
-            into a flat disc/ear shape instead of a readable arm. */}
-        <mesh position={[0.62, 1.18, 0.05]} rotation={[0, 0, 0.3]} scale={[0.2, 0.54, 0.22]} castShadow>
-          <capsuleGeometry args={[1, 1, 8, 16]} />
-          <primitive object={mainMaterial} attach="material" />
-        </mesh>
-        {/* Right hand */}
-        <mesh position={[0.75, 0.88, 0.08]} scale={[0.16, 0.22, 0.16]} castShadow>
-          <sphereGeometry args={[1, 24, 16]} />
-          <primitive object={mainMaterial} attach="material" />
-        </mesh>
-
-        {/* Left arm - long, hanging past hip height with a larger mitten, per the reference photo
-            (consistent across its whole turnaround, not a one-shot pose quirk). Taller Y-scale
-            than the right arm is what makes it read as reaching lower, not just a bigger offset. */}
-        <mesh position={[-0.66, 0.95, 0.08]} rotation={[0, 0, -0.35]} scale={[0.19, 0.75, 0.21]} castShadow>
-          <capsuleGeometry args={[1, 1, 8, 16]} />
-          <primitive object={mainMaterial} attach="material" />
-        </mesh>
-        {/* Left hand - larger hanging mitten */}
-        <mesh position={[-0.82, 0.42, 0.15]} scale={[0.19, 0.25, 0.19]} castShadow>
-          <sphereGeometry args={[1, 24, 16]} />
-          <primitive object={mainMaterial} attach="material" />
-        </mesh>
-
-        {/* Front cloth fold */}
-        <mesh position={[0, 1.1, 0.46]} scale={[0.11, 0.55, 0.07]} castShadow>
-          <sphereGeometry args={[1, 24, 16]} />
-          <primitive object={mainMaterial} attach="material" />
-        </mesh>
-      </group>
+      <ParkillerModel color={color} config={DEFAULT_PARKILLER_CONFIG} />
     </group>
   )
 }
