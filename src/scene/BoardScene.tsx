@@ -195,6 +195,9 @@ interface BoardSceneProps {
   /** The rulebook's two white dice plus the Parkiller's own black die (PK2), all rolled together. */
   diceValues: [number | null, number | null, number | null]
   rolling: boolean
+  /** True once the current player has left their turn unrolled past the idle threshold - see
+   * GameBoardScreen.tsx's own idle timer. */
+  nudgeDice: boolean
   onRollDice: () => void
   moveAnimation: MoveAnimationRequest | null
   onAnimationComplete: () => void
@@ -210,6 +213,7 @@ export function BoardScene({
   currentPlayerColor,
   diceValues,
   rolling,
+  nudgeDice,
   onRollDice,
   moveAnimation,
   onAnimationComplete,
@@ -487,9 +491,9 @@ export function BoardScene({
         )
       })}
 
-      <DiceMesh value={diceValues[0]} rolling={rolling} onClick={onRollDice} column={-0.5} />
-      <DiceMesh value={diceValues[1]} rolling={rolling} onClick={onRollDice} column={0.5} />
-      <DiceMesh value={diceValues[2]} rolling={rolling} onClick={onRollDice} column={0} row={1} black />
+      <DiceMesh value={diceValues[0]} rolling={rolling} nudge={nudgeDice} onClick={onRollDice} column={-0.5} />
+      <DiceMesh value={diceValues[1]} rolling={rolling} nudge={nudgeDice} onClick={onRollDice} column={0.5} />
+      <DiceMesh value={diceValues[2]} rolling={rolling} nudge={nudgeDice} onClick={onRollDice} column={0} row={1} black />
       {TRACK_DEBUG_PLAYER_COUNTS.has(definition.playerCount) && (
         <TrackDebugPath trackWaypoints={definition.trackWaypoints} safeTrackIndices={definition.safeTrackIndices} />
       )}
