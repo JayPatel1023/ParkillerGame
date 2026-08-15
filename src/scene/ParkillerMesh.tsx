@@ -31,51 +31,58 @@ function yawTowards(from: [number, number, number], to: [number, number, number]
   return Math.atan2(dx, dz)
 }
 
-// Body/hood profiles and every mesh position/rotation/scale below are supplied as-is from a
-// third reference build (this one produced by ChatGPT, after two prior modeler-provided versions
-// still read as too pawn-like at gameplay scale) - kept verbatim in the model's own unit system
-// rather than hand-converted, so it can be diffed directly against the source if it ever needs
-// re-syncing. MODEL_SCALE is the only conversion applied.
+// Body/hood profiles were re-derived directly from Carlos's own dimensioned reference photo
+// (parkiller.png, checked in at the repo root - a real product-shot turnaround with a labeled
+// 40mm-tall/22mm-wide front elevation), not hand-copied from anyone's code. The back-view
+// turntable panel (cleanest silhouette - no face-cavity hole and the near-symmetric pose keeps
+// both arms mostly out of frame) was traced pixel-row-by-pixel and converted to normalized
+// (radius, height) pairs at this same MODEL_RAW_HEIGHT scale - see the analysis this replaced for
+// the arithmetic. Two real structural corrections came out of that measurement, both invisible
+// from code alone:
+//   1. The body is a nearly straight-sided cone/bell from hem to shoulder (radius holds close to
+//      its max, ~0.567, all the way up) - every prior version instead bulged out mid-body and
+//      pinched back in before flaring at the hem, which the reference photo does not show at all.
+//   2. The hood is proportionally SHORTER than every prior version assumed - the neck seam sits
+//      at roughly 69% of total height (raw y=2.0 of 2.9), not ~57% - so more of the model's own
+//      height belongs to the robe, not the hood.
+// A small hood-rim bulge where the hood drapes onto the shoulders, then a neck pinch just below
+// it, were both visible in the traced data and are kept here as the seam between the two profiles.
 //
-// Reported directly: scaling by the model's own footprint radius (its widest point, 0.5, matched
-// to PARKILLER_BASE_RADIUS the way a regular pawn's profile is matched to its own base radius)
-// put the whole figure at roughly 2.3x a regular pawn's height - the model's own proportions are
-// much more slender (height:radius ~5.8:1) than a pawn's, so matching the footprint overscales
-// the height. Matched to height instead - "clearly bigger than a pawn, not just slightly wider"
-// was always about height, not footprint - targeting ~1.4x PieceMesh's own total pawn height
-// (0.9116 raw * PROFILE_SCALE * PIECE_HEIGHT_SCALE, see PieceMesh.tsx) over this model's own total
-// raw height (hood tip at y=2.9).
+// Reported directly (in an earlier round, kept for context): scaling by the model's own footprint
+// radius (its widest point, matched to PARKILLER_BASE_RADIUS the way a regular pawn's profile is
+// matched to its own base radius) put the whole figure at roughly 2.3x a regular pawn's height -
+// the model's own proportions are much more slender than a pawn's, so matching the footprint
+// overscales the height. Matched to height instead - "clearly bigger than a pawn, not just
+// slightly wider" was always about height, not footprint - targeting ~1.4x PieceMesh's own total
+// pawn height (0.9116 raw * PROFILE_SCALE * PIECE_HEIGHT_SCALE, see PieceMesh.tsx) over this
+// model's own total raw height (hood tip at y=2.9).
 const PAWN_HEIGHT = 0.9116 * (0.065 / 0.335) * 1.43
 const MODEL_RAW_HEIGHT = 2.9
 const MODEL_SCALE = (PAWN_HEIGHT * 1.4) / MODEL_RAW_HEIGHT
 
 const BODY_PROFILE_RAW: [number, number][] = [
-  [0.03, 0.0],
-  [0.48, 0.02],
-  [0.5, 0.1],
-  [0.52, 0.25],
-  [0.5, 0.55],
-  [0.46, 0.85],
-  [0.4, 1.15],
-  [0.42, 1.38],
+  [0.05, 0.0],
+  [0.52, 0.04],
+  [0.567, 0.15],
+  [0.567, 0.9],
+  [0.55, 1.3],
   [0.5, 1.55],
-  [0.44, 1.65],
-  [0.3, 1.72],
-  [0.03, 1.75],
+  [0.43, 1.75],
+  [0.34, 1.9],
+  [0.26, 2.0],
 ]
 
 const HOOD_PROFILE_RAW: [number, number][] = [
-  [0.03, 1.66],
-  [0.26, 1.69],
-  [0.36, 1.8],
-  [0.42, 1.98],
-  [0.43, 2.14],
-  [0.4, 2.32],
-  [0.34, 2.48],
-  [0.26, 2.62],
-  [0.16, 2.75],
-  [0.07, 2.85],
-  [0.01, 2.9],
+  [0.26, 2.0],
+  [0.29, 2.11],
+  [0.29, 2.22],
+  [0.29, 2.32],
+  [0.26, 2.43],
+  [0.23, 2.53],
+  [0.19, 2.64],
+  [0.14, 2.74],
+  [0.08, 2.85],
+  [0.0, 2.9],
 ]
 
 export function ParkillerMesh({ color, restPosition, facingTarget, hopFrom, hops, onHopsComplete, introDelay }: ParkillerMeshProps) {
@@ -210,45 +217,60 @@ export function ParkillerMesh({ color, restPosition, facingTarget, hopFrom, hops
         {/* Pointed hood */}
         <mesh geometry={hoodGeometry} material={mainMaterial} castShadow receiveShadow />
 
-        {/* Dark hollow inside the hood, and a hint of a face just forward of it - positions/scales
-            exactly as provided, no tilt. An upward tilt was tried here to keep this visible from
-            the board's own steep (~49° off vertical) camera angle, but it made the flattened
-            cavity sphere poke past the hood's own silhouette as a stray fin/petal shape from other
-            viewing angles - reported directly, with photos. Untilted, it reads correctly (if more
-            subtly) from every angle instead of correctly from one and broken from others. */}
-        <mesh position={[0, 2.05, 0.39]} scale={[0.28, 0.36, 0.09]} castShadow>
+        {/* Dark hollow inside the hood, and a hint of a face just forward of it. Repositioned
+            higher than earlier rounds - with the hood now proportionally shorter (neck seam at
+            raw y=2.0, tip at 2.9), the old y=2.05 sat almost at the neck; the reference photo
+            shows the opening well inside the hood's own interior, closer to its midpoint. No
+            tilt: an upward tilt was tried in an earlier round to keep this visible from the
+            board's own steep (~49° off vertical) camera angle, but it made the flattened cavity
+            sphere poke past the hood's own silhouette as a stray fin/petal shape from other
+            viewing angles - reported directly, with photos. */}
+        <mesh position={[0, 2.28, 0.4]} scale={[0.27, 0.19, 0.1]} castShadow>
           <sphereGeometry args={[1, 32, 24]} />
           <primitive object={darkMaterial} attach="material" />
         </mesh>
-        <mesh position={[0, 2.05, 0.455]} scale={[0.22, 0.3, 0.06]} castShadow>
+        <mesh position={[0, 2.28, 0.47]} scale={[0.21, 0.16, 0.07]} castShadow>
           <sphereGeometry args={[1, 32, 24]} />
           <primitive object={mainMaterial} attach="material" />
         </mesh>
 
-        {/* Left arm */}
-        <mesh position={[-0.45, 1.18, 0]} rotation={[0, 0, -0.3]} scale={[0.2, 0.54, 0.22]} castShadow>
-          <capsuleGeometry args={[1, 1, 8, 16]} />
-          <primitive object={mainMaterial} attach="material" />
-        </mesh>
-        {/* Left hand */}
-        <mesh position={[-0.58, 0.88, 0.02]} scale={[0.16, 0.22, 0.16]} castShadow>
-          <sphereGeometry args={[1, 24, 16]} />
-          <primitive object={mainMaterial} attach="material" />
-        </mesh>
+        {/* Arms are asymmetric in the reference photo, consistently across every angle of its own
+            turnaround sheet, not just a pose quirk of one shot: one arm stays tucked close to the
+            body around chest height, the other hangs all the way down past hip height with a
+            noticeably larger mitten-shaped hand at the end. Kept as-is rather than symmetrized -
+            it's a real, repeated feature of the reference, and an asymmetric silhouette also
+            reads as more distinct from a plain pawn than a mirrored pair would. */}
 
-        {/* Right arm */}
-        <mesh position={[0.45, 1.18, 0]} rotation={[0, 0, 0.3]} scale={[0.2, 0.54, 0.22]} castShadow>
+        {/* Right arm - tucked, shorter. Same capsule proportions that read correctly as a limb in
+            the previous round (position/rotation/scale confirmed by screenshot), just pushed
+            further out in x to clear the new, wider body (radius ~0.5-0.55 through this height
+            range, vs ~0.44 before) - a shorter Y-scale tried here first collapsed the capsule
+            into a flat disc/ear shape instead of a readable arm. */}
+        <mesh position={[0.62, 1.18, 0.05]} rotation={[0, 0, 0.3]} scale={[0.2, 0.54, 0.22]} castShadow>
           <capsuleGeometry args={[1, 1, 8, 16]} />
           <primitive object={mainMaterial} attach="material" />
         </mesh>
         {/* Right hand */}
-        <mesh position={[0.58, 0.88, 0.02]} scale={[0.16, 0.22, 0.16]} castShadow>
+        <mesh position={[0.75, 0.88, 0.08]} scale={[0.16, 0.22, 0.16]} castShadow>
+          <sphereGeometry args={[1, 24, 16]} />
+          <primitive object={mainMaterial} attach="material" />
+        </mesh>
+
+        {/* Left arm - long, hanging past hip height with a larger mitten, per the reference photo
+            (consistent across its whole turnaround, not a one-shot pose quirk). Taller Y-scale
+            than the right arm is what makes it read as reaching lower, not just a bigger offset. */}
+        <mesh position={[-0.66, 0.95, 0.08]} rotation={[0, 0, -0.35]} scale={[0.19, 0.75, 0.21]} castShadow>
+          <capsuleGeometry args={[1, 1, 8, 16]} />
+          <primitive object={mainMaterial} attach="material" />
+        </mesh>
+        {/* Left hand - larger hanging mitten */}
+        <mesh position={[-0.82, 0.42, 0.15]} scale={[0.19, 0.25, 0.19]} castShadow>
           <sphereGeometry args={[1, 24, 16]} />
           <primitive object={mainMaterial} attach="material" />
         </mesh>
 
         {/* Front cloth fold */}
-        <mesh position={[0, 1.05, 0.43]} scale={[0.1, 0.48, 0.065]} castShadow>
+        <mesh position={[0, 1.1, 0.46]} scale={[0.11, 0.55, 0.07]} castShadow>
           <sphereGeometry args={[1, 24, 16]} />
           <primitive object={mainMaterial} attach="material" />
         </mesh>
