@@ -31,83 +31,44 @@ function yawTowards(from: [number, number, number], to: [number, number, number]
   return Math.atan2(dx, dz)
 }
 
-// A single lathe revolve (radially symmetric) reads as a round-topped blob, not a hooded figure -
-// tried that first, confirmed directly against the reference photo that it didn't read as hooded
-// at all. This is a small composite instead: a robe (its own lathe), a separate pointed hood
-// (another lathe, sitting on top of the robe rather than blended into one profile, so it can flare
-// out wider than the robe's neck before pointing up - the "cowl draped over the shoulders" look in
-// the photo), and two arm+hand pieces that break full radial symmetry on purpose, since the
-// reference photo's silhouette clearly has visible arms at the sides.
-// Reported directly (with reference photos): the Parki figure is clearly bigger than a regular
-// pawn, not just slightly wider - 0.075 (vs. a pawn's 0.065 base radius) read as barely different
-// once both were on the board. This also scales the hood/robe/arms/hands uniformly since they're
-// all derived from this value via ROBE_SCALE below.
+// Body/hood profiles and every mesh position/rotation/scale below are supplied as-is from a
+// modeler's own reference build (matched directly against the studio turnaround sheet) - kept
+// verbatim in the model's own unit system rather than hand-converted, so it can be diffed directly
+// against the source if it ever needs re-syncing. MODEL_SCALE is the only conversion applied,
+// wrapping the whole group so it lands at the same footprint radius (PARKILLER_BASE_RADIUS, below)
+// the rest of the board's sizing already assumes - it does not touch any of the modeler's own numbers.
 const PARKILLER_BASE_RADIUS = 0.1
+const MODEL_MAX_RADIUS = 0.5 // the body profile's own widest point, in the modeler's unit system
+const MODEL_SCALE = PARKILLER_BASE_RADIUS / MODEL_MAX_RADIUS
 
-// Re-measured against a clean, isolated front-on reference shot (no background clutter) - the
-// hands come together near the front center (a clasped pose), not out at the sides.
-const ROBE_PROFILE_RAW: [number, number][] = [
-  [0.0, 0.0],
-  [0.42, 0.0],
-  [0.44, 0.05],
-  [0.36, 0.18],
-  [0.29, 0.32],
-  [0.24, 0.44],
-  [0.22, 0.52],
-  [0.21, 0.55],
+const BODY_PROFILE_RAW: [number, number][] = [
+  [0.03, 0.0],
+  [0.38, 0.02],
+  [0.48, 0.1],
+  [0.5, 0.25],
+  [0.48, 0.55],
+  [0.44, 0.85],
+  [0.38, 1.15],
+  [0.4, 1.38],
+  [0.48, 1.55],
+  [0.42, 1.65],
+  [0.28, 1.72],
+  [0.03, 1.75],
 ]
-const ROBE_SCALE = PARKILLER_BASE_RADIUS / Math.max(...ROBE_PROFILE_RAW.map(([r]) => r))
-const ROBE_TOP_Y = 0.55 * ROBE_SCALE // where the hood sits, in world units
 
-// Reported directly against a clearer multi-color reference photo: the previous hood profile had
-// a wide mid-height bulge (0.32 max radius around a third of the way up) that read as round/
-// bulbous once lathed - the photo's hood is a much steadier taper, angular/pointed rather than a
-// dome, with only a small flare right at the base where it drapes over the shoulders before
-// narrowing continuously to the tip.
 const HOOD_PROFILE_RAW: [number, number][] = [
-  [0.22, 0.0],
-  [0.26, 0.045],
-  [0.23, 0.13],
-  [0.17, 0.22],
-  [0.1, 0.3],
-  [0.06, 0.36],
-  [0.0, 0.38],
+  [0.03, 1.66],
+  [0.25, 1.69],
+  [0.36, 1.8],
+  [0.42, 1.96],
+  [0.43, 2.12],
+  [0.4, 2.3],
+  [0.34, 2.46],
+  [0.26, 2.61],
+  [0.16, 2.75],
+  [0.07, 2.85],
+  [0.01, 2.9],
 ]
-// Hood uses the same overall scale as the robe (not its own max-radius scale) so the two profiles
-// join at a matching radius where the hood sits on the robe's shoulders, instead of a visible seam.
-const HOOD_SCALE = ROBE_SCALE
-
-// Re-measured against a full studio turnaround sheet (front/3-4/side/back, wireframe, and a
-// dimensioned front view - by far the most precise reference yet): the two arms are deliberately
-// NOT a mirrored pair - one is bent and held close, fist near the waist; the other hangs looser
-// and lower, swung further from the body. ARM_RADIUS/HAND_RADIUS/ARM_X/ARM_TOP_Y/ARM_Z stay shared
-// between both; only each arm's own length and outward lean differ (see ARM_POSES below).
-const ARM_RADIUS = 0.075 * ROBE_SCALE
-const ARM_TOP_Y = ROBE_TOP_Y - 0.03 * ROBE_SCALE // just under the hood's hem, at the shoulder
-const ARM_X = 0.34 * ROBE_SCALE
-const ARM_Z = 0.06 * ROBE_SCALE
-const HAND_RADIUS = 0.09 * ROBE_SCALE
-
-interface ArmPose {
-  side: -1 | 1
-  length: number // shoulder to hand, including the rounded caps
-  lean: number // radians the whole arm swings outward from the shoulder
-}
-const ARM_POSES: ArmPose[] = [
-  { side: -1, length: 0.22 * ROBE_SCALE, lean: 0.22 }, // bent close to the body, fist near the waist
-  { side: 1, length: 0.42 * ROBE_SCALE, lean: 0.62 }, // hangs looser and lower, swung further out
-]
-
-// The hood's hollow interior - the turnaround sheet shows a real, sizeable carved-out opening (not
-// a subtle shadow), roughly as wide as half the hood itself and clearly deep. A dark, flattened
-// sphere sunk mostly into the hood's own front surface, the same "mostly-embedded sphere" trick
-// PieceMesh's glossy highlight band uses. A true concave back-face render (a sphere cap rendered
-// inside-out) was tried first but read as a stray fleck from most camera angles instead of a
-// hollow - this convex-but-dark, deeply-recessed approach reads more reliably as shadow across the
-// board's actual camera angles, even though it isn't literally concave.
-const HOOD_CAVITY_RADIUS = 0.24 * ROBE_SCALE
-const HOOD_CAVITY_Y = 0.16 * ROBE_SCALE // height within the hood, above its base at ROBE_TOP_Y
-const HOOD_CAVITY_Z = 0.12 * ROBE_SCALE // pushed forward so most of the sphere sinks into the hood, only a shallow cap left visible
 
 export function ParkillerMesh({ color, restPosition, facingTarget, hopFrom, hops, onHopsComplete, introDelay }: ParkillerMeshProps) {
   const meshRef = useRef<Group>(null)
@@ -184,52 +145,98 @@ export function ParkillerMesh({ color, restPosition, facingTarget, hopFrom, hops
     }
   })
 
-  const robeProfile = useMemo(() => ROBE_PROFILE_RAW.map(([r, y]) => new THREE.Vector2(r * ROBE_SCALE, y * ROBE_SCALE)), [])
-  const hoodProfile = useMemo(() => HOOD_PROFILE_RAW.map(([r, y]) => new THREE.Vector2(r * HOOD_SCALE, y * HOOD_SCALE)), [])
-  // The hood's hollow is this same piece's own material sitting in shadow, not a separate black
-  // part - confirmed directly against the reference photo, which shows no black anywhere on it.
-  const cavityColor = useMemo(() => new THREE.Color(getColor(color)).multiplyScalar(0.22), [color])
+  const bodyGeometry = useMemo(() => {
+    const points = BODY_PROFILE_RAW.map(([r, y]) => new THREE.Vector2(r, y))
+    const geometry = new THREE.LatheGeometry(points, 64)
+    geometry.computeVertexNormals()
+    return geometry
+  }, [])
 
-  const bodyMaterial = (
-    <meshPhysicalMaterial
-      color={getColor(color)}
-      emissive={getColor(color)}
-      emissiveIntensity={0.22}
-      roughness={0.35}
-      metalness={0.1}
-      clearcoat={0.5}
-      clearcoatRoughness={0.3}
-    />
+  const hoodGeometry = useMemo(() => {
+    const points = HOOD_PROFILE_RAW.map(([r, y]) => new THREE.Vector2(r, y))
+    const geometry = new THREE.LatheGeometry(points, 64)
+    geometry.computeVertexNormals()
+    return geometry
+  }, [])
+
+  // The reference's own red/dark-red pair, generalized to every piece color: main is this piece's
+  // own color, dark is the same hue at roughly the reference's own brightness ratio (#700018 is
+  // ~0.5x #e0002b) rather than a fixed independent color, so it reads as this piece's own material
+  // in shadow instead of a separately-colored part.
+  const mainMaterial = useMemo(
+    () => new THREE.MeshStandardMaterial({ color: getColor(color), roughness: 0.18, metalness: 0 }),
+    [color],
+  )
+  const darkMaterial = useMemo(
+    () => new THREE.MeshStandardMaterial({ color: new THREE.Color(getColor(color)).multiplyScalar(0.5), roughness: 0.25, metalness: 0 }),
+    [color],
   )
 
   return (
     <group ref={meshRef} position={restPosition}>
-      <mesh castShadow receiveShadow>
-        <latheGeometry args={[robeProfile, 24]} />
-        {bodyMaterial}
-      </mesh>
-      <mesh castShadow receiveShadow position={[0, ROBE_TOP_Y, 0]}>
-        <latheGeometry args={[hoodProfile, 24]} />
-        {bodyMaterial}
-      </mesh>
-      {/* Shadowed hollow under the hood's point - see HOOD_CAVITY comment above. */}
-      <mesh position={[0, ROBE_TOP_Y + HOOD_CAVITY_Y, HOOD_CAVITY_Z]} scale={[1, 1.15, 0.55]}>
-        <sphereGeometry args={[HOOD_CAVITY_RADIUS, 20, 14]} />
-        <meshStandardMaterial color={cavityColor} roughness={1} metalness={0} />
-      </mesh>
-      {/* Two arms + hands, deliberately asymmetric - see ARM_POSES above. */}
-      {ARM_POSES.map(({ side, length, lean }) => (
-        <group key={side} position={[side * ARM_X, ARM_TOP_Y, ARM_Z]} rotation={[0.12, 0, side * lean]}>
-          <mesh castShadow position={[0, -length / 2, 0]}>
-            <capsuleGeometry args={[ARM_RADIUS, Math.max(0.001, length - ARM_RADIUS * 2), 4, 8]} />
-            {bodyMaterial}
+      <group scale={MODEL_SCALE}>
+        {/* Body */}
+        <mesh geometry={bodyGeometry} material={mainMaterial} castShadow receiveShadow />
+
+        {/* Pointed hood */}
+        <mesh geometry={hoodGeometry} material={mainMaterial} castShadow receiveShadow />
+
+        {/* Dark hollow inside the hood, and a hint of a face just forward of it. The board's camera
+            looks nearly straight down (~49° off vertical) rather than the eye-level angle these were
+            modeled for - a small upward tilt keeps both actually visible from that steeper angle
+            instead of foreshortened to nothing, without touching the body/hood profiles themselves.
+            The tilt group is positioned AT the cavity first, then rotates in place - rotating a
+            group around the origin while its children sit far away (y=2.05) swings them out to a
+            wildly different spot instead of tilting them where they already are. */}
+        <group position={[0, 2.05, 0.39]} rotation={[0.55, 0, 0]}>
+          <mesh scale={[0.29, 0.37, 0.1]} castShadow>
+            <sphereGeometry args={[1, 32, 24]} />
+            <primitive object={darkMaterial} attach="material" />
           </mesh>
-          <mesh castShadow position={[0, -length, 0]}>
-            <sphereGeometry args={[HAND_RADIUS, 12, 12]} />
-            {bodyMaterial}
+          <mesh position={[0, 0, 0.065]} scale={[0.22, 0.29, 0.06]} castShadow>
+            <sphereGeometry args={[1, 32, 24]} />
+            <primitive object={mainMaterial} attach="material" />
           </mesh>
         </group>
-      ))}
+
+        {/* Left arm */}
+        <mesh position={[-0.43, 1.18, 0]} rotation={[0, 0, -0.32]} scale={[0.21, 0.55, 0.22]} castShadow>
+          <capsuleGeometry args={[1, 1, 8, 16]} />
+          <primitive object={mainMaterial} attach="material" />
+        </mesh>
+        {/* Left hand */}
+        <mesh position={[-0.58, 0.88, 0.02]} scale={[0.16, 0.22, 0.16]} castShadow>
+          <sphereGeometry args={[1, 24, 16]} />
+          <primitive object={mainMaterial} attach="material" />
+        </mesh>
+
+        {/* Right arm */}
+        <mesh position={[0.43, 1.18, 0]} rotation={[0, 0, 0.32]} scale={[0.21, 0.55, 0.22]} castShadow>
+          <capsuleGeometry args={[1, 1, 8, 16]} />
+          <primitive object={mainMaterial} attach="material" />
+        </mesh>
+        {/* Right hand */}
+        <mesh position={[0.58, 0.88, 0.02]} scale={[0.16, 0.22, 0.16]} castShadow>
+          <sphereGeometry args={[1, 24, 16]} />
+          <primitive object={mainMaterial} attach="material" />
+        </mesh>
+
+        {/* Front cloth fold */}
+        <mesh position={[0, 1.05, 0.43]} scale={[0.1, 0.48, 0.065]} castShadow>
+          <sphereGeometry args={[1, 24, 16]} />
+          <primitive object={mainMaterial} attach="material" />
+        </mesh>
+        {/* Left cloth fold */}
+        <mesh position={[-0.22, 0.78, 0.4]} rotation={[0, 0, -0.18]} scale={[0.055, 0.5, 0.045]}>
+          <sphereGeometry args={[1, 20, 12]} />
+          <primitive object={mainMaterial} attach="material" />
+        </mesh>
+        {/* Right cloth fold */}
+        <mesh position={[0.22, 0.78, 0.4]} rotation={[0, 0, 0.18]} scale={[0.055, 0.5, 0.045]}>
+          <sphereGeometry args={[1, 20, 12]} />
+          <primitive object={mainMaterial} attach="material" />
+        </mesh>
+      </group>
     </group>
   )
 }
