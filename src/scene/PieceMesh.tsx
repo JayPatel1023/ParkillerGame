@@ -75,6 +75,14 @@ export function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - t, 3)
 }
 
+// Overshoots past 1 then settles back to exactly 1 - used for the "just became movable" pop so it
+// reads as a snap/flourish rather than a linear grow.
+export function easeOutBack(t: number): number {
+  const c1 = 1.70158
+  const c3 = c1 + 1
+  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2)
+}
+
 // Standard easeOutBounce: overshoots past 1 and settles back, giving a "lands and bounces" feel
 // when used to drive a position lerp instead of a plain 0..1 fade.
 export function easeOutBounce(t: number): number {
@@ -104,20 +112,18 @@ interface PieceMeshProps {
   introDelay: number
   selectable: boolean
   onSelect: (piece: Piece) => void
-  /** True for every piece belonging to whoever's turn it is right now - a whose-turn cue, distinct
-   * from (and weaker than) `selectable`, which only lights up the specific piece(s) with an actual
-   * move available once the dice are rolled. Without this, before rolling there was no visual
-   * indication at all of which pieces on the board are even yours this turn. */
+  /** True for every piece belonging to whoever's turn it is right now - kept deliberately plain (a
+   * faint emissive tint only, see the material below) so it doesn't compete with `selectable`,
+   * which is the piece(s) with an actual move available once the dice are rolled and carries the
+   * animated ring/marker/flash below. Without `isCurrentTurn` at all, before rolling there was no
+   * visual indication of which pieces on the board are even yours this turn. */
   isCurrentTurn: boolean
 }
 
-// Whose-turn cue, take 2 - the first version (a single flat pulsing ring on the ground) was
-// reported directly as unsatisfying ("한심하다", not just "make it more visible" like the first
-// round of feedback). Replaced entirely rather than re-tuned: a counter-rotating double ring at
-// the base (reads as an active energy field, not a static blink) plus a small spinning gold
-// marker gem bobbing above the piece's head - a floating indicator is a much more common and
-// immediately legible "this is yours, act on it" language in board/mobile games than a ground
-// decal alone, and having motion at two different heights (base + overhead) reads as more alive.
+// Movable cue, keyed off `selectable` (not `isCurrentTurn` - see the prop doc above): a
+// counter-rotating double ring at the base plus a small spinning gold marker gem bobbing above the
+// piece's head. Kept off pieces that are merely "yours this turn" so the animated effect stays a
+// reliable "you can act on this one" signal instead of lighting up on every piece for the whole turn.
 const RING_OUTER_SPIN_SPEED = 0.9 // radians/sec
 const RING_INNER_SPIN_SPEED = -1.3 // opposite direction from the outer ring, on purpose
 const RING_PULSE_SPEED = 1.5
@@ -129,6 +135,19 @@ const MARKER_BOB_AMPLITUDE = 0.05
 const MARKER_SPIN_SPEED = 2.0
 const MARKER_BASE_Y = 0.4 // world units above the piece's own base - clears the head with margin
 const MARKER_SIZE = 0.024
+
+const IDLE_SCALE = 1
+const SELECTABLE_SCALE = 1.3
+const SELECTABLE_EMISSIVE = 0.55
+const TURN_EMISSIVE = 0.32
+const IDLE_EMISSIVE = 0.18
+
+// The moment a piece becomes selectable, it pops in (scale overshoots via easeOutBack) and briefly
+// flashes brighter/bigger rings before settling to the steady selectable state above - a distinct,
+// eye-catching "this just became movable" beat instead of the same static look simply appearing.
+const FLASH_DURATION = 0.35 // seconds
+const FLASH_EMISSIVE_BOOST = 0.45
+const FLASH_RING_SCALE_BOOST = 0.6
 
 // Renders as a small bouncing peg-pawn rather than a flat token: at board scale a flat disc barely
 // shows how far it travelled between rolls, but a shape that visibly arcs once per square makes
@@ -154,6 +173,9 @@ export function PieceMesh({
   const ringInnerRef = useRef<Mesh>(null)
   const markerRef = useRef<Group>(null)
   const indicatorElapsedRef = useRef(0)
+  const bodyMaterialRef = useRef<THREE.MeshPhysicalMaterial>(null)
+  const prevSelectableRef = useRef(false)
+  const flashElapsedRef = useRef(0)
 
   useEffect(() => {
     hopIndexRef.current = 0
@@ -166,8 +188,27 @@ export function PieceMesh({
     if (!mesh) return
     const delta = Math.min(rawDelta, MAX_FRAME_DELTA)
 
+    // Detect the false -> true transition to restart the flash from its beginning each time a
+    // piece newly becomes selectable, rather than only once ever.
+    if (selectable && !prevSelectableRef.current) flashElapsedRef.current = 0
+    if (selectable) flashElapsedRef.current += delta
+    prevSelectableRef.current = selectable
+
+    const flashT = Math.min(1, flashElapsedRef.current / FLASH_DURATION)
+    // Eased decay from 1 (the instant it becomes selectable) to 0 (steady state) - drives the
+    // brightness/ring-size flash. Scale itself uses easeOutBack directly below for the pop-overshoot.
+    const flashFade = selectable ? 1 - easeOutCubic(flashT) : 0
+
+    mesh.scale.setScalar(
+      selectable ? THREE.MathUtils.lerp(IDLE_SCALE, SELECTABLE_SCALE, easeOutBack(flashT)) : IDLE_SCALE,
+    )
+    if (bodyMaterialRef.current) {
+      const steadyEmissive = selectable ? SELECTABLE_EMISSIVE : isCurrentTurn ? TURN_EMISSIVE : IDLE_EMISSIVE
+      bodyMaterialRef.current.emissiveIntensity = steadyEmissive + flashFade * FLASH_EMISSIVE_BOOST
+    }
+
     if (indicatorGroupRef.current) {
-      if (isCurrentTurn) {
+      if (selectable) {
         indicatorGroupRef.current.visible = true
         indicatorElapsedRef.current += delta
         const t = indicatorElapsedRef.current
@@ -179,8 +220,15 @@ export function PieceMesh({
         const raw = Math.sin(t * RING_PULSE_SPEED) * 0.5 + 0.5
         const pulse = raw * raw * (3 - 2 * raw)
         const ringOpacity = RING_BASE_OPACITY + pulse * RING_PULSE_AMPLITUDE
-        if (ringOuterRef.current) (ringOuterRef.current.material as THREE.MeshBasicMaterial).opacity = ringOpacity
-        if (ringInnerRef.current) (ringInnerRef.current.material as THREE.MeshBasicMaterial).opacity = ringOpacity
+        const ringScale = 1 + flashFade * FLASH_RING_SCALE_BOOST
+        if (ringOuterRef.current) {
+          ;(ringOuterRef.current.material as THREE.MeshBasicMaterial).opacity = ringOpacity
+          ringOuterRef.current.scale.setScalar(ringScale)
+        }
+        if (ringInnerRef.current) {
+          ;(ringInnerRef.current.material as THREE.MeshBasicMaterial).opacity = ringOpacity
+          ringInnerRef.current.scale.setScalar(ringScale)
+        }
 
         if (markerRef.current) {
           markerRef.current.position.y = MARKER_BASE_Y + Math.sin(t * MARKER_BOB_SPEED) * MARKER_BOB_AMPLITUDE
@@ -188,6 +236,7 @@ export function PieceMesh({
         }
       } else {
         indicatorGroupRef.current.visible = false
+        indicatorElapsedRef.current = 0
       }
     }
 
@@ -256,14 +305,14 @@ export function PieceMesh({
         e.stopPropagation()
         onSelect(piece)
       }}
-      scale={selectable ? 1.3 : 1}
     >
       <mesh castShadow receiveShadow>
         <latheGeometry args={[profile, 24]} />
         <meshPhysicalMaterial
+          ref={bodyMaterialRef}
           color={getColor(piece.color)}
           emissive={getColor(piece.color)}
-          emissiveIntensity={selectable ? 0.55 : isCurrentTurn ? 0.32 : 0.18}
+          emissiveIntensity={IDLE_EMISSIVE}
           roughness={0.25}
           metalness={0.15}
           clearcoat={0.7}
@@ -275,8 +324,8 @@ export function PieceMesh({
         <sphereGeometry args={[HIGHLIGHT_RADIUS, 16, 16]} />
         <meshPhysicalMaterial color="#ffffff" transparent opacity={0.18} roughness={0.15} metalness={0} />
       </mesh>
-      {/* Whose-turn cue: visible on every piece belonging to the current player for their whole
-          turn - not just the one(s) selectable right now. */}
+      {/* Movable cue: visible only on the piece(s) with an actual legal move this roll - not on
+          every piece belonging to the current player for the whole turn. */}
       <group ref={indicatorGroupRef} visible={false}>
         {/* Counter-rotating double ring at the base - flat (rotated onto the board plane) and
             unlit (MeshBasicMaterial) so it reads as a glow rather than a lit disc, just outside

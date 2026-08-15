@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { BoardDefinition } from '../src/core/board/boardDefinition'
-import { getHopWaypoints, getParkillerHopWaypoints, getParkillerWaypoint } from '../src/scene/piecePosition'
+import { getCaptureReturnWaypoints, getHopWaypoints, getParkillerHopWaypoints, getParkillerWaypoint } from '../src/scene/piecePosition'
 
 // Mirrors CAPTURE_REWARD (20) in turnManager.ts plus a few corridor squares, to reproduce a
 // legitimate reward move that must NOT collapse to a single instant hop.
@@ -142,6 +142,29 @@ describe('getParkillerWaypoint', () => {
   it('is null once Eliminated, regardless of its last position', () => {
     const definition = buildTestDefinition()
     expect(getParkillerWaypoint(5, 'Eliminated', definition)).toBeNull()
+  })
+})
+
+describe('getCaptureReturnWaypoints', () => {
+  it('hops in a straight line from the capture square directly to the piece\'s own yard slot, not along the track', () => {
+    const definition = buildTestDefinition() // Red's yardWaypoints[0] is [0, 0]
+    const hops = getCaptureReturnWaypoints('Red', 6, 0, definition)
+
+    expect(hops).toEqual([
+      [4, 4],
+      [2, 2],
+      [0, 0],
+    ])
+  })
+
+  it('is empty for a color with no matching lane', () => {
+    const definition = buildTestDefinition()
+    expect(getCaptureReturnWaypoints('Blue', 6, 0, definition)).toEqual([])
+  })
+
+  it('is empty for a piece index with no yard slot', () => {
+    const definition = buildTestDefinition()
+    expect(getCaptureReturnWaypoints('Red', 6, 99, definition)).toEqual([])
   })
 })
 
