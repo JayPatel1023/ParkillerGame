@@ -209,23 +209,20 @@ export function ParkillerMesh({ color, restPosition, facingTarget, hopFrom, hops
         {/* Pointed hood */}
         <mesh geometry={hoodGeometry} material={mainMaterial} castShadow receiveShadow />
 
-        {/* Dark hollow inside the hood, and a hint of a face just forward of it. The board's camera
-            looks nearly straight down (~49° off vertical) rather than the eye-level angle these were
-            modeled for - a small upward tilt keeps both actually visible from that steeper angle
-            instead of foreshortened to nothing, without touching the body/hood profiles themselves.
-            The tilt group is positioned AT the cavity first, then rotates in place - rotating a
-            group around the origin while its children sit far away (y=2.05) swings them out to a
-            wildly different spot instead of tilting them where they already are. */}
-        <group position={[0, 2.05, 0.39]} rotation={[0.55, 0, 0]}>
-          <mesh scale={[0.29, 0.37, 0.1]} castShadow>
-            <sphereGeometry args={[1, 32, 24]} />
-            <primitive object={darkMaterial} attach="material" />
-          </mesh>
-          <mesh position={[0, 0, 0.065]} scale={[0.22, 0.29, 0.06]} castShadow>
-            <sphereGeometry args={[1, 32, 24]} />
-            <primitive object={mainMaterial} attach="material" />
-          </mesh>
-        </group>
+        {/* Dark hollow inside the hood, and a hint of a face just forward of it - positions/scales
+            exactly as provided, no tilt. An upward tilt was tried here to keep this visible from
+            the board's own steep (~49° off vertical) camera angle, but it made the flattened
+            cavity sphere poke past the hood's own silhouette as a stray fin/petal shape from other
+            viewing angles - reported directly, with photos. Untilted, it reads correctly (if more
+            subtly) from every angle instead of correctly from one and broken from others. */}
+        <mesh position={[0, 2.05, 0.39]} scale={[0.29, 0.37, 0.1]} castShadow>
+          <sphereGeometry args={[1, 32, 24]} />
+          <primitive object={darkMaterial} attach="material" />
+        </mesh>
+        <mesh position={[0, 2.05, 0.455]} scale={[0.22, 0.29, 0.06]} castShadow>
+          <sphereGeometry args={[1, 32, 24]} />
+          <primitive object={mainMaterial} attach="material" />
+        </mesh>
 
         {/* Left arm */}
         <mesh position={[-0.43, 1.18, 0]} rotation={[0, 0, -0.32]} scale={[0.21, 0.55, 0.22]} castShadow>
