@@ -77,17 +77,27 @@ const HOOD_PROFILE_RAW: [number, number][] = [
 // join at a matching radius where the hood sits on the robe's shoulders, instead of a visible seam.
 const HOOD_SCALE = ROBE_SCALE
 
-// Reported directly: the forward hand isn't just decoration - on the real piece it marks the
-// Parkiller's direction of travel. It already sat at the front (+Z, HAND_Z below) before this was
-// known, so the fix was giving the whole figure a heading (see facingTarget/yawTowards) rather
-// than reshaping the hands themselves - the group now turns so this hand always points toward the
-// next square it's walking to, at rest and mid-hop.
-const ARM_Y = 0.34 * ROBE_SCALE // roughly mid-robe height
-const ARM_X = 0.24 * ROBE_SCALE
-const ARM_Z = 0.08 * ROBE_SCALE
-const HAND_Y = 0.22 * ROBE_SCALE
-const HAND_X = 0.1 * ROBE_SCALE // hands come together near the front center, not out at the sides
-const HAND_Z = 0.17 * ROBE_SCALE // well forward of the arms, like the photo's clasped pose
+// Re-measured against a sharp, isolated close-up photo (previous references were too small/distant
+// to show this): the arm hangs straight down from the shoulder and swings outward, ending in a
+// visible hand around hip height - not a pair of hands clasped together at the front, which the
+// blurrier reference photos this was tuned against before had misread.
+const ARM_LENGTH = 0.38 * ROBE_SCALE // shoulder to hand, including the rounded caps
+const ARM_RADIUS = 0.075 * ROBE_SCALE
+const ARM_TOP_Y = ROBE_TOP_Y - 0.03 * ROBE_SCALE // just under the hood's hem, at the shoulder
+const ARM_X = 0.22 * ROBE_SCALE
+const ARM_Z = 0.06 * ROBE_SCALE
+const ARM_LEAN = 0.42 // radians the whole arm swings outward from the shoulder
+const HAND_RADIUS = 0.085 * ROBE_SCALE
+
+// The hood's hollow interior (the reference photo shows a real carved-out cavity, not a painted
+// mark) - a dark, flattened sphere sunk mostly into the hood's own front surface, the same "mostly-
+// embedded sphere" trick PieceMesh's glossy highlight band uses. A true concave back-face render
+// (a sphere cap rendered inside-out) was tried first but read as a stray fleck from most camera
+// angles instead of a hollow - this convex-but-dark, deeply-recessed approach reads more reliably
+// as shadow across the board's actual camera angles, even though it isn't literally concave.
+const HOOD_CAVITY_RADIUS = 0.19 * ROBE_SCALE
+const HOOD_CAVITY_Y = 0.14 * ROBE_SCALE // height within the hood, above its base at ROBE_TOP_Y
+const HOOD_CAVITY_Z = 0.1 * ROBE_SCALE // pushed forward so most of the sphere sinks into the hood, only a shallow cap left visible
 
 export function ParkillerMesh({ color, restPosition, facingTarget, hopFrom, hops, onHopsComplete, introDelay }: ParkillerMeshProps) {
   const meshRef = useRef<Group>(null)
@@ -189,17 +199,22 @@ export function ParkillerMesh({ color, restPosition, facingTarget, hopFrom, hops
         <latheGeometry args={[hoodProfile, 24]} />
         {bodyMaterial}
       </mesh>
-      {/* Two arms + hands, breaking full radial symmetry on purpose - the reference photo's
-          silhouette clearly shows both, hanging at the sides and meeting slightly forward near the
-          waist, not tucked invisibly inside a smooth cloak revolve. */}
+      {/* Shadowed hollow under the hood's point - see HOOD_CAVITY comment above. */}
+      <mesh position={[0, ROBE_TOP_Y + HOOD_CAVITY_Y, HOOD_CAVITY_Z]} scale={[1, 1.08, 0.5]}>
+        <sphereGeometry args={[HOOD_CAVITY_RADIUS, 20, 14]} />
+        <meshStandardMaterial color="#191410" roughness={1} metalness={0} />
+      </mesh>
+      {/* Two arms + hands, breaking full radial symmetry on purpose - the reference photo shows an
+          arm hanging from the shoulder and swinging outward, hand visible around hip height, not
+          tucked invisibly inside a smooth cloak revolve. */}
       {[-1, 1].map((side) => (
-        <group key={side}>
-          <mesh castShadow position={[side * ARM_X, ARM_Y, ARM_Z]} rotation={[0.15, 0, side * 0.25]} scale={[0.85, 1.8, 0.85]}>
-            <sphereGeometry args={[0.09 * ROBE_SCALE, 12, 12]} />
+        <group key={side} position={[side * ARM_X, ARM_TOP_Y, ARM_Z]} rotation={[0.12, 0, side * ARM_LEAN]}>
+          <mesh castShadow position={[0, -ARM_LENGTH / 2, 0]}>
+            <capsuleGeometry args={[ARM_RADIUS, Math.max(0.001, ARM_LENGTH - ARM_RADIUS * 2), 4, 8]} />
             {bodyMaterial}
           </mesh>
-          <mesh castShadow position={[side * HAND_X, HAND_Y, HAND_Z]} scale={[1, 0.85, 1]}>
-            <sphereGeometry args={[0.085 * ROBE_SCALE, 12, 12]} />
+          <mesh castShadow position={[0, -ARM_LENGTH, 0]}>
+            <sphereGeometry args={[HAND_RADIUS, 12, 12]} />
             {bodyMaterial}
           </mesh>
         </group>
