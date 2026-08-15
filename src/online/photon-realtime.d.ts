@@ -33,6 +33,17 @@ declare module 'photon-realtime' {
         All: number
         MasterClient: number
       }
+      OperationCode: {
+        JoinGame: number
+        CreateGame: number
+      }
+      ErrorCode: {
+        Ok: number
+        GameDoesNotExist: number
+        GameFull: number
+        GameClosed: number
+        GameIdAlreadyExists: number
+      }
     }
 
     class LoadBalancingClient {
@@ -56,13 +67,17 @@ declare module 'photon-realtime' {
       onEvent: (code: number, content: unknown, actorNr: number) => void
       onActorJoin: (actor: Actor) => void
       onActorLeave: (actor: Actor, cleanup: boolean) => void
+      /** Fires for operation-level failures (bad room code, full room, ...) that never touch
+       * onStateChange at all - see photonClient.ts's own comment on joinOrCreate for why both are
+       * needed. errorCode 0 (ErrorCode.Ok) means success. */
+      onOperationResponse: (errorCode: number, errorMsg: string, operationCode: number, vals: unknown) => void
 
       state(): number
       isInLobby(): boolean
       isJoinedToRoom(): boolean
       connectToRegionMaster(region: string): void
       disconnect(): void
-      joinRoom(roomName: string, options?: RoomOptions): void
+      joinRoom(roomName: string, joinOptions?: RoomOptions, createOptions?: RoomOptions): void
       raiseEvent(code: number, data: unknown, options?: { receivers?: number }): void
       myActor(): Actor
       myRoom(): Room
