@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { beginLocalGame } from './core/gameFlow/localGameSession'
 import { TURN_ORDER_BY_COUNT } from './core/turnOrder'
 import { BOARD_DEFINITIONS } from './data/boards'
@@ -22,19 +22,33 @@ export default function App() {
     [playerCount],
   )
 
+  // Reading window.location.hash directly (as this used to) never re-renders on its own - setting
+  // the hash doesn't touch React state, so OnlineLobbyScreen's own onExit (`location.hash = ''`)
+  // had no effect: this component just kept rendering it forever. Reported directly as the online
+  // screen's "Salir" button doing nothing and its Photon connection never actually disconnecting
+  // (its cleanup only runs on unmount, which never came). Tracking the hash in state, updated by
+  // the browser's own hashchange event, makes every hash-based route (including the dev-only ones
+  // below) actually reactive.
+  const [hash, setHash] = useState(window.location.hash)
+  useEffect(() => {
+    const onHashChange = () => setHash(window.location.hash)
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
+
   // Dev-only route: open with #editor to trace board waypoints. See src/tools/WaypointEditor.tsx.
-  if (window.location.hash === '#editor') {
+  if (hash === '#editor') {
     return <WaypointEditor />
   }
   // Dev-only route: open with #component to inspect a single track-square component in
   // isolation, with nothing else rendered. See src/tools/ComponentPreview.tsx.
-  if (window.location.hash === '#component') {
+  if (hash === '#component') {
     return <ComponentPreview />
   }
   // Dev-only route (milestone 2, in progress): online play via Photon Realtime - not linked from
   // anywhere in the visible UI ("Jugar online" on StartScreen stays disabled) until it's actually
   // ready to show the client. See src/ui/OnlineLobbyScreen.tsx.
-  if (window.location.hash === '#online') {
+  if (hash === '#online') {
     return <OnlineLobbyScreen />
   }
 

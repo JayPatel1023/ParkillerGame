@@ -40,6 +40,10 @@ export default function OnlineLobbyScreen() {
   const [seats, setSeats] = useState<ActorInfo[]>([])
   const [session, setSession] = useState<GameSession | null>(null)
   const connectionRef = useRef<PhotonConnection | null>(null)
+  // Stored so the cleanup below can dispose it - startGame() constructs this imperatively (only
+  // when bot seats exist), not from its own effect, so nothing else was holding a reference to
+  // stop its turnStarted/moveChoicesReady subscriptions and pending setTimeouts on unmount.
+  const botControllerRef = useRef<BotController | null>(null)
 
   useEffect(() => {
     const appId = import.meta.env.VITE_PHOTON_APP_ID
@@ -54,10 +58,13 @@ export default function OnlineLobbyScreen() {
       .connect(REGION)
       .then(() => setPhase('menu'))
       .catch((err: unknown) => {
-        setErrorMessage(String(err))
+        setErrorMessage(`No se pudo conectar: ${err instanceof Error ? err.message : String(err)}`)
         setPhase('error')
       })
-    return () => connection.disconnect()
+    return () => {
+      botControllerRef.current?.dispose()
+      connection.disconnect()
+    }
   }, [])
 
   useEffect(() => {
@@ -70,12 +77,25 @@ export default function OnlineLobbyScreen() {
 
   // Non-master clients: the Master broadcasts gameStarted once it clicks "Empezar partida" - this
   // is how everyone else in the lobby transitions into the game at the same moment.
+  //
+  // A live broadcast alone misses anyone whose subscription wasn't registered yet at the instant
+  // it was sent - e.g. the Master clicking "Empezar partida" in the gap between a joiner's
+  // joinRoom() promise resolving and this effect actually running after that render. Photon doesn't
+  // cache/replay events by default, so that client would wait on the lobby screen forever for a
+  // signal that already fired. startGame() also mirrors the same data into room properties (which
+  // Photon *does* sync to every actor, including ones who join/re-render later), so this checks
+  // those directly first, before subscribing to catch anyone who starts after this point.
   useEffect(() => {
     const connection = connectionRef.current
-    if (!connection || phase !== 'lobby') return
+    if (!connection || phase !== 'lobby' || connection.isMasterClient()) return
+    const props = connection.getRoomProperties()
+    if (props.started) {
+      startAsRemote(connection, props.startedColors as PieceColor[])
+      return
+    }
     return connection.onMessage((data) => {
       const msg = data as GameMessage
-      if (msg.type !== 'gameStarted' || connection.isMasterClient()) return
+      if (msg.type !== 'gameStarted') return
       startAsRemote(connection, msg.colors)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -106,7 +126,7 @@ export default function OnlineLobbyScreen() {
         setPhase('lobby')
       })
       .catch((err: unknown) => {
-        setErrorMessage(String(err))
+        setErrorMessage(`No se pudo crear la sala: ${err instanceof Error ? err.message : String(err)}`)
         setPhase('error')
       })
   }
@@ -129,7 +149,7 @@ export default function OnlineLobbyScreen() {
         setPhase('lobby')
       })
       .catch((err: unknown) => {
-        setErrorMessage(String(err))
+        setErrorMessage(`No se pudo unir a la sala: ${err instanceof Error ? err.message : String(err)}`)
         setPhase('error')
       })
   }
@@ -153,9 +173,13 @@ export default function OnlineLobbyScreen() {
     // Any color nobody claimed a seat for becomes a bot - this is what "bots fill empty seats" means.
     const claimedColors = new Set(actorColors.values())
     const botColors = new Set(colors.filter((c) => !claimedColors.has(c)))
-    if (botColors.size > 0) new BotController(bridge, botColors)
+    if (botColors.size > 0) botControllerRef.current = new BotController(bridge, botColors)
 
     bridge.start()
+    // Mirrored into room properties (not just the broadcast below) so a client that joins or
+    // re-renders after this point still sees the game already started - see the lobby-phase
+    // effect above for why the broadcast alone isn't enough.
+    connection.setRoomProperties({ started: true, startedColors: colors })
     connection.broadcast({ type: 'gameStarted', colors, seats: Object.fromEntries(actorColors) })
     setSession({ turnManager: bridge, players })
     setPhase('game')
