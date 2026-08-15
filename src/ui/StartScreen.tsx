@@ -3,6 +3,7 @@ const BRAND_GOLD = '#ccb154'
 const BRAND_TEXT = '#f2ede0'
 
 export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
+  const canPlayOnline = Boolean(import.meta.env.VITE_PHOTON_APP_ID)
   return (
     <div
       style={{
@@ -27,9 +28,14 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
           Jugar local
         </button>
         <button
-          disabled
-          title="Disponible en el hito 2 (Photon)"
-          style={{ padding: '14px 24px', fontSize: 18, background: '#8b8b8b', border: 'none', borderRadius: 8, color: '#e0e0e0' }}
+          disabled={!canPlayOnline}
+          title={canPlayOnline ? undefined : 'Falta configurar VITE_PHOTON_APP_ID'}
+          onClick={() => (window.location.hash = '#online')}
+          style={
+            canPlayOnline
+              ? { padding: '14px 24px', fontSize: 18, background: BRAND_GOLD, border: 'none', borderRadius: 8 }
+              : { padding: '14px 24px', fontSize: 18, background: '#8b8b8b', border: 'none', borderRadius: 8, color: '#e0e0e0' }
+          }
         >
           Jugar online
         </button>
