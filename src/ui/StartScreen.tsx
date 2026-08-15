@@ -1,6 +1,33 @@
-// Branding placeholders - replace once Carlos sends the final logo/brand colors.
-const BRAND_GOLD = '#ccb154'
+// Branding placeholder - replace once Carlos sends the final logo/brand colors.
 const BRAND_TEXT = '#f2ede0'
+
+// Reported directly, with screenshots of Carlos's own earlier (Unity) prototype: its buttons were
+// chunky, beveled, "carved wood/leather" tokens with real visible depth, not flat rounded
+// rectangles - and this screen was the very first thing shown after the game reads. The solid
+// bottom-edge (`boxShadow: '0 Npx 0 <darker>'`, no blur) is what actually reads as physical depth,
+// like a pressable button sitting slightly above the surface, rather than just a bigger shadow -
+// combined with a top-to-bottom gradient and an inset gloss line, the same "glass-like sheen over
+// a solid color" recipe already used for the 3D pieces and the in-game HUD's own buttons, so this
+// first screen reads as the same game as the board that follows it, not a plainer web page before it.
+function chunkyButtonStyle(enabled: boolean): React.CSSProperties {
+  return {
+    padding: '20px 44px',
+    fontSize: 22,
+    fontWeight: 800,
+    letterSpacing: 0.4,
+    color: enabled ? '#4a2e12' : '#8a8a80',
+    background: enabled
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0) 40%), linear-gradient(180deg, #ffe08a 0%, #ecb84a 55%, #d9982e 100%)'
+      : 'linear-gradient(180deg, #8a8a80, #6a6a60)',
+    border: `3px solid ${enabled ? '#8a5a1e' : '#4a4a44'}`,
+    borderRadius: 20,
+    boxShadow: enabled
+      ? '0 7px 0 #8a5a1e, 0 12px 20px rgba(0,0,0,0.45), inset 0 2px 1px rgba(255,255,255,0.55)'
+      : '0 7px 0 #3a3a34, 0 10px 16px rgba(0,0,0,0.35)',
+    textShadow: enabled ? '0 1px 0 rgba(255,255,255,0.35)' : 'none',
+    cursor: enabled ? 'pointer' : 'default',
+  }
+}
 
 export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
   const canPlayOnline = Boolean(import.meta.env.VITE_PHOTON_APP_ID)
@@ -12,30 +39,35 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 24,
+        gap: 36,
         color: BRAND_TEXT,
-        backgroundImage: 'radial-gradient(ellipse at center, rgba(0,0,0,0) 0%, rgba(0,0,0,0.45) 100%), url(/backgrounds/start-bg.jpg)',
+        backgroundImage:
+          'radial-gradient(ellipse at center, rgba(20,14,6,0.15) 0%, rgba(15,10,5,0.6) 100%), url(/backgrounds/start-bg.jpg)',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
       }}
     >
-      <h1 style={{ fontSize: 48, margin: 0, letterSpacing: 2, textShadow: '0 2px 10px rgba(0,0,0,0.6)' }}>Parkiller</h1>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: 240 }}>
-        <button
-          onClick={onPlayLocal}
-          style={{ padding: '14px 24px', fontSize: 18, background: BRAND_GOLD, border: 'none', borderRadius: 8 }}
-        >
+      <h1
+        style={{
+          fontSize: 56,
+          margin: 0,
+          letterSpacing: 3,
+          fontWeight: 800,
+          color: '#ffe9b8',
+          textShadow: '0 2px 0 #8a5a1e, 0 6px 14px rgba(0,0,0,0.6)',
+        }}
+      >
+        Parkiller
+      </h1>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: 300 }}>
+        <button onClick={onPlayLocal} style={chunkyButtonStyle(true)}>
           Jugar local
         </button>
         <button
           disabled={!canPlayOnline}
           title={canPlayOnline ? undefined : 'Falta configurar VITE_PHOTON_APP_ID'}
           onClick={() => (window.location.hash = '#online')}
-          style={
-            canPlayOnline
-              ? { padding: '14px 24px', fontSize: 18, background: BRAND_GOLD, border: 'none', borderRadius: 8 }
-              : { padding: '14px 24px', fontSize: 18, background: '#8b8b8b', border: 'none', borderRadius: 8, color: '#e0e0e0' }
-          }
+          style={chunkyButtonStyle(canPlayOnline)}
         >
           Jugar online
         </button>
