@@ -140,9 +140,16 @@ function createDiceFaceTexture(value: number, bodyColors: [string, string], pipC
   return texture
 }
 
+// Idle nudge (see GameBoardScreen.tsx's own idle timer): a gentle repeating hop + side-to-side
+// rock, clearly distinct from the fast tumbling `rolling` spin below, so it reads as "someone's
+// waiting on you" rather than as the dice already rolling on their own.
+const NUDGE_BOUNCE_HEIGHT = 0.06
+const NUDGE_FREQ = 3.2
+
 export function DiceMesh({
   value,
   rolling,
+  nudge = false,
   onClick,
   column,
   row = 0,
@@ -150,6 +157,10 @@ export function DiceMesh({
 }: {
   value: number | null
   rolling: boolean
+  /** True once this player's turn has sat unrolled past the idle threshold - see
+   * GameBoardScreen.tsx's own idle timer, which is the single source of truth for the 60s delay
+   * so it isn't duplicated (and drifting) per die. */
+  nudge?: boolean
   onClick: () => void
   /** Horizontal slot among however many dice are laid out together, centered on 0 (e.g. -0.5/0.5
    * for 2 dice) - the caller works out the exact layout since it knows how many dice are on the
@@ -201,10 +212,25 @@ export function DiceMesh({
     )
   }, [value, faceTextures])
 
-  useFrame((_, delta) => {
-    if (rolling && meshRef.current) {
-      meshRef.current.rotation.x += delta * 10
-      meshRef.current.rotation.y += delta * 8
+  // Small per-die offset (from its own table position) so all three don't bounce/rock in exact
+  // lockstep during a nudge - reads as more alive, less like one rigid block moving together.
+  const phaseOffset = useMemo(() => (column + row * 2) * 0.4, [column, row])
+
+  useFrame((state, delta) => {
+    const mesh = meshRef.current
+    if (!mesh) return
+    if (rolling) {
+      mesh.rotation.x += delta * 10
+      mesh.rotation.y += delta * 8
+      return
+    }
+    if (nudge) {
+      const t = state.clock.elapsedTime + phaseOffset
+      mesh.position.y = Math.max(0, Math.sin(t * NUDGE_FREQ)) * NUDGE_BOUNCE_HEIGHT
+      mesh.rotation.z = Math.sin(t * NUDGE_FREQ * 0.85) * 0.12
+    } else if (mesh.position.y !== 0 || mesh.rotation.z !== 0) {
+      mesh.position.y = 0
+      mesh.rotation.z = 0
     }
   })
 

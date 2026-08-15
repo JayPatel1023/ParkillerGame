@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { BoardDefinition } from '../core/board/boardDefinition'
 import type { PlayerState } from '../core/gameFlow/playerState'
 import { getColor } from '../core/colorPalette'
@@ -48,6 +48,20 @@ export function GameBoardScreen({
   } = useTurnManager(session.turnManager)
 
   const canRoll = pendingMoves.length === 0 && !winner && !rolling && !moveAnimation
+
+  // Idle nudge: reported directly - a player who steps away or just spaces out mid-turn leaves
+  // everyone else staring at a board that never visibly asks for input. Restarts whenever canRoll
+  // flips (a fresh chance to roll appeared, or this one just got used/left) or the turn itself
+  // changes, so it can't fire mid-roll or carry over onto the next player's turn.
+  const IDLE_NUDGE_MS = 60_000
+  const [nudgeDice, setNudgeDice] = useState(false)
+  useEffect(() => {
+    setNudgeDice(false)
+    if (!canRoll) return
+    const timer = setTimeout(() => setNudgeDice(true), IDLE_NUDGE_MS)
+    return () => clearTimeout(timer)
+  }, [canRoll, currentPlayer.color])
+
   const diceValues: [number | null, number | null, number | null] = [
     lastRoll?.dieA ?? null,
     lastRoll?.dieB ?? null,
@@ -65,6 +79,7 @@ export function GameBoardScreen({
         currentPlayerColor={currentPlayer.color}
         diceValues={diceValues}
         rolling={rolling}
+        nudgeDice={nudgeDice}
         onRollDice={() => canRoll && rollDice()}
         moveAnimation={moveAnimation}
         onAnimationComplete={clearMoveAnimation}
