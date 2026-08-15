@@ -7,6 +7,7 @@ import { PlayerCountSelector } from './ui/PlayerCountSelector'
 import { StartScreen } from './ui/StartScreen'
 import WaypointEditor from './tools/WaypointEditor'
 import ComponentPreview from './tools/ComponentPreview'
+import ParkillerEditor from './tools/ParkillerEditor'
 import OnlineLobbyScreen from './ui/OnlineLobbyScreen'
 
 type Screen = 'start' | 'selectCount' | 'game'
@@ -44,6 +45,11 @@ export default function App() {
   // isolation, with nothing else rendered. See src/tools/ComponentPreview.tsx.
   if (hash === '#component') {
     return <ComponentPreview />
+  }
+  // Dev-only route: click-trace the Parkiller piece's body/hood silhouette against the reference
+  // photo with a live 3D preview alongside it. See src/tools/ParkillerEditor.tsx.
+  if (hash === '#parkiller-editor') {
+    return <ParkillerEditor />
   }
   // Milestone 2: online play via Photon Realtime, linked from StartScreen's "Jugar online" button
   // once VITE_PHOTON_APP_ID is configured. See src/ui/OnlineLobbyScreen.tsx.
