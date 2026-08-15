@@ -1,4 +1,4 @@
-import { Suspense, useMemo } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
 import { Line, OrbitControls, PerspectiveCamera, Text } from '@react-three/drei'
 import type { BoardDefinition } from '../core/board/boardDefinition'
@@ -6,14 +6,22 @@ import type { PlayerState } from '../core/gameFlow/playerState'
 import type { ParkillerMoveResult } from '../core/gameFlow/turnManager'
 import type { MoveOption } from '../core/rules/moveOption'
 import type { Piece } from '../core/pieces/piece'
+import type { PieceColor } from '../core/pieceColor'
 import type { MoveAnimationRequest } from '../hooks/useTurnManager'
 import { BoardMesh } from './BoardMesh'
 import { PieceMesh } from './PieceMesh'
 import { ParkillerMesh } from './ParkillerMesh'
 import { DiceMesh } from './DiceMesh'
 import { TrackTile } from './TrackTile'
+import { CaptureImpactEffect } from './CaptureImpactEffect'
 import { useBoardColorSampler } from './useBoardColorSampler'
-import { getHopWaypoints, getParkillerHopWaypoints, getParkillerWaypoint, getPieceWaypoint } from './piecePosition'
+import {
+  getCaptureReturnWaypoints,
+  getHopWaypoints,
+  getParkillerHopWaypoints,
+  getParkillerWaypoint,
+  getPieceWaypoint,
+} from './piecePosition'
 import { toWorldPosition, estimateSquareSize, computeTileCorners, BASE_HEIGHT, FLAT_SURFACE_HEIGHT } from './boardGeometry'
 import { getColor } from '../core/colorPalette'
 
@@ -166,6 +174,17 @@ function stackKeyFor(piece: Piece): string | null {
   return null // InYard has its own 4 distinct slots already; Finished pieces don't need separating
 }
 
+interface CaptureFlight {
+  hopFrom: [number, number, number]
+  hops: [number, number, number][]
+}
+
+interface CaptureImpact {
+  id: number
+  position: [number, number, number]
+  color: string
+}
+
 interface BoardSceneProps {
   definition: BoardDefinition
   players: PlayerState[]
@@ -263,6 +282,49 @@ export function BoardScene({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parkillerAnimation?.color, parkillerAnimation?.before, parkillerAnimation?.after, definition])
 
+  // Rules apply a capture the instant a move is submitted, but the captured piece only stops
+  // rendering frozen at the capture square (see isBeingCaptured below) once the capturing piece's
+  // own hop animation finishes - up to that point it's just a plain instant teleport home, which
+  // reads as the piece quietly vanishing rather than getting sent back. These two effects catch
+  // exactly that trailing-edge moment (moveAnimation/parkillerAnimation going from "had a capture"
+  // to null) and kick off a short "flung home" hop animation plus an impact flash at the capture
+  // square, entirely as presentation on top of state that's already resolved - it doesn't gate or
+  // delay anything else about turn flow.
+  const [captureFlights, setCaptureFlights] = useState<Map<Piece, CaptureFlight>>(new Map())
+  const [impacts, setImpacts] = useState<CaptureImpact[]>([])
+  const nextImpactIdRef = useRef(0)
+  const prevMoveAnimationRef = useRef<MoveAnimationRequest | null>(null)
+  const prevParkillerAnimationRef = useRef<ParkillerMoveResult | null>(null)
+
+  const spawnCaptureEffects = (captureTrackPosition: number, capturedPiece: Piece | null, capturedParkillerColor: PieceColor | null) => {
+    const fromWaypoint = definition.trackWaypoints[captureTrackPosition]
+    if (!fromWaypoint) return
+    const impactColor = getColor(capturedPiece ? capturedPiece.color : capturedParkillerColor!)
+    setImpacts((prev) => [...prev, { id: nextImpactIdRef.current++, position: toWorldPosition(fromWaypoint, BASE_HEIGHT), color: impactColor }])
+    if (capturedPiece) {
+      const hops = getCaptureReturnWaypoints(capturedPiece.color, captureTrackPosition, capturedPiece.pieceIndex, definition).map(toWorldPosition)
+      setCaptureFlights((prev) => new Map(prev).set(capturedPiece, { hopFrom: toWorldPosition(fromWaypoint, BASE_HEIGHT), hops }))
+    }
+  }
+
+  useEffect(() => {
+    const prevMove = prevMoveAnimationRef.current
+    if (!moveAnimation && prevMove && (prevMove.capturedPiece || prevMove.capturedParkillerColor)) {
+      spawnCaptureEffects(prevMove.after.trackPosition, prevMove.capturedPiece, prevMove.capturedParkillerColor)
+    }
+    prevMoveAnimationRef.current = moveAnimation
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moveAnimation, definition])
+
+  useEffect(() => {
+    const prevParkiller = prevParkillerAnimationRef.current
+    if (!parkillerAnimation && prevParkiller && (prevParkiller.capturedPawn || prevParkiller.capturedParkillerColor)) {
+      spawnCaptureEffects(prevParkiller.after, prevParkiller.capturedPawn, prevParkiller.capturedParkillerColor)
+    }
+    prevParkillerAnimationRef.current = parkillerAnimation
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parkillerAnimation, definition])
+
   const stackGroups = new Map<string, Piece[]>()
   for (const piece of allPieces) {
     const key = stackKeyFor(piece)
@@ -341,8 +403,22 @@ export function BoardScene({
           restPosition[2] += oz
         }
         const isAnimating = moveAnimation?.piece === piece
-        const hopFrom = isAnimating ? (animatingHopData?.hopFrom ?? null) : null
-        const hops = isAnimating ? (animatingHopData?.hops ?? []) : []
+        // Once the freeze above ends, a piece just captured plays its own short "flung home" hop
+        // animation (see spawnCaptureEffects) instead of snapping straight to restPosition - which
+        // by now is already its real yard slot, so the flight's own hops lead there directly.
+        const captureFlight = captureFlights.get(piece)
+        const hopFrom = isAnimating ? (animatingHopData?.hopFrom ?? null) : (captureFlight?.hopFrom ?? null)
+        const hops = isAnimating ? (animatingHopData?.hops ?? []) : (captureFlight?.hops ?? [])
+        const onHopsComplete = isAnimating
+          ? onAnimationComplete
+          : captureFlight
+            ? () =>
+                setCaptureFlights((prev) => {
+                  const next = new Map(prev)
+                  next.delete(piece)
+                  return next
+                })
+            : undefined
 
         return (
           <PieceMesh
@@ -351,7 +427,7 @@ export function BoardScene({
             restPosition={restPosition}
             hopFrom={hopFrom}
             hops={hops}
-            onHopsComplete={isAnimating ? onAnimationComplete : undefined}
+            onHopsComplete={onHopsComplete}
             introDelay={index * INTRO_STAGGER}
             selectable={selectablePieces.has(piece)}
             onSelect={onSelectPiece}
@@ -359,6 +435,15 @@ export function BoardScene({
           />
         )
       })}
+
+      {impacts.map((impact) => (
+        <CaptureImpactEffect
+          key={impact.id}
+          position={impact.position}
+          color={impact.color}
+          onComplete={() => setImpacts((prev) => prev.filter((i) => i.id !== impact.id))}
+        />
+      ))}
 
       {players.map((player, index) => {
         // A Parkiller can be eliminated by a pawn's move (moveAnimation, PK6) or by another

@@ -107,6 +107,31 @@ export function getHopWaypoints(
   return hops
 }
 
+// A captured piece's own state flips to InYard the instant the capturing move is submitted (see
+// captureAt in parchisRules.ts) - reconstructing "the path it walked" the way getHopWaypoints does
+// makes no sense here, since it didn't walk anywhere, it got sent back. A few direct hops in a
+// straight line from the capture square to its own yard slot read as "flung home" instead.
+const CAPTURE_RETURN_HOPS = 3
+
+export function getCaptureReturnWaypoints(
+  color: Piece['color'],
+  captureTrackPosition: number,
+  pieceIndex: number,
+  definition: BoardDefinition,
+): [number, number][] {
+  const lane = definition.playerLanes.find((l) => l.color === color)
+  const from = definition.trackWaypoints[captureTrackPosition]
+  const to = lane?.yardWaypoints[pieceIndex]
+  if (!lane || !from || !to) return []
+
+  const hops: [number, number][] = []
+  for (let i = 1; i <= CAPTURE_RETURN_HOPS; i++) {
+    const t = i / CAPTURE_RETURN_HOPS
+    hops.push([from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t])
+  }
+  return hops
+}
+
 /** Null once eliminated (PK6) - it's simply not rendered anywhere from that point on. */
 export function getParkillerWaypoint(trackPosition: number, state: 'InPlay' | 'Eliminated', definition: BoardDefinition): [number, number] | null {
   if (state !== 'InPlay') return null
