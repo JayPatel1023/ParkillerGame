@@ -17,3 +17,6 @@ scripts/debug_*.png
 # OS
 .DS_Store
 Thumbs.db
+
+# Old GameMaker Studio prototype, kept locally for reference only - not part of this codebase
+Parkiller_GameMaker-main/
