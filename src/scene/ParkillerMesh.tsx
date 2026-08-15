@@ -81,12 +81,16 @@ const HOOD_SCALE = ROBE_SCALE
 // to show this): the arm hangs straight down from the shoulder and swings outward, ending in a
 // visible hand around hip height - not a pair of hands clasped together at the front, which the
 // blurrier reference photos this was tuned against before had misread.
+// Reported directly: at the previous ARM_X/ARM_LEAN, the arm stayed inside the robe's own
+// silhouette almost its whole length - the robe's radius grows faster toward the base (see
+// ROBE_PROFILE_RAW) than a shallow lean angle can outpace, so only the hand cleared the body.
+// Starting further out and leaning harder keeps the whole arm visibly separate, not absorbed.
 const ARM_LENGTH = 0.38 * ROBE_SCALE // shoulder to hand, including the rounded caps
 const ARM_RADIUS = 0.075 * ROBE_SCALE
 const ARM_TOP_Y = ROBE_TOP_Y - 0.03 * ROBE_SCALE // just under the hood's hem, at the shoulder
-const ARM_X = 0.22 * ROBE_SCALE
+const ARM_X = 0.34 * ROBE_SCALE
 const ARM_Z = 0.06 * ROBE_SCALE
-const ARM_LEAN = 0.42 // radians the whole arm swings outward from the shoulder
+const ARM_LEAN = 0.58 // radians the whole arm swings outward from the shoulder
 const HAND_RADIUS = 0.085 * ROBE_SCALE
 
 // The hood's hollow interior (the reference photo shows a real carved-out cavity, not a painted
@@ -176,6 +180,9 @@ export function ParkillerMesh({ color, restPosition, facingTarget, hopFrom, hops
 
   const robeProfile = useMemo(() => ROBE_PROFILE_RAW.map(([r, y]) => new THREE.Vector2(r * ROBE_SCALE, y * ROBE_SCALE)), [])
   const hoodProfile = useMemo(() => HOOD_PROFILE_RAW.map(([r, y]) => new THREE.Vector2(r * HOOD_SCALE, y * HOOD_SCALE)), [])
+  // The hood's hollow is this same piece's own material sitting in shadow, not a separate black
+  // part - confirmed directly against the reference photo, which shows no black anywhere on it.
+  const cavityColor = useMemo(() => new THREE.Color(getColor(color)).multiplyScalar(0.22), [color])
 
   const bodyMaterial = (
     <meshPhysicalMaterial
@@ -202,7 +209,7 @@ export function ParkillerMesh({ color, restPosition, facingTarget, hopFrom, hops
       {/* Shadowed hollow under the hood's point - see HOOD_CAVITY comment above. */}
       <mesh position={[0, ROBE_TOP_Y + HOOD_CAVITY_Y, HOOD_CAVITY_Z]} scale={[1, 1.08, 0.5]}>
         <sphereGeometry args={[HOOD_CAVITY_RADIUS, 20, 14]} />
-        <meshStandardMaterial color="#191410" roughness={1} metalness={0} />
+        <meshStandardMaterial color={cavityColor} roughness={1} metalness={0} />
       </mesh>
       {/* Two arms + hands, breaking full radial symmetry on purpose - the reference photo shows an
           arm hanging from the shoulder and swinging outward, hand visible around hip height, not
