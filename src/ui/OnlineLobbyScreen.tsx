@@ -15,10 +15,11 @@ import type { GameMessage } from '../online/protocol'
 import { RemoteTurnManager } from '../online/RemoteTurnManager'
 import { GameBoardScreen, type GameSession } from './GameBoardScreen'
 
-// Milestone 2, in progress - reachable only via the hidden #online hash (see App.tsx), not linked
-// from anywhere in the visible UI. Not yet exercised against a real Photon connection (no App ID
-// was available while building this) - the logic is correct per the verified SDK/bridge behavior,
-// but a live two-tab test is still a required follow-up once VITE_PHOTON_APP_ID is set.
+// Milestone 2 - reachable via the #online hash (see App.tsx), linked from StartScreen's "Jugar
+// online" button once VITE_PHOTON_APP_ID is configured (see StartScreen.tsx's canPlayOnline gate).
+// Verified against a real Photon App ID with two independent browser clients: room creation,
+// joining, seat assignment, bot fill-in for empty seats, the game-start broadcast, and a live dice
+// roll all relayed correctly and produced identical state on both sides.
 
 const REGION = 'us' // TODO: region picker, or Photon's own Best Region flow - fixed for Phase 1
 const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // no 0/O/1/I - easier to read aloud/type
@@ -191,7 +192,7 @@ export default function OnlineLobbyScreen() {
 
   return (
     <div style={wrapperStyle}>
-      <h1 style={{ margin: 0 }}>Parkiller - Online (dev)</h1>
+      <h1 style={{ margin: 0 }}>Parkiller - Online</h1>
 
       {phase === 'connecting' && <p>Conectando a Photon...</p>}
 

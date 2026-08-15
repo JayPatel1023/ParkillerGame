@@ -45,9 +45,8 @@ export default function App() {
   if (hash === '#component') {
     return <ComponentPreview />
   }
-  // Dev-only route (milestone 2, in progress): online play via Photon Realtime - not linked from
-  // anywhere in the visible UI ("Jugar online" on StartScreen stays disabled) until it's actually
-  // ready to show the client. See src/ui/OnlineLobbyScreen.tsx.
+  // Milestone 2: online play via Photon Realtime, linked from StartScreen's "Jugar online" button
+  // once VITE_PHOTON_APP_ID is configured. See src/ui/OnlineLobbyScreen.tsx.
   if (hash === '#online') {
     return <OnlineLobbyScreen />
   }
