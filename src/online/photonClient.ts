@@ -54,26 +54,64 @@ export class PhotonConnection implements RoomTransport {
   }
 
   /** Room "name" is the join code - Photon's own uniqueness-per-region handles the rest, no
-   * separate matchmaking service needed. */
+   * separate matchmaking service needed. maxPlayers has to travel as joinRoom's own THIRD argument
+   * (createRoomOptions) - confirmed directly in the SDK source (fillCreateRoomOptions reads
+   * maxPlayers off that argument specifically), not the second (joinRoomOptions, which only holds
+   * createIfNotExists/rejoin/expectedUsers). Passing it as part of the second argument, as an
+   * earlier version of this did, silently drops it - every room ends up with no player cap at all. */
   createRoom(code: string, maxPlayers: number): Promise<void> {
-    return this.joinOrCreate(code, { createIfNotExists: true, maxPlayers } as Photon.LoadBalancing.RoomOptions)
+    return this.joinOrCreate(code, { createIfNotExists: true }, { maxPlayers })
   }
 
   joinRoom(code: string): Promise<void> {
-    return this.joinOrCreate(code, undefined)
+    return this.joinOrCreate(code, undefined, undefined)
   }
 
-  private joinOrCreate(code: string, options: Photon.LoadBalancing.RoomOptions | undefined): Promise<void> {
+  private joinOrCreate(
+    code: string,
+    joinOptions: Photon.LoadBalancing.RoomOptions | undefined,
+    createOptions: Photon.LoadBalancing.RoomOptions | undefined,
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
+      let settled = false
       this.client.onStateChange = (state: number) => {
+        if (settled) return
         if (this.client.isJoinedToRoom()) {
+          settled = true
           this.lastKnownMasterActorNr = this.client.myRoomMasterActorNr()
           resolve()
         } else if (state === LBC.State.Error) {
+          settled = true
           reject(new Error('Failed to join or create room'))
         }
       }
-      this.client.joinRoom(code, options)
+      // onStateChange alone misses operation-level failures (wrong room code, room full, room
+      // already exists) - confirmed directly in the SDK source: those flow only through
+      // _onOperationResponseInternal2 -> onOperationResponse, which never touches state at all.
+      // Without this, a mistyped room code just leaves the caller's promise pending forever - the
+      // UI stays on its "joining..." spinner with no error, no timeout, no way out.
+      this.client.onOperationResponse = (errorCode, errorMsg, operationCode) => {
+        if (settled) return
+        const { OperationCode, ErrorCode } = Photon.LoadBalancing.Constants
+        if (operationCode !== OperationCode.JoinGame && operationCode !== OperationCode.CreateGame) return
+        if (errorCode === ErrorCode.Ok) return
+        settled = true
+        // English here, matching this file's other errors (e.g. "Failed to join or create room"
+        // just above) - OnlineLobbyScreen.tsx is where user-facing (Spanish) text lives, same
+        // layering as its existing "Falta VITE_PHOTON_APP_ID..." message.
+        const reason =
+          errorCode === ErrorCode.GameDoesNotExist
+            ? 'room does not exist'
+            : errorCode === ErrorCode.GameFull
+              ? 'room is full'
+              : errorCode === ErrorCode.GameClosed
+                ? 'room has already started'
+                : errorCode === ErrorCode.GameIdAlreadyExists
+                  ? 'room code already in use'
+                  : errorMsg || `operation error ${errorCode}`
+        reject(new Error(reason))
+      }
+      this.client.joinRoom(code, joinOptions, createOptions)
     })
   }
 
