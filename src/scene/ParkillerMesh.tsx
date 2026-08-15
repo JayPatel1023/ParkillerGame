@@ -48,10 +48,10 @@ const PARKILLER_BASE_RADIUS = 0.1
 // hands come together near the front center (a clasped pose), not out at the sides.
 const ROBE_PROFILE_RAW: [number, number][] = [
   [0.0, 0.0],
-  [0.36, 0.0],
-  [0.38, 0.05],
-  [0.33, 0.18],
-  [0.28, 0.32],
+  [0.42, 0.0],
+  [0.44, 0.05],
+  [0.36, 0.18],
+  [0.29, 0.32],
   [0.24, 0.44],
   [0.22, 0.52],
   [0.21, 0.55],
@@ -66,12 +66,12 @@ const ROBE_TOP_Y = 0.55 * ROBE_SCALE // where the hood sits, in world units
 // narrowing continuously to the tip.
 const HOOD_PROFILE_RAW: [number, number][] = [
   [0.22, 0.0],
-  [0.26, 0.06],
-  [0.23, 0.17],
-  [0.17, 0.29],
-  [0.1, 0.4],
-  [0.06, 0.48],
-  [0.0, 0.51],
+  [0.26, 0.045],
+  [0.23, 0.13],
+  [0.17, 0.22],
+  [0.1, 0.3],
+  [0.06, 0.36],
+  [0.0, 0.38],
 ]
 // Hood uses the same overall scale as the robe (not its own max-radius scale) so the two profiles
 // join at a matching radius where the hood sits on the robe's shoulders, instead of a visible seam.
@@ -188,12 +188,6 @@ export function ParkillerMesh({ color, restPosition, facingTarget, hopFrom, hops
       <mesh castShadow receiveShadow position={[0, ROBE_TOP_Y, 0]}>
         <latheGeometry args={[hoodProfile, 24]} />
         {bodyMaterial}
-      </mesh>
-      {/* Shadowed hollow under the hood's brim, like the reference photo's recessed face - a small
-          dark disc rather than fully sculpting an opening. */}
-      <mesh position={[0, ROBE_TOP_Y + 0.12 * ROBE_SCALE, 0.2 * ROBE_SCALE]} rotation={[-Math.PI / 3, 0, 0]}>
-        <circleGeometry args={[0.15 * ROBE_SCALE, 16]} />
-        <meshBasicMaterial color="#0a0a0a" />
       </mesh>
       {/* Two arms + hands, breaking full radial symmetry on purpose - the reference photo's
           silhouette clearly shows both, hanging at the sides and meeting slightly forward near the

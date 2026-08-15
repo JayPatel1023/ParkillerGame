@@ -145,9 +145,14 @@ export function wouldCapture(
   if (move.kind !== 'ExitYard' && move.kind !== 'TrackMove') return false
   const pos = move.resultingTrackPosition
 
+  // PK6: "Se mueve con la cifra de un dado el peón que elimina al Parkiller" - the capturing move
+  // must spend a single die's own face value, not the sum of both. A double's sum landing on the
+  // Parkiller's square doesn't count, even though the same double's individual die value might.
+  const usesSingleDie = move.diceSource === 'dieA' || move.diceSource === 'dieB'
   for (const opponent of allPlayers) {
     if (opponent.color === move.piece.color) continue
-    if (allowParkillerCapture && opponent.parkiller.state === 'InPlay' && opponent.parkiller.trackPosition === pos) return true
+    if (allowParkillerCapture && usesSingleDie && opponent.parkiller.state === 'InPlay' && opponent.parkiller.trackPosition === pos)
+      return true
   }
 
   if (board.safeTrackIndices.has(pos)) return false
@@ -181,8 +186,10 @@ export function applyMove(
         : null
       // PK6/PK8: a common piece only eliminates the Parkiller during the roll that just produced
       // doubles (the reference implementation's own doblete_mata_parkiller flag) - landing on it
-      // any other time does nothing at all, verified directly against that source.
-      result.capturedParkillerColor = allowParkillerCapture
+      // any other time does nothing at all, verified directly against that source. And even on a
+      // double, only a single die's own value counts, not their sum (see wouldCapture).
+      const usesSingleDie = move.diceSource === 'dieA' || move.diceSource === 'dieB'
+      result.capturedParkillerColor = allowParkillerCapture && usesSingleDie
         ? captureParkillerAt(piece, move.resultingTrackPosition, allPlayers)
         : null
       break
