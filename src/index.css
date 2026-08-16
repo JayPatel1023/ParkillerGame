@@ -25,6 +25,20 @@ button {
   cursor: pointer;
 }
 
+/* Shared "pressed" feedback for every chunky carved-wood button (StartScreen,
+   PlayerCountSelector, GameBoardScreen, OnlineLobbyScreen) - a color-agnostic sink + darken
+   instead of per-button shadow math, since precisely recomputing each button's own offset-edge
+   box-shadow on press (to make it look like it's sinking into its own carved depth) would need
+   knowing that button's specific edge color/shadow size at every call site. Scale+translate+darken
+   reads as a convincing press regardless of the button's own colors. */
+.chunky-btn {
+  transition: transform 0.08s ease, filter 0.08s ease;
+}
+.chunky-btn:active:not(:disabled) {
+  transform: translateY(3px) scale(0.97);
+  filter: brightness(0.92);
+}
+
 @keyframes game-screen-in {
   from {
     opacity: 0;

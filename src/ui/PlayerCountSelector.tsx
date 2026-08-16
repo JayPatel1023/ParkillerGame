@@ -49,7 +49,7 @@ export function PlayerCountSelector({ onConfirm }: { onConfirm: (count: number) 
       </h2>
       <div style={{ display: 'flex', gap: 16 }}>
         {[2, 3, 4, 5, 6].map((count) => (
-          <button key={count} onClick={() => onConfirm(count)} style={countButtonStyle()}>
+          <button key={count} className="chunky-btn" onClick={() => onConfirm(count)} style={countButtonStyle()}>
             {count}
           </button>
         ))}

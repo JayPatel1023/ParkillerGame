@@ -217,13 +217,13 @@ export default function OnlineLobbyScreen() {
                 <div style={{ ...hintStyle, marginBottom: 8 }}>Jugadores</div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   {[2, 3, 4, 5, 6].map((n) => (
-                    <button key={n} onClick={() => setPlayerCount(n)} style={countButtonStyle(n === playerCount)}>
+                    <button key={n} className="chunky-btn" onClick={() => setPlayerCount(n)} style={countButtonStyle(n === playerCount)}>
                       {n}
                     </button>
                   ))}
                 </div>
               </div>
-              <button onClick={createRoom} style={chunkyButtonStyle(true)}>
+              <button className="chunky-btn" onClick={createRoom} style={chunkyButtonStyle(true)}>
                 Crear
               </button>
             </div>
@@ -237,7 +237,12 @@ export default function OnlineLobbyScreen() {
                 style={inputStyle}
               />
               <div style={{ height: 12 }} />
-              <button onClick={joinRoom} disabled={!roomCodeInput.trim()} style={chunkyButtonStyle(Boolean(roomCodeInput.trim()))}>
+              <button
+                className="chunky-btn"
+                onClick={joinRoom}
+                disabled={!roomCodeInput.trim()}
+                style={chunkyButtonStyle(Boolean(roomCodeInput.trim()))}
+              >
                 Unirse
               </button>
             </div>
@@ -267,7 +272,7 @@ export default function OnlineLobbyScreen() {
               })}
             </div>
             {connectionRef.current.isMasterClient() ? (
-              <button onClick={startGame} style={chunkyButtonStyle(true)}>
+              <button className="chunky-btn" onClick={startGame} style={chunkyButtonStyle(true)}>
                 Empezar partida
               </button>
             ) : (

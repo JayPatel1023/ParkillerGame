@@ -110,12 +110,12 @@ export function GameBoardScreen({
             forward with what to actually click next. */}
         {pendingReward && <div style={{ ...hintTextStyle, color: '#7fd88f' }}>Elegí una ficha para tu recompensa</div>}
         {pendingMoves.length > 0 && !pendingReward && <div style={hintTextStyle}>Elegí una ficha para mover</div>}
-        <button onClick={() => canRoll && rollDice()} disabled={!canRoll} style={rollButtonStyle(canRoll)}>
+        <button className="chunky-btn" onClick={() => canRoll && rollDice()} disabled={!canRoll} style={rollButtonStyle(canRoll)}>
           {rolling ? 'Rodando...' : 'Tirar dados'}
         </button>
       </div>
 
-      <button onClick={() => setConfirmingExit(true)} title="Salir del juego" style={exitButtonStyle}>
+      <button className="chunky-btn" onClick={() => setConfirmingExit(true)} title="Salir del juego" style={exitButtonStyle}>
         ✕
       </button>
 
@@ -124,10 +124,10 @@ export function GameBoardScreen({
           <div style={{ fontSize: 18, fontWeight: 600, color: '#f2ede0' }}>¿Seguro que querés salir?</div>
           <div style={{ ...hintTextStyle, marginBottom: 4 }}>Se perderá la partida en curso.</div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={() => setConfirmingExit(false)} style={secondaryButtonStyle}>
+            <button className="chunky-btn" onClick={() => setConfirmingExit(false)} style={secondaryButtonStyle}>
               Cancelar
             </button>
-            <button onClick={onExit} style={rollButtonStyle(true)}>
+            <button className="chunky-btn" onClick={onExit} style={rollButtonStyle(true)}>
               Sí, salir
             </button>
           </div>
@@ -137,7 +137,7 @@ export function GameBoardScreen({
       {winner && (
         <div style={overlayStyle}>
           <div style={{ color: getColor(winner.color), fontSize: 32, fontWeight: 'bold' }}>¡{winner.color} gana!</div>
-          <button onClick={onExit} style={{ ...rollButtonStyle(true), marginTop: 8 }}>
+          <button className="chunky-btn" onClick={onExit} style={{ ...rollButtonStyle(true), marginTop: 8 }}>
             Volver al inicio
           </button>
         </div>
