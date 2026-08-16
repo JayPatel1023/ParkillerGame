@@ -200,7 +200,7 @@ export default function OnlineLobbyScreen() {
       <div style={cardStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 8 }}>
           <img src="/logo-badge.png" alt="Parkiller" style={{ width: 56, height: 56, filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.5))' }} />
-          <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: '#ffe9b8', textShadow: '0 2px 0 #8a5a1e, 0 4px 10px rgba(0,0,0,0.5)' }}>
+          <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: '#dce8ff', textShadow: '0 2px 0 #1a3468, 0 4px 10px rgba(0,0,0,0.5)' }}>
             Jugar online
           </h1>
         </div>
@@ -255,7 +255,7 @@ export default function OnlineLobbyScreen() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, width: 340 }}>
             <div style={sectionStyle}>
               <div style={hintStyle}>Código de sala</div>
-              <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: 3, color: '#ffe9b8', textShadow: '0 2px 0 #8a5a1e' }}>{roomCode}</div>
+              <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: 3, color: '#dce8ff', textShadow: '0 2px 0 #1a3468' }}>{roomCode}</div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {TURN_ORDER_BY_COUNT[playerCount].map((color) => {
@@ -306,7 +306,7 @@ const cardStyle: React.CSSProperties = {
   padding: '36px 44px',
   borderRadius: 28,
   background: 'linear-gradient(180deg, rgba(255,255,255,0.05), transparent 25%), linear-gradient(165deg, rgba(58, 46, 30, 0.85), rgba(30, 23, 14, 0.85))',
-  border: '2px solid #8a5a1e',
+  border: '2px solid #1a3468',
   boxShadow: '0 10px 30px rgba(0,0,0,0.5), inset 0 0 0 3px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)',
 }
 
@@ -314,14 +314,14 @@ const sectionStyle: React.CSSProperties = {
   padding: '16px 18px',
   borderRadius: 14,
   background: 'rgba(0,0,0,0.2)',
-  border: '1px solid rgba(204,177,84,0.4)',
+  border: '1px solid rgba(74,120,216,0.4)',
 }
 
 const sectionTitleStyle: React.CSSProperties = {
   margin: '0 0 12px 0',
   fontSize: 16,
   fontWeight: 700,
-  color: '#ffe9b8',
+  color: '#dce8ff',
 }
 
 const hintStyle: React.CSSProperties = {
@@ -336,7 +336,7 @@ const seatRowStyle: React.CSSProperties = {
   padding: '8px 12px',
   borderRadius: 10,
   background: 'rgba(0,0,0,0.2)',
-  border: '1px solid rgba(204,177,84,0.25)',
+  border: '1px solid rgba(74,120,216,0.25)',
 }
 
 const seatDotStyle: React.CSSProperties = {
@@ -355,9 +355,9 @@ const inputStyle: React.CSSProperties = {
   fontWeight: 700,
   letterSpacing: 2,
   textTransform: 'uppercase',
-  color: '#ffe9b8',
+  color: '#dce8ff',
   background: 'rgba(0,0,0,0.35)',
-  border: '2px solid #8a5a1e',
+  border: '2px solid #1a3468',
   borderRadius: 10,
   boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.4)',
 }
@@ -372,16 +372,16 @@ function chunkyButtonStyle(enabled: boolean): React.CSSProperties {
     fontSize: 17,
     fontWeight: 800,
     letterSpacing: 0.3,
-    color: enabled ? '#4a2e12' : '#8a8a80',
+    color: enabled ? '#eef4ff' : '#8a8a80',
     background: enabled
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0) 40%), linear-gradient(180deg, #ffe08a 0%, #ecb84a 55%, #d9982e 100%)'
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0) 40%), linear-gradient(180deg, #c8dcff 0%, #4a78d8 55%, #2850a8 100%)'
       : 'linear-gradient(180deg, #8a8a80, #6a6a60)',
-    border: `3px solid ${enabled ? '#8a5a1e' : '#4a4a44'}`,
+    border: `3px solid ${enabled ? '#1a3468' : '#4a4a44'}`,
     borderRadius: 16,
     boxShadow: enabled
-      ? '0 5px 0 #8a5a1e, 0 9px 16px rgba(0,0,0,0.4), inset 0 2px 1px rgba(255,255,255,0.55)'
+      ? '0 5px 0 #1a3468, 0 9px 16px rgba(0,0,0,0.4), inset 0 2px 1px rgba(255,255,255,0.55)'
       : '0 5px 0 #3a3a34, 0 8px 12px rgba(0,0,0,0.3)',
-    textShadow: enabled ? '0 1px 0 rgba(255,255,255,0.35)' : 'none',
+    textShadow: enabled ? '0 1px 2px rgba(8,16,40,0.5)' : 'none',
     cursor: enabled ? 'pointer' : 'default',
   }
 }
@@ -392,15 +392,15 @@ function countButtonStyle(selected: boolean): React.CSSProperties {
     height: 44,
     fontSize: 17,
     fontWeight: 800,
-    color: '#4a2e12',
+    color: selected ? '#eef4ff' : '#c8d4ec',
     background: selected
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0) 40%), linear-gradient(180deg, #fff2c4 0%, #ffcf5e 55%, #e8a82e 100%)'
-      : 'linear-gradient(180deg, rgba(255,255,255,0.4), rgba(255,255,255,0) 40%), linear-gradient(180deg, #d9b06a 0%, #b8823a 55%, #96631f 100%)',
-    border: `2px solid ${selected ? '#e0a030' : '#8a5a1e'}`,
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0) 40%), linear-gradient(180deg, #d4e4ff 0%, #6a94e8 55%, #3868c0 100%)'
+      : 'linear-gradient(180deg, rgba(255,255,255,0.25), rgba(255,255,255,0) 40%), linear-gradient(180deg, #4a6aa0 0%, #345078 55%, #223a5a 100%)',
+    border: `2px solid ${selected ? '#3868c0' : '#1a3468'}`,
     borderRadius: 12,
     boxShadow: selected
-      ? '0 3px 0 #a06a10, 0 6px 10px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.6)'
-      : '0 3px 0 #6a4515, 0 5px 8px rgba(0,0,0,0.35), inset 0 1px 1px rgba(255,255,255,0.4)',
+      ? '0 3px 0 #24448c, 0 6px 10px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.6)'
+      : '0 3px 0 #14253f, 0 5px 8px rgba(0,0,0,0.35), inset 0 1px 1px rgba(255,255,255,0.25)',
     cursor: 'pointer',
   }
 }
