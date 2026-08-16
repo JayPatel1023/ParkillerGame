@@ -7,7 +7,7 @@ import { useTurnManager } from '../hooks/useTurnManager'
 import { BoardScene } from '../scene/BoardScene'
 import { RewardToast } from './RewardToast'
 
-const BRAND_GOLD = '#ccb154'
+const BRAND_GOLD = '#4a78d8'
 
 /** A local game builds this via beginLocalGame (src/core/gameFlow/localGameSession.ts); an online
  * game builds it from a HostTurnManagerBridge/RemoteTurnManager (src/online/) plus the players
@@ -213,16 +213,16 @@ function rollButtonStyle(enabled: boolean): React.CSSProperties {
     fontSize: 16,
     fontWeight: 800,
     letterSpacing: 0.3,
-    color: enabled ? '#4a2e12' : '#9a9a90',
+    color: enabled ? '#eef4ff' : '#9a9a90',
     background: enabled
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0) 40%), linear-gradient(180deg, #ffe08a 0%, #ecb84a 55%, #d9982e 100%)'
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0) 40%), linear-gradient(180deg, #c8dcff 0%, #4a78d8 55%, #2850a8 100%)'
       : 'linear-gradient(165deg, #6b6b62, #4a4a44)',
-    border: `3px solid ${enabled ? '#8a5a1e' : '#3a3a34'}`,
+    border: `3px solid ${enabled ? '#1a3468' : '#3a3a34'}`,
     borderRadius: 999,
     boxShadow: enabled
-      ? '0 5px 0 #8a5a1e, 0 9px 14px rgba(0,0,0,0.4), inset 0 2px 1px rgba(255,255,255,0.55)'
+      ? '0 5px 0 #1a3468, 0 9px 14px rgba(0,0,0,0.4), inset 0 2px 1px rgba(255,255,255,0.55)'
       : '0 5px 0 #3a3a34, inset 0 1px 2px rgba(0,0,0,0.3)',
-    textShadow: enabled ? '0 1px 0 rgba(255,255,255,0.35)' : 'none',
+    textShadow: enabled ? '0 1px 2px rgba(8,16,40,0.5)' : 'none',
     cursor: enabled ? 'pointer' : 'default',
   }
 }
@@ -235,7 +235,7 @@ const secondaryButtonStyle: React.CSSProperties = {
   background: 'linear-gradient(165deg, rgba(255,255,255,0.1), rgba(255,255,255,0) 60%), rgba(58, 46, 30, 0.6)',
   border: `3px solid ${BRAND_GOLD}`,
   borderRadius: 999,
-  boxShadow: '0 5px 0 #8a5a1e, 0 8px 12px rgba(0,0,0,0.35), inset 0 1px 1px rgba(255,255,255,0.2)',
+  boxShadow: '0 5px 0 #1a3468, 0 8px 12px rgba(0,0,0,0.35), inset 0 1px 1px rgba(255,255,255,0.2)',
   cursor: 'pointer',
 }
 
@@ -258,7 +258,7 @@ const exitButtonStyle: React.CSSProperties = {
     'linear-gradient(180deg, rgba(255,255,255,0.22), transparent 45%), linear-gradient(165deg, rgba(64, 50, 32, 0.95), rgba(36, 28, 18, 0.95))',
   border: `3px solid ${BRAND_GOLD}`,
   borderRadius: '50%',
-  boxShadow: '0 5px 0 #8a5a1e, 0 9px 14px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.15)',
+  boxShadow: '0 5px 0 #1a3468, 0 9px 14px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.15)',
   color: '#f2ede0',
   cursor: 'pointer',
   fontFamily: 'system-ui, sans-serif',

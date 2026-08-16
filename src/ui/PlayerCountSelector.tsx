@@ -8,12 +8,12 @@ function countButtonStyle(): React.CSSProperties {
     height: 68,
     fontSize: 26,
     fontWeight: 800,
-    color: '#4a2e12',
-    background: 'linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0) 40%), linear-gradient(180deg, #ffe08a 0%, #ecb84a 55%, #d9982e 100%)',
-    border: '3px solid #8a5a1e',
+    color: '#eef4ff',
+    background: 'linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0) 40%), linear-gradient(180deg, #c8dcff 0%, #4a78d8 55%, #2850a8 100%)',
+    border: '3px solid #1a3468',
     borderRadius: 16,
-    boxShadow: '0 5px 0 #8a5a1e, 0 9px 14px rgba(0,0,0,0.4), inset 0 2px 1px rgba(255,255,255,0.55)',
-    textShadow: '0 1px 0 rgba(255,255,255,0.35)',
+    boxShadow: '0 5px 0 #1a3468, 0 9px 14px rgba(0,0,0,0.4), inset 0 2px 1px rgba(255,255,255,0.55)',
+    textShadow: '0 1px 2px rgba(8,16,40,0.5)',
     cursor: 'pointer',
   }
 }
@@ -41,8 +41,8 @@ export function PlayerCountSelector({ onConfirm }: { onConfirm: (count: number) 
           fontWeight: 800,
           margin: 0,
           letterSpacing: 1,
-          color: '#ffe9b8',
-          textShadow: '0 2px 0 #8a5a1e, 0 5px 12px rgba(0,0,0,0.55)',
+          color: '#dce8ff',
+          textShadow: '0 2px 0 #1a3468, 0 5px 12px rgba(0,0,0,0.55)',
         }}
       >
         ¿Cuántos jugadores?
