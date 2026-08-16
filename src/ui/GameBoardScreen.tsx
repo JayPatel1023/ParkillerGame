@@ -201,61 +201,64 @@ const hintTextStyle: React.CSSProperties = {
   color: '#d8d2c2',
 }
 
-// Full pill shape (borderRadius 999) instead of a lightly-rounded rectangle, plus a glossy
-// top-highlight layer over the gold gradient - the same "glass-like sheen over a solid color"
-// recipe the 3D pieces use (see PieceMesh/ParkillerMesh's clearcoat material), so the game's most-
-// pressed button reads as a tactile, lacquered token rather than a flat web button.
+// Full pill shape (borderRadius 999), but now with the same solid (non-blurred) offset bottom
+// edge as StartScreen/PlayerCountSelector's own chunky buttons - that crisp edge, not a bigger
+// blurred shadow, is what actually reads as physical carved-wood depth. The two screens were
+// restyled first and this one still used the earlier blurred-shadow pass, which read as a
+// different, plainer button style right where the game's most-pressed button lives - reported
+// directly as wanting one consistent button language across every screen, not per-screen styles.
 function rollButtonStyle(enabled: boolean): React.CSSProperties {
   return {
-    padding: '12px 22px',
-    fontSize: 15,
-    fontWeight: 700,
+    padding: '12px 24px',
+    fontSize: 16,
+    fontWeight: 800,
     letterSpacing: 0.3,
+    color: enabled ? '#4a2e12' : '#9a9a90',
     background: enabled
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0) 45%), linear-gradient(165deg, #ffe08a, #ccb154)'
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0) 40%), linear-gradient(180deg, #ffe08a 0%, #ecb84a 55%, #d9982e 100%)'
       : 'linear-gradient(165deg, #6b6b62, #4a4a44)',
-    color: enabled ? '#3a2c10' : '#9a9a90',
-    border: `2px solid ${enabled ? '#8a6d2a' : '#3a3a34'}`,
+    border: `3px solid ${enabled ? '#8a5a1e' : '#3a3a34'}`,
     borderRadius: 999,
     boxShadow: enabled
-      ? '0 4px 12px rgba(204, 177, 84, 0.4), inset 0 1px 1px rgba(255,255,255,0.6), inset 0 -2px 3px rgba(120, 90, 20, 0.35)'
-      : 'inset 0 1px 2px rgba(0,0,0,0.3)',
+      ? '0 5px 0 #8a5a1e, 0 9px 14px rgba(0,0,0,0.4), inset 0 2px 1px rgba(255,255,255,0.55)'
+      : '0 5px 0 #3a3a34, inset 0 1px 2px rgba(0,0,0,0.3)',
+    textShadow: enabled ? '0 1px 0 rgba(255,255,255,0.35)' : 'none',
     cursor: enabled ? 'pointer' : 'default',
-    transition: 'transform 0.08s ease, box-shadow 0.08s ease',
   }
 }
 
 const secondaryButtonStyle: React.CSSProperties = {
-  padding: '11px 20px',
+  padding: '11px 22px',
   fontSize: 15,
-  fontWeight: 600,
-  background: 'linear-gradient(165deg, rgba(255,255,255,0.08), rgba(255,255,255,0) 60%)',
+  fontWeight: 700,
   color: '#f2ede0',
-  border: `2px solid ${BRAND_GOLD}`,
+  background: 'linear-gradient(165deg, rgba(255,255,255,0.1), rgba(255,255,255,0) 60%), rgba(58, 46, 30, 0.6)',
+  border: `3px solid ${BRAND_GOLD}`,
   borderRadius: 999,
-  boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.15)',
+  boxShadow: '0 5px 0 #8a5a1e, 0 8px 12px rgba(0,0,0,0.35), inset 0 1px 1px rgba(255,255,255,0.2)',
   cursor: 'pointer',
 }
 
 // Round medallion badge instead of a rectangular "Salir" pill - matches the fleur-de-lis/star
 // corner ornaments already painted into the board art, and clears the boxy dead space a text
-// button left in the corner (reported directly, alongside the panel/roll-button shapes).
+// button left in the corner (reported directly, alongside the panel/roll-button shapes). Same
+// solid offset-edge depth as the pill buttons, just circular.
 const exitButtonStyle: React.CSSProperties = {
   position: 'absolute',
   top: 16,
   right: 16,
-  width: 44,
-  height: 44,
+  width: 46,
+  height: 46,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  fontSize: 16,
+  fontSize: 17,
   fontWeight: 700,
   background:
-    'linear-gradient(180deg, rgba(255,255,255,0.18), transparent 45%), linear-gradient(165deg, rgba(64, 50, 32, 0.92), rgba(36, 28, 18, 0.92))',
-  border: `2px solid ${BRAND_GOLD}`,
+    'linear-gradient(180deg, rgba(255,255,255,0.22), transparent 45%), linear-gradient(165deg, rgba(64, 50, 32, 0.95), rgba(36, 28, 18, 0.95))',
+  border: `3px solid ${BRAND_GOLD}`,
   borderRadius: '50%',
-  boxShadow: '0 4px 12px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.12)',
+  boxShadow: '0 5px 0 #8a5a1e, 0 9px 14px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.15)',
   color: '#f2ede0',
   cursor: 'pointer',
   fontFamily: 'system-ui, sans-serif',
