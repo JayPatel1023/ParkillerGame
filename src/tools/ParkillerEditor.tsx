@@ -186,10 +186,10 @@ export default function ParkillerEditor() {
       <div style={{ flexShrink: 0 }}>
         <div style={{ marginBottom: 10, display: 'flex', gap: 8 }}>
           {([
-            ['back', '뒷모습 (여기서 점 찍기)'],
-            ['side', '옆모습 (참고용)'],
-            ['front', '앞모습 (참고용)'],
-            ['full', '전체 시트 (참고용)'],
+            ['back', 'back (click here)'],
+            ['side', 'side (reference)'],
+            ['front', 'front (reference)'],
+            ['full', 'full sheet (reference)'],
           ] as [View, string][]).map(([v, label]) => (
             <button
               key={v}
@@ -215,10 +215,10 @@ export default function ParkillerEditor() {
             border: `2px solid ${mode ? '#e0a030' : '#444'}`,
           }}
         >
-          {!canTrace && '⚠️ 이 사진에서는 점을 찍을 수 없어요 - "뒷모습" 탭으로 이동하세요.'}
-          {canTrace && mode === 'body' && '👉 지금: 몸통 실루엣을 따라 클릭하세요 (오른쪽 가장자리를 위→아래로)'}
-          {canTrace && mode === 'hood' && '👉 지금: 후드 실루엣을 따라 클릭하세요'}
-          {canTrace && !mode && '아래 버튼을 눌러서 "몸통 점 찍기" 또는 "후드 점 찍기"를 먼저 켜세요.'}
+          {!canTrace && '⚠️ Point-tracing only works on the "back" tab - switch to it.'}
+          {canTrace && mode === 'body' && '👉 Now: click along the body silhouette (top to bottom, either edge)'}
+          {canTrace && mode === 'hood' && '👉 Now: click along the hood silhouette'}
+          {canTrace && !mode && 'Click "Add body point" or "Add hood point" below to start.'}
         </div>
 
         <div style={{ marginBottom: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -227,20 +227,20 @@ export default function ParkillerEditor() {
             disabled={!canTrace}
             style={{ padding: '10px 16px', fontSize: 14, fontWeight: 700, background: mode === 'body' ? '#c97b1f' : '#2e2e2e', color: '#fff', border: '1px solid #666', borderRadius: 6 }}
           >
-            몸통 점 찍기 ({bodyProfile.length}개)
+            Add body point ({bodyProfile.length})
           </button>
           <button onClick={() => setBodyProfile((p) => p.slice(0, -1))} style={{ padding: '10px 14px', fontSize: 13 }}>
-            방금 점 취소
+            Undo last
           </button>
           <button
             onClick={() => setMode(mode === 'hood' ? null : 'hood')}
             disabled={!canTrace}
             style={{ padding: '10px 16px', fontSize: 14, fontWeight: 700, background: mode === 'hood' ? '#c97b1f' : '#2e2e2e', color: '#fff', border: '1px solid #666', borderRadius: 6 }}
           >
-            후드 점 찍기 ({hoodProfile.length}개)
+            Add hood point ({hoodProfile.length})
           </button>
           <button onClick={() => setHoodProfile((p) => p.slice(0, -1))} style={{ padding: '10px 14px', fontSize: 13 }}>
-            방금 점 취소
+            Undo last
           </button>
         </div>
 
@@ -253,7 +253,7 @@ export default function ParkillerEditor() {
             }}
             style={{ padding: '10px 14px', fontSize: 13, background: '#5a1e1e', color: '#fff', border: '1px solid #a33', borderRadius: 6 }}
           >
-            🗑️ 전체 점 지우고 처음부터
+            🗑️ Clear all points
           </button>
           <button
             onClick={() => {
@@ -263,7 +263,7 @@ export default function ParkillerEditor() {
             }}
             style={{ padding: '10px 14px', fontSize: 13, background: '#1e3a5a', color: '#fff', border: '1px solid #369', borderRadius: 6 }}
           >
-            ↩️ 지금 게임에 있는 모양으로 되돌리기
+            ↩️ Restore shipped shape
           </button>
         </div>
 
@@ -296,9 +296,11 @@ export default function ParkillerEditor() {
           )}
         </div>
         <p style={{ fontSize: 12, color: '#999', width: 380, lineHeight: 1.5 }}>
-          초록/청록/노랑 선은 이미 정확하게 맞춰져 있어요 - 다시 설정할 필요 없습니다. "몸통 점 찍기"를 누르고 실루엣 가장자리를 따라
-          여러 번 클릭하면, 오른쪽 3D 미리보기가 바로바로 바뀌는 걸 보실 수 있어요. 후드는 "후드 점 찍기"로 같은 방식으로 하시면 됩니다.
-          팔은 클릭이 아니라 맨 오른쪽 숫자칸으로 조정하세요 ("옆모습"/"앞모습" 탭 보면서).
+          The green/cyan/yellow calibration lines are already set correctly - no need to touch
+          them. Click "Add body point", then click along the silhouette edge several times - the
+          3D preview on the right updates live. Do the hood the same way with "Add hood point".
+          Arms aren't click-traced (not lathe-symmetric) - adjust them with the number fields on
+          the far right instead, while looking at the "side"/"front" tabs.
         </p>
       </div>
 
@@ -325,7 +327,7 @@ export default function ParkillerEditor() {
             <OrbitControls target={[0, 0.7, 0]} />
           </Canvas>
         </div>
-        <p style={{ fontSize: 12, color: '#999' }}>드래그해서 돌려보면서, 여러 각도에서 사진이랑 비교해보세요 (한 각도만 보지 마시고).</p>
+        <p style={{ fontSize: 12, color: '#999' }}>Drag to orbit. Compare this silhouette against the photo from several angles, not just one.</p>
       </div>
 
       {/* Numeric controls + export */}
@@ -341,7 +343,7 @@ export default function ParkillerEditor() {
             onClick={() => navigator.clipboard.writeText(json)}
             style={{ padding: '10px 16px', fontSize: 14, fontWeight: 700, background: '#2a6b3a', color: '#fff', border: '1px solid #4a9', borderRadius: 6 }}
           >
-            📋 완성됐으면 여기 눌러서 복사 → 저한테 붙여넣기
+            📋 Copy config JSON when done
           </button>
         </div>
         <textarea readOnly value={json} style={{ width: '100%', height: 320, fontSize: 10, fontFamily: 'monospace' }} />
