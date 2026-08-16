@@ -5,6 +5,7 @@ import { getColor } from '../core/colorPalette'
 import type { TurnManagerLike } from '../core/gameFlow/turnManagerLike'
 import { useTurnManager } from '../hooks/useTurnManager'
 import { BoardScene } from '../scene/BoardScene'
+import { Confetti } from './Confetti'
 import { RewardToast } from './RewardToast'
 
 const BRAND_GOLD = '#4a78d8'
@@ -136,10 +137,36 @@ export function GameBoardScreen({
 
       {winner && (
         <div style={overlayStyle}>
-          <div style={{ color: getColor(winner.color), fontSize: 32, fontWeight: 'bold' }}>¡{winner.color} gana!</div>
-          <button className="chunky-btn" onClick={onExit} style={{ ...rollButtonStyle(true), marginTop: 8 }}>
-            Volver al inicio
-          </button>
+          <Confetti />
+          <div
+            style={{
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 18,
+              padding: '32px 44px',
+              borderRadius: 24,
+              background: 'linear-gradient(180deg, rgba(255,255,255,0.06), transparent 25%), linear-gradient(165deg, rgba(58, 46, 30, 0.85), rgba(30, 23, 14, 0.85))',
+              border: `3px solid ${getColor(winner.color)}`,
+              boxShadow: `0 12px 34px rgba(0,0,0,0.55), 0 0 40px 4px ${getColor(winner.color)}55, inset 0 1px 0 rgba(255,255,255,0.12)`,
+            }}
+          >
+            <div
+              style={{
+                color: getColor(winner.color),
+                fontSize: 'clamp(26px, 7vw, 36px)',
+                fontWeight: 800,
+                textShadow: '0 2px 0 rgba(0,0,0,0.4), 0 0 22px currentColor',
+                textAlign: 'center',
+              }}
+            >
+              ¡{winner.color} gana!
+            </div>
+            <button className="chunky-btn" onClick={onExit} style={rollButtonStyle(true)}>
+              Volver al inicio
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -215,7 +242,7 @@ function rollButtonStyle(enabled: boolean): React.CSSProperties {
     letterSpacing: 0.3,
     color: enabled ? '#eef4ff' : '#9a9a90',
     background: enabled
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0) 40%), linear-gradient(180deg, #c8dcff 0%, #4a78d8 55%, #2850a8 100%)'
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0) 40%), linear-gradient(180deg, #dcebff 0%, #3d76e6 48%, #16409c 100%)'
       : 'linear-gradient(165deg, #6b6b62, #4a4a44)',
     border: `3px solid ${enabled ? '#1a3468' : '#3a3a34'}`,
     borderRadius: 999,

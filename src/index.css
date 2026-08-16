@@ -39,6 +39,44 @@ button {
   filter: brightness(0.92);
 }
 
+/* Confetti.tsx - each piece falls from top to well past the bottom of the overlay, drifting
+   sideways by its own random --drift and tumbling a full turn, so the burst reads as scattered
+   debris rather than uniform rain. */
+@keyframes confetti-fall {
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--drift), 115vh) rotate(600deg);
+    opacity: 0.9;
+  }
+}
+
+/* StartScreen's primary CTA - a slow breathing glow to draw the eye first, per researched "bold
+   accent + visual hierarchy" guidance (see StartScreen.tsx's own comment on chunky-btn-pulse). */
+@keyframes cta-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 7px 0 #1a3468,
+      0 12px 20px rgba(0, 0, 0, 0.45),
+      inset 0 2px 1px rgba(255, 255, 255, 0.55),
+      0 0 0 rgba(74, 120, 216, 0);
+  }
+  50% {
+    box-shadow:
+      0 7px 0 #1a3468,
+      0 12px 20px rgba(0, 0, 0, 0.45),
+      inset 0 2px 1px rgba(255, 255, 255, 0.55),
+      0 0 26px 6px rgba(120, 165, 255, 0.55);
+  }
+}
+
+.chunky-btn-pulse {
+  animation: cta-pulse 2.4s ease-in-out infinite;
+}
+
 @keyframes game-screen-in {
   from {
     opacity: 0;
