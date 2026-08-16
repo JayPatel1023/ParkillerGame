@@ -20,6 +20,11 @@ import { GameBoardScreen, type GameSession } from './GameBoardScreen'
 // Verified against a real Photon App ID with two independent browser clients: room creation,
 // joining, seat assignment, bot fill-in for empty seats, the game-start broadcast, and a live dice
 // roll all relayed correctly and produced identical state on both sides.
+//
+// Reported directly, with a screenshot: this screen still looked like an unstyled dev tool (plain
+// dark background, default HTML <select>/<input>, flat buttons) right next to a start screen and
+// in-game HUD that had both since been restyled - same carved-wood card/button language ported
+// here so the flow doesn't visibly change games partway through.
 
 const REGION = 'us' // TODO: region picker, or Photon's own Best Region flow - fixed for Phase 1
 const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // no 0/O/1/I - easier to read aloud/type
@@ -192,77 +197,85 @@ export default function OnlineLobbyScreen() {
 
   return (
     <div style={wrapperStyle}>
-      <h1 style={{ margin: 0 }}>Parkiller - Online</h1>
-
-      {phase === 'connecting' && <p>Conectando a Photon...</p>}
-
-      {phase === 'error' && (
-        <div>
-          <p style={{ color: '#e8a15c' }}>{errorMessage}</p>
+      <div style={cardStyle}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 8 }}>
+          <img src="/logo-badge.png" alt="Parkiller" style={{ width: 56, height: 56, filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.5))' }} />
+          <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: '#ffe9b8', textShadow: '0 2px 0 #8a5a1e, 0 4px 10px rgba(0,0,0,0.5)' }}>
+            Jugar online
+          </h1>
         </div>
-      )}
 
-      {phase === 'menu' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: 320 }}>
-          <div>
-            <h3>Crear sala</h3>
-            <label>
-              Jugadores:{' '}
-              <select value={playerCount} onChange={(e) => setPlayerCount(Number(e.target.value))}>
-                {[2, 3, 4, 5, 6].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button onClick={createRoom} style={buttonStyle}>
-              Crear
-            </button>
-          </div>
-          <div>
-            <h3>Unirse a sala</h3>
-            <input
-              value={roomCodeInput}
-              onChange={(e) => setRoomCodeInput(e.target.value)}
-              placeholder="Código de sala"
-              style={{ padding: 8, fontSize: 16, textTransform: 'uppercase' }}
-            />
-            <button onClick={joinRoom} style={buttonStyle}>
-              Unirse
-            </button>
-          </div>
-        </div>
-      )}
+        {phase === 'connecting' && <p style={hintStyle}>Conectando a Photon...</p>}
 
-      {(phase === 'creating' || phase === 'joining') && <p>...</p>}
+        {phase === 'error' && <p style={{ ...hintStyle, color: '#e8a15c' }}>{errorMessage}</p>}
 
-      {phase === 'lobby' && connectionRef.current && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <p>
-            Código de sala: <strong>{roomCode}</strong>
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {TURN_ORDER_BY_COUNT[playerCount].map((color) => {
-              const occupant = seats.find((a) => a.customProperties.color === color)
-              return (
-                <div key={color} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ width: 14, height: 14, borderRadius: '50%', background: getColor(color) }} />
-                  <span>{color}</span>
-                  <span style={{ color: '#999' }}>{occupant ? (occupant.isLocal ? '(vos)' : 'jugador conectado') : 'vacío -> bot'}</span>
+        {phase === 'menu' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 22, width: 340 }}>
+            <div style={sectionStyle}>
+              <h3 style={sectionTitleStyle}>Crear sala</h3>
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ ...hintStyle, marginBottom: 8 }}>Jugadores</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {[2, 3, 4, 5, 6].map((n) => (
+                    <button key={n} onClick={() => setPlayerCount(n)} style={countButtonStyle(n === playerCount)}>
+                      {n}
+                    </button>
+                  ))}
                 </div>
-              )
-            })}
+              </div>
+              <button onClick={createRoom} style={chunkyButtonStyle(true)}>
+                Crear
+              </button>
+            </div>
+
+            <div style={sectionStyle}>
+              <h3 style={sectionTitleStyle}>Unirse a sala</h3>
+              <input
+                value={roomCodeInput}
+                onChange={(e) => setRoomCodeInput(e.target.value)}
+                placeholder="CÓDIGO DE SALA"
+                style={inputStyle}
+              />
+              <div style={{ height: 12 }} />
+              <button onClick={joinRoom} disabled={!roomCodeInput.trim()} style={chunkyButtonStyle(Boolean(roomCodeInput.trim()))}>
+                Unirse
+              </button>
+            </div>
           </div>
-          {connectionRef.current.isMasterClient() ? (
-            <button onClick={startGame} style={buttonStyle}>
-              Empezar partida
-            </button>
-          ) : (
-            <p>Esperando a que el anfitrión empiece la partida...</p>
-          )}
-        </div>
-      )}
+        )}
+
+        {(phase === 'creating' || phase === 'joining') && <p style={hintStyle}>...</p>}
+
+        {phase === 'lobby' && connectionRef.current && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, width: 340 }}>
+            <div style={sectionStyle}>
+              <div style={hintStyle}>Código de sala</div>
+              <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: 3, color: '#ffe9b8', textShadow: '0 2px 0 #8a5a1e' }}>{roomCode}</div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {TURN_ORDER_BY_COUNT[playerCount].map((color) => {
+                const occupant = seats.find((a) => a.customProperties.color === color)
+                return (
+                  <div key={color} style={seatRowStyle}>
+                    <span style={{ ...seatDotStyle, background: getColor(color) }} />
+                    <span style={{ fontWeight: 700, flex: 1 }}>{color}</span>
+                    <span style={{ color: occupant ? '#bfe8bf' : '#a89a80', fontSize: 13 }}>
+                      {occupant ? (occupant.isLocal ? '(vos)' : 'jugador conectado') : 'vacío -> bot'}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+            {connectionRef.current.isMasterClient() ? (
+              <button onClick={startGame} style={chunkyButtonStyle(true)}>
+                Empezar partida
+              </button>
+            ) : (
+              <p style={hintStyle}>Esperando a que el anfitrión empiece la partida...</p>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -270,24 +283,119 @@ export default function OnlineLobbyScreen() {
 const wrapperStyle: React.CSSProperties = {
   height: '100vh',
   display: 'flex',
-  flexDirection: 'column',
   alignItems: 'center',
   justifyContent: 'center',
-  gap: 24,
   color: '#f2ede0',
-  background: '#1a1310',
   fontFamily: 'system-ui, sans-serif',
+  backgroundImage: 'radial-gradient(ellipse at center, rgba(10,8,4,0.35) 0%, rgba(8,6,3,0.82) 100%), url(/boards/board_4p.jpg)',
+  backgroundSize: 'cover',
+  backgroundPosition: 'center',
 }
 
-const buttonStyle: React.CSSProperties = {
-  display: 'block',
-  marginTop: 8,
-  padding: '10px 18px',
-  fontSize: 15,
-  fontWeight: 600,
-  background: '#ccb154',
-  color: '#2a2a2a',
-  border: 'none',
-  borderRadius: 8,
-  cursor: 'pointer',
+// Same carved-wood card as StartScreen's own title/button panel - reused as a plain style object
+// (not a shared component) since each screen's internal layout differs enough that a shared
+// wrapper component would need as many override props as it saves.
+const cardStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  padding: '36px 44px',
+  borderRadius: 28,
+  background: 'linear-gradient(180deg, rgba(255,255,255,0.05), transparent 25%), linear-gradient(165deg, rgba(58, 46, 30, 0.85), rgba(30, 23, 14, 0.85))',
+  border: '2px solid #8a5a1e',
+  boxShadow: '0 10px 30px rgba(0,0,0,0.5), inset 0 0 0 3px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)',
+}
+
+const sectionStyle: React.CSSProperties = {
+  padding: '16px 18px',
+  borderRadius: 14,
+  background: 'rgba(0,0,0,0.2)',
+  border: '1px solid rgba(204,177,84,0.4)',
+}
+
+const sectionTitleStyle: React.CSSProperties = {
+  margin: '0 0 12px 0',
+  fontSize: 16,
+  fontWeight: 700,
+  color: '#ffe9b8',
+}
+
+const hintStyle: React.CSSProperties = {
+  fontSize: 13,
+  color: '#d8d2c2',
+}
+
+const seatRowStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+  padding: '8px 12px',
+  borderRadius: 10,
+  background: 'rgba(0,0,0,0.2)',
+  border: '1px solid rgba(204,177,84,0.25)',
+}
+
+const seatDotStyle: React.CSSProperties = {
+  width: 14,
+  height: 14,
+  borderRadius: '50%',
+  boxShadow: '0 0 6px rgba(0,0,0,0.5)',
+  flexShrink: 0,
+}
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  boxSizing: 'border-box',
+  padding: '12px 14px',
+  fontSize: 16,
+  fontWeight: 700,
+  letterSpacing: 2,
+  textTransform: 'uppercase',
+  color: '#ffe9b8',
+  background: 'rgba(0,0,0,0.35)',
+  border: '2px solid #8a5a1e',
+  borderRadius: 10,
+  boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.4)',
+}
+
+// Same chunky carved-wood recipe used across StartScreen/PlayerCountSelector/GameBoardScreen: a
+// solid (non-blurred) offset bottom edge reads as physical depth, not just a bigger shadow.
+function chunkyButtonStyle(enabled: boolean): React.CSSProperties {
+  return {
+    width: '100%',
+    boxSizing: 'border-box',
+    padding: '14px 24px',
+    fontSize: 17,
+    fontWeight: 800,
+    letterSpacing: 0.3,
+    color: enabled ? '#4a2e12' : '#8a8a80',
+    background: enabled
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0) 40%), linear-gradient(180deg, #ffe08a 0%, #ecb84a 55%, #d9982e 100%)'
+      : 'linear-gradient(180deg, #8a8a80, #6a6a60)',
+    border: `3px solid ${enabled ? '#8a5a1e' : '#4a4a44'}`,
+    borderRadius: 16,
+    boxShadow: enabled
+      ? '0 5px 0 #8a5a1e, 0 9px 16px rgba(0,0,0,0.4), inset 0 2px 1px rgba(255,255,255,0.55)'
+      : '0 5px 0 #3a3a34, 0 8px 12px rgba(0,0,0,0.3)',
+    textShadow: enabled ? '0 1px 0 rgba(255,255,255,0.35)' : 'none',
+    cursor: enabled ? 'pointer' : 'default',
+  }
+}
+
+function countButtonStyle(selected: boolean): React.CSSProperties {
+  return {
+    width: 44,
+    height: 44,
+    fontSize: 17,
+    fontWeight: 800,
+    color: '#4a2e12',
+    background: selected
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0) 40%), linear-gradient(180deg, #fff2c4 0%, #ffcf5e 55%, #e8a82e 100%)'
+      : 'linear-gradient(180deg, rgba(255,255,255,0.4), rgba(255,255,255,0) 40%), linear-gradient(180deg, #d9b06a 0%, #b8823a 55%, #96631f 100%)',
+    border: `2px solid ${selected ? '#e0a030' : '#8a5a1e'}`,
+    borderRadius: 12,
+    boxShadow: selected
+      ? '0 3px 0 #a06a10, 0 6px 10px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.6)'
+      : '0 3px 0 #6a4515, 0 5px 8px rgba(0,0,0,0.35), inset 0 1px 1px rgba(255,255,255,0.4)',
+    cursor: 'pointer',
+  }
 }
