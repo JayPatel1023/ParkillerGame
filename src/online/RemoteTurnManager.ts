@@ -16,10 +16,9 @@ import type { RoomTransport } from './roomTransport'
  *
  * requestRoll()/submitMove() only ever send an intent and return without touching local state -
  * the actual local game state only changes once the Master's corresponding broadcast arrives and
- * is replayed here. This means a remote player's own action doesn't visually animate the instant
- * they click (no synchronous mutation for useTurnManager's chooseMove() to snapshot around) - the
- * underlying game state is still always correct the moment the broadcast lands, but the smooth
- * hop animation for network-originated moves is a known gap for this pass, not attempted here.
+ * is replayed here (this.inner.submitMove(piece) below), which is what actually fires
+ * moveAnimationReady - so a remote player's own move animates once the broadcast lands, same as
+ * everyone else's, even though nothing here builds that animation request directly.
  */
 export class RemoteTurnManager implements TurnManagerLike {
   readonly turnStarted: TurnManager['turnStarted']
@@ -28,6 +27,7 @@ export class RemoteTurnManager implements TurnManagerLike {
   readonly moveChoicesReady: TurnManager['moveChoicesReady']
   readonly moveNotPossible: TurnManager['moveNotPossible']
   readonly moveApplied: TurnManager['moveApplied']
+  readonly moveAnimationReady: TurnManager['moveAnimationReady']
   readonly pieceEliminatedByDoubles: TurnManager['pieceEliminatedByDoubles']
   readonly rewardOffered: TurnManager['rewardOffered']
   readonly rewardForfeited: TurnManager['rewardForfeited']
@@ -51,6 +51,7 @@ export class RemoteTurnManager implements TurnManagerLike {
     this.moveChoicesReady = inner.moveChoicesReady
     this.moveNotPossible = inner.moveNotPossible
     this.moveApplied = inner.moveApplied
+    this.moveAnimationReady = inner.moveAnimationReady
     this.pieceEliminatedByDoubles = inner.pieceEliminatedByDoubles
     this.rewardOffered = inner.rewardOffered
     this.rewardForfeited = inner.rewardForfeited

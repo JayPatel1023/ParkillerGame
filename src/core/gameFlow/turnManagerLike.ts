@@ -1,6 +1,6 @@
 import type { Piece } from '../pieces/piece'
 import type { MoveOption, MoveResult } from '../rules/moveOption'
-import type { DiceRoll, ParkillerMoveResult, RewardGrant } from './turnManager'
+import type { DiceRoll, MoveAnimationInfo, ParkillerMoveResult, RewardGrant } from './turnManager'
 import type { PlayerState } from './playerState'
 
 /** The read side of TurnManager's own EventEmitter<T> - deliberately without .emit(), so nothing
@@ -25,6 +25,7 @@ export interface TurnManagerLike {
   readonly moveChoicesReady: Listenable<MoveOption[]>
   readonly moveNotPossible: Listenable<void>
   readonly moveApplied: Listenable<MoveResult>
+  readonly moveAnimationReady: Listenable<MoveAnimationInfo>
   readonly pieceEliminatedByDoubles: Listenable<Piece>
   readonly rewardOffered: Listenable<RewardGrant>
   readonly rewardForfeited: Listenable<RewardGrant>
