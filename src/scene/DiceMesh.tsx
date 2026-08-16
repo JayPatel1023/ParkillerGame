@@ -146,6 +146,14 @@ function createDiceFaceTexture(value: number, bodyColors: [string, string], pipC
 const NUDGE_BOUNCE_HEIGHT = 0.06
 const NUDGE_FREQ = 3.2
 
+// Settle punch + sparkle flash, requested directly ("반짝임/펄스" - a flash/pulse the instant a
+// roll's result appears): the die used to just stop tumbling and sit there, no reveal moment at
+// all. A brief overshoot scale-bounce plus a quick white flash sphere reads as "the result landed"
+// - both fire together, timed off the same wasRolling->!rolling transition the orientation-settle
+// already used.
+const SETTLE_PULSE_DURATION = 0.35
+const SETTLE_FLASH_DURATION = 0.22
+
 export function DiceMesh({
   value,
   rolling,
@@ -176,7 +184,9 @@ export function DiceMesh({
   black?: boolean
 }) {
   const meshRef = useRef<Mesh>(null)
+  const flashRef = useRef<Mesh>(null)
   const wasRolling = useRef(rolling)
+  const settleElapsedRef = useRef(Infinity)
 
   const size = black ? BLACK_DIE_SIZE : DIE_SIZE
   // The die's own geometry is centered on its local origin, so resting it on the flat board plane
@@ -232,6 +242,28 @@ export function DiceMesh({
       mesh.position.y = 0
       mesh.rotation.z = 0
     }
+
+    // Scale channel is untouched by the rolling/nudge logic above, so this layers on top of
+    // either state with no interference.
+    settleElapsedRef.current += delta
+    if (settleElapsedRef.current < SETTLE_PULSE_DURATION) {
+      const st = settleElapsedRef.current / SETTLE_PULSE_DURATION
+      const bounce = Math.sin(st * Math.PI) * (1 - st)
+      mesh.scale.setScalar(1 + bounce * 0.28)
+    } else if (mesh.scale.x !== 1) {
+      mesh.scale.setScalar(1)
+    }
+
+    if (flashRef.current) {
+      if (settleElapsedRef.current < SETTLE_FLASH_DURATION) {
+        const ft = settleElapsedRef.current / SETTLE_FLASH_DURATION
+        flashRef.current.visible = true
+        flashRef.current.scale.setScalar(size * (0.7 + ft * 1.6))
+        ;(flashRef.current.material as THREE.MeshBasicMaterial).opacity = 1 - ft
+      } else if (flashRef.current.visible) {
+        flashRef.current.visible = false
+      }
+    }
   })
 
   useEffect(() => {
@@ -239,6 +271,7 @@ export function DiceMesh({
     // count actually ends up facing up instead of wherever the spin happened to stop.
     if (wasRolling.current && !rolling && meshRef.current) {
       meshRef.current.rotation.set(0, 0, 0)
+      settleElapsedRef.current = 0
     }
     wasRolling.current = rolling
   }, [rolling])
@@ -252,6 +285,10 @@ export function DiceMesh({
         {materials.map((mat, i) => (
           <primitive key={i} object={mat} attach={`material-${i}`} />
         ))}
+      </mesh>
+      <mesh ref={flashRef} visible={false}>
+        <sphereGeometry args={[1, 12, 12]} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={0} depthWrite={false} />
       </mesh>
     </group>
   )

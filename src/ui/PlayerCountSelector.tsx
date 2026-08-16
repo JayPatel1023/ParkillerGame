@@ -20,7 +20,7 @@ function countButtonStyle(): React.CSSProperties {
     fontSize: 'clamp(17px, 5vw, 24px)',
     fontWeight: 800,
     color: '#eef4ff',
-    background: 'linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0) 45%), linear-gradient(180deg, #c8dcff 0%, #4a78d8 55%, #2850a8 100%)',
+    background: 'linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0) 45%), linear-gradient(180deg, #dcebff 0%, #3d76e6 48%, #16409c 100%)',
     border: '3px solid #1a3468',
     borderRadius: '50%',
     boxShadow: '0 5px 0 #1a3468, 0 9px 14px rgba(0,0,0,0.4), inset 0 2px 1px rgba(255,255,255,0.55)',
