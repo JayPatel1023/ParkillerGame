@@ -1,5 +1,5 @@
 import type { BoardDefinition } from '../core/board/boardDefinition'
-import type { Piece, PieceState } from '../core/pieces/piece'
+import type { Piece, PieceSnapshot } from '../core/pieces/piece'
 
 export function getPieceWaypoint(piece: Piece, definition: BoardDefinition): [number, number] | null {
   const lane = definition.playerLanes.find((l) => l.color === piece.color)
@@ -19,15 +19,6 @@ export function getPieceWaypoint(piece: Piece, definition: BoardDefinition): [nu
   }
 }
 
-export interface PieceSnapshot {
-  state: PieceState
-  trackPosition: number
-  corridorPosition: number
-}
-
-export function snapshotPiece(piece: Piece): PieceSnapshot {
-  return { state: piece.state, trackPosition: piece.trackPosition, corridorPosition: piece.corridorPosition }
-}
 
 // No legitimate single move produces anywhere near this many hops. Two dice cap a normal move at
 // 12 (double sixes), but a capture/finish reward (PC 5) legitimately moves a piece up to 20

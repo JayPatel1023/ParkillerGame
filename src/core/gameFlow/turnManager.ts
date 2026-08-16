@@ -1,7 +1,7 @@
 import type { BoardData } from '../board/boardData'
 import { Dice, type DiceLike } from '../dice'
 import type { PieceColor } from '../pieceColor'
-import type { Piece } from '../pieces/piece'
+import { snapshotPiece, type Piece, type PieceSnapshot } from '../pieces/piece'
 import { applyMove, getValidMoves, wouldCapture } from '../rules/parchisRules'
 import type { DiceSource, MoveOption, MoveResult } from '../rules/moveOption'
 import type { RuleSettings } from '../rules/ruleSettings'
@@ -19,6 +19,25 @@ export interface ParkillerMoveResult {
   before: number
   after: number
   capturedPawn: Piece | null
+  capturedParkillerColor: PieceColor | null
+}
+
+/** Everything BoardScene needs to play a piece's move as a square-by-square hop instead of an
+ * instant snap. Emitted directly from TurnManager.submitMove() - not built by whoever *called*
+ * submitMove() - so every path that ends up mutating a piece gets this for free: a local human's
+ * click, the online host's own click (via HostTurnManagerBridge), a bot's move (BotController calls
+ * submitMoveForBot(), bypassing any UI layer entirely), and a remote client replaying the host's
+ * broadcast (RemoteTurnManager owns its own real TurnManager and calls submitMove() on it once the
+ * broadcast lands). Reported directly: bot moves in particular had no hop animation at all, since
+ * the previous approach (useTurnManager's chooseMove() snapshotting before/after around its own
+ * call to submitMove()) only ever ran for the one path that went through that specific function -
+ * BotController and RemoteTurnManager's broadcast replay both call submitMove() directly, so their
+ * moves applied instantly with no animation and no way for that UI-layer snapshot to run at all. */
+export interface MoveAnimationInfo {
+  piece: Piece
+  before: PieceSnapshot
+  after: PieceSnapshot
+  capturedPiece: Piece | null
   capturedParkillerColor: PieceColor | null
 }
 
@@ -75,6 +94,7 @@ export class TurnManager {
   readonly moveChoicesReady = new EventEmitter<MoveOption[]>()
   readonly moveNotPossible = new EventEmitter<void>()
   readonly moveApplied = new EventEmitter<MoveResult>()
+  readonly moveAnimationReady = new EventEmitter<MoveAnimationInfo>()
   readonly pieceEliminatedByDoubles = new EventEmitter<Piece>()
   readonly rewardOffered = new EventEmitter<RewardGrant>()
   readonly rewardForfeited = new EventEmitter<RewardGrant>()
@@ -275,6 +295,7 @@ export class TurnManager {
     const move = this.pendingMoves?.find((m) => m.piece === chosenPiece)
     if (!move) return null
     const isRewardMove = move.diceSource === 'reward'
+    const before = snapshotPiece(chosenPiece)
 
     const result = applyMove(this.board, move, this.players, this.settings, this.parkillerCapturableThisRoll)
     // PK6/PK8: the window to kill the Parkiller with a common piece closes after this roll's first
@@ -295,6 +316,13 @@ export class TurnManager {
     }
 
     this.moveApplied.emit(result)
+    this.moveAnimationReady.emit({
+      piece: chosenPiece,
+      before,
+      after: snapshotPiece(chosenPiece),
+      capturedPiece: result.capturedPiece,
+      capturedParkillerColor: result.capturedParkillerColor,
+    })
 
     if (hasWon(this.currentPlayer)) {
       this.gameWon.emit(this.currentPlayer)

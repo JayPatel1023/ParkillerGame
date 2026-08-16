@@ -1,29 +1,22 @@
 import { useEffect, useState } from 'react'
 import type { PlayerState } from '../core/gameFlow/playerState'
-import type { DiceRoll, ParkillerMoveResult, RewardGrant } from '../core/gameFlow/turnManager'
+import type { DiceRoll, MoveAnimationInfo, ParkillerMoveResult, RewardGrant } from '../core/gameFlow/turnManager'
 import type { TurnManagerLike } from '../core/gameFlow/turnManagerLike'
-import type { PieceColor } from '../core/pieceColor'
 import type { Piece } from '../core/pieces/piece'
 import type { MoveOption } from '../core/rules/moveOption'
-import { snapshotPiece, type PieceSnapshot } from '../scene/piecePosition'
 
-export interface MoveAnimationRequest {
-  piece: Piece
-  before: PieceSnapshot
-  after: PieceSnapshot
-  /**
-   * The opponent piece this move captured, if any. Rules apply a capture the instant the move is
-   * submitted (the captured piece's own state flips to InYard right away, same as everything
-   * else), but visually it should stay put until the capturing piece's hop animation actually
-   * arrives - see BoardScene, which keeps rendering this piece at the capture square for as long
-   * as `moveAnimation` names it here, only letting it snap home once the animation completes.
-   */
-  capturedPiece: Piece | null
-  /** Same idea as capturedPiece, but for an opposing Parkiller (PK6) this move eliminated - see
-   * BoardScene, which keeps rendering that Parkiller at the capture square until this animation
-   * completes instead of letting it vanish the instant its state flips to Eliminated. */
-  capturedParkillerColor: PieceColor | null
-}
+/**
+ * The opponent piece a move captured, if any. Rules apply a capture the instant the move is
+ * submitted (the captured piece's own state flips to InYard right away, same as everything else),
+ * but visually it should stay put until the capturing piece's hop animation actually arrives - see
+ * BoardScene, which keeps rendering this piece at the capture square for as long as `moveAnimation`
+ * names it here, only letting it snap home once the animation completes. Same idea for
+ * capturedParkillerColor, but for an opposing Parkiller (PK6) the move eliminated.
+ *
+ * Shape comes straight from TurnManager's own moveAnimationReady event (see MoveAnimationInfo) -
+ * re-exported under this name since BoardScene/GameBoardScreen already import it from here.
+ */
+export type MoveAnimationRequest = MoveAnimationInfo
 
 export function useTurnManager(turnManager: TurnManagerLike) {
   const [currentPlayer, setCurrentPlayer] = useState<PlayerState>(turnManager.currentPlayer)
@@ -59,6 +52,10 @@ export function useTurnManager(turnManager: TurnManagerLike) {
         // both happen synchronously within the same submitMove call, so React batches them together.
         setPendingReward(null)
       }),
+      // Fires from inside TurnManager.submitMove() itself, not built here around a UI-triggered
+      // call to it (as this used to be) - see MoveAnimationInfo's own comment for why that missed
+      // bot moves and remote clients' own moves entirely.
+      turnManager.moveAnimationReady.on((info) => setMoveAnimation(info)),
       turnManager.pieceEliminatedByDoubles.on((piece) => setEliminatedByDoubles(piece)),
       turnManager.rewardOffered.on((grant) => {
         setPendingReward(grant)
@@ -80,16 +77,7 @@ export function useTurnManager(turnManager: TurnManagerLike) {
   }
 
   function chooseMove(piece: Piece) {
-    const before = snapshotPiece(piece)
-    const result = turnManager.submitMove(piece) // mutates `piece` synchronously - after-snapshot below is post-move
-    const after = snapshotPiece(piece)
-    setMoveAnimation({
-      piece,
-      before,
-      after,
-      capturedPiece: result?.capturedPiece ?? null,
-      capturedParkillerColor: result?.capturedParkillerColor ?? null,
-    })
+    turnManager.submitMove(piece)
   }
 
   function clearMoveAnimation() {

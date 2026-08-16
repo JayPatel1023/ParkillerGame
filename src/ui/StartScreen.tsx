@@ -46,10 +46,11 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
           style={{ width: 168, height: 168, filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.5))' }}
         />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: 300 }}>
-          <button onClick={onPlayLocal} style={chunkyButtonStyle(true)}>
+          <button className="chunky-btn" onClick={onPlayLocal} style={chunkyButtonStyle(true)}>
             Jugar local
           </button>
           <button
+            className="chunky-btn"
             disabled={!canPlayOnline}
             title={canPlayOnline ? undefined : 'Falta configurar VITE_PHOTON_APP_ID'}
             onClick={() => (window.location.hash = '#online')}

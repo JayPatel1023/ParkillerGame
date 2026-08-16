@@ -32,6 +32,7 @@ export class HostTurnManagerBridge implements TurnManagerLike {
   readonly moveChoicesReady: TurnManager['moveChoicesReady']
   readonly moveNotPossible: TurnManager['moveNotPossible']
   readonly moveApplied: TurnManager['moveApplied']
+  readonly moveAnimationReady: TurnManager['moveAnimationReady']
   readonly pieceEliminatedByDoubles: TurnManager['pieceEliminatedByDoubles']
   readonly rewardOffered: TurnManager['rewardOffered']
   readonly rewardForfeited: TurnManager['rewardForfeited']
@@ -64,6 +65,7 @@ export class HostTurnManagerBridge implements TurnManagerLike {
     this.moveChoicesReady = inner.moveChoicesReady
     this.moveNotPossible = inner.moveNotPossible
     this.moveApplied = inner.moveApplied
+    this.moveAnimationReady = inner.moveAnimationReady
     this.pieceEliminatedByDoubles = inner.pieceEliminatedByDoubles
     this.rewardOffered = inner.rewardOffered
     this.rewardForfeited = inner.rewardForfeited

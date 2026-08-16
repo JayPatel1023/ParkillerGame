@@ -153,13 +153,19 @@ const INTRO_STAGGER = 0.09 // seconds between each piece's drop-in entrance, for
 // When multiple pieces land on the same square, they'd otherwise render fully overlapping and
 // look like a single piece (or like a piece vanished/jumped oddly when one splits off to move).
 // Spread them into a small tight cluster instead, same visual language as the yard's 4 slots.
+// Reported directly: even with this offset, overlapping pieces still read as one piece - +0.11 was
+// already the effective footprint's own radius, so neighbors barely cleared each other's silhouette.
+// Widened to +0.16/-0.22 (still inside a track square, checked against estimateSquareSize's own
+// per-board minimum). Also widened again after pulling the default camera back further (see
+// CAMERA_DISTANCE) for a separate report - everything on the board reads smaller on screen at that
+// distance, so the same world-space offset became less visually distinct than when it was tuned.
 const STACK_OFFSETS: [number, number][] = [
   [0, 0],
-  [-0.11, -0.11],
-  [0.11, -0.11],
-  [-0.11, 0.11],
-  [0.11, 0.11],
-  [0, -0.16],
+  [-0.16, -0.16],
+  [0.16, -0.16],
+  [-0.16, 0.16],
+  [0.16, 0.16],
+  [0, -0.22],
 ]
 
 // Only OnTrack pieces stand on a raised TrackTile mesh (see BASE_HEIGHT); every other state rests
@@ -173,6 +179,26 @@ function stackKeyFor(piece: Piece): string | null {
   if (piece.state === 'OnTrack') return `track-${piece.trackPosition}`
   if (piece.state === 'InHomeCorridor') return `corridor-${piece.color}-${piece.corridorPosition}`
   return null // InYard has its own 4 distinct slots already; Finished pieces don't need separating
+}
+
+// A Parkiller shares the same track squares pawns walk (including opposing colors', on safe
+// squares) but is a different type entirely (Parkiller, not Piece) - rendered in its own separate
+// loop below, not part of `allPieces`. Reported directly: a Parkiller sharing a square with a pawn
+// still rendered fully overlapping even after the pawn-only stacking above was widened, since the
+// Parkiller was never part of that grouping at all. Both loops now build one shared stackGroups
+// map (identity strings, not object references, since the two loops can't compare a Piece and a
+// Parkiller by reference) so every occupant of a square - pawns and Parkillers together - ends up
+// in the same offset cluster.
+function pawnOccupantId(piece: Piece): string {
+  return `pawn-${piece.color}-${piece.pieceIndex}`
+}
+
+function parkillerOccupantId(color: PieceColor): string {
+  return `parkiller-${color}`
+}
+
+function parkillerStackKey(parkiller: PlayerState['parkiller']): string | null {
+  return parkiller.state === 'InPlay' ? `track-${parkiller.trackPosition}` : null
 }
 
 interface CaptureFlight {
@@ -330,13 +356,14 @@ export function BoardScene({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parkillerAnimation, definition])
 
-  const stackGroups = new Map<string, Piece[]>()
-  for (const piece of allPieces) {
-    const key = stackKeyFor(piece)
-    if (!key) continue
+  const stackGroups = new Map<string, string[]>()
+  function addToStack(key: string | null, id: string) {
+    if (!key) return
     if (!stackGroups.has(key)) stackGroups.set(key, [])
-    stackGroups.get(key)!.push(piece)
+    stackGroups.get(key)!.push(id)
   }
+  for (const piece of allPieces) addToStack(stackKeyFor(piece), pawnOccupantId(piece))
+  for (const player of players) addToStack(parkillerStackKey(player.parkiller), parkillerOccupantId(player.color))
 
   return (
     <Canvas shadows>
@@ -403,7 +430,7 @@ export function BoardScene({
         const group = stackKey ? stackGroups.get(stackKey) : undefined
         const restPosition: [number, number, number] = worldPos
         if (group && group.length > 1) {
-          const [ox, oz] = STACK_OFFSETS[group.indexOf(piece) % STACK_OFFSETS.length]
+          const [ox, oz] = STACK_OFFSETS[group.indexOf(pawnOccupantId(piece)) % STACK_OFFSETS.length]
           restPosition[0] += ox
           restPosition[2] += oz
         }
@@ -463,7 +490,14 @@ export function BoardScene({
           ? (definition.trackWaypoints[player.parkiller.trackPosition] ?? null)
           : getParkillerWaypoint(player.parkiller.trackPosition, player.parkiller.state, definition)
         if (!waypoint) return null
-        const restPosition = toWorldPosition(waypoint, BASE_HEIGHT)
+        const restPosition: [number, number, number] = toWorldPosition(waypoint, BASE_HEIGHT)
+        const parkillerStackGroupKey = parkillerStackKey(player.parkiller)
+        const parkillerGroup = parkillerStackGroupKey ? stackGroups.get(parkillerStackGroupKey) : undefined
+        if (parkillerGroup && parkillerGroup.length > 1) {
+          const [ox, oz] = STACK_OFFSETS[parkillerGroup.indexOf(parkillerOccupantId(player.color)) % STACK_OFFSETS.length]
+          restPosition[0] += ox
+          restPosition[2] += oz
+        }
         const isAnimating = parkillerAnimation?.color === player.color
         const hopFrom = isAnimating ? (parkillerHopData?.hopFrom ?? null) : null
         const hops = isAnimating ? (parkillerHopData?.hops ?? []) : []
