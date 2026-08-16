@@ -34,6 +34,9 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
           justifyContent: 'center',
           gap: 30,
           color: BRAND_TEXT,
+          overflowY: 'auto',
+          boxSizing: 'border-box',
+          padding: '16px 0',
         }}
       >
       <div
@@ -41,20 +44,22 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          gap: 28,
-          padding: '40px 56px',
+          gap: 'clamp(16px, 4vh, 28px)',
+          padding: 'clamp(20px, 5vh, 40px) clamp(20px, 7vw, 56px)',
           borderRadius: 28,
           background: 'linear-gradient(180deg, rgba(255,255,255,0.05), transparent 25%), linear-gradient(165deg, rgba(58, 46, 30, 0.72), rgba(30, 23, 14, 0.72))',
           border: '2px solid #1a3468',
           boxShadow: '0 10px 30px rgba(0,0,0,0.5), inset 0 0 0 3px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)',
+          maxWidth: '92vw',
+          boxSizing: 'border-box',
         }}
       >
         <img
           src="/logo-badge.png"
           alt="Parkiller"
-          style={{ width: 168, height: 168, filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.5))' }}
+          style={{ width: 'clamp(100px, 24vw, 168px)', height: 'clamp(100px, 24vw, 168px)', filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.5))' }}
         />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: 300 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(12px, 3vh, 20px)', width: 'min(300px, 70vw)' }}>
           <button className="chunky-btn" onClick={onPlayLocal} style={chunkyButtonStyle(true)}>
             Jugar local
           </button>
@@ -80,10 +85,12 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
 // the 3D pieces' own clearcoat material.
 function chunkyButtonStyle(enabled: boolean): React.CSSProperties {
   return {
-    padding: '20px 44px',
-    fontSize: 22,
+    padding: 'clamp(14px, 3vh, 20px) clamp(24px, 6vw, 44px)',
+    fontSize: 'clamp(17px, 4.5vw, 22px)',
     fontWeight: 800,
     letterSpacing: 0.4,
+    width: '100%',
+    boxSizing: 'border-box',
     color: enabled ? '#eef4ff' : '#8a8a80',
     background: enabled
       ? 'linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0) 40%), linear-gradient(180deg, #c8dcff 0%, #4a78d8 55%, #2850a8 100%)'
