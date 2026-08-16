@@ -9,6 +9,7 @@ import type { Piece } from '../core/pieces/piece'
 import type { PieceColor } from '../core/pieceColor'
 import type { MoveAnimationRequest } from '../hooks/useTurnManager'
 import { BoardMesh } from './BoardMesh'
+import { TableSurface } from './TableSurface'
 import { PieceMesh } from './PieceMesh'
 import { ParkillerMesh } from './ParkillerMesh'
 import { DiceMesh } from './DiceMesh'
@@ -381,6 +382,7 @@ export function BoardScene({
       <FitBoardCamera />
       <ambientLight intensity={0.7} />
       <directionalLight position={[4, 8, 2]} intensity={1.1} castShadow />
+      <TableSurface />
       <Suspense fallback={null}>
         <BoardMesh imageUrl={definition.boardImage} />
       </Suspense>
