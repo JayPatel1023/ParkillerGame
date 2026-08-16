@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { StartScreenBackground } from '../scene/StartScreenBackground'
 import { toBoardData } from '../core/board/boardDefinition'
 import { createPlayerState } from '../core/gameFlow/playerState'
 import { TurnManager } from '../core/gameFlow/turnManager'
@@ -197,10 +198,24 @@ export default function OnlineLobbyScreen() {
 
   return (
     <div style={wrapperStyle}>
+      <div style={{ position: 'absolute', inset: 0 }}>
+        <StartScreenBackground />
+      </div>
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'radial-gradient(ellipse at center, rgba(10,8,4,0.15) 0%, rgba(6,8,14,0.7) 100%)',
+        }}
+      />
       <div style={cardStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 8 }}>
-          <img src="/logo-badge.png" alt="Parkiller" style={{ width: 56, height: 56, filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.5))' }} />
-          <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: '#dce8ff', textShadow: '0 2px 0 #1a3468, 0 4px 10px rgba(0,0,0,0.5)' }}>
+          <img
+            src="/logo-badge.png"
+            alt="Parkiller"
+            style={{ width: 'clamp(42px, 12vw, 56px)', height: 'clamp(42px, 12vw, 56px)', filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.5))', flexShrink: 0 }}
+          />
+          <h1 style={{ margin: 0, fontSize: 'clamp(21px, 6vw, 28px)', fontWeight: 800, color: '#dce8ff', textShadow: '0 2px 0 #1a3468, 0 4px 10px rgba(0,0,0,0.5)' }}>
             Jugar online
           </h1>
         </div>
@@ -210,7 +225,7 @@ export default function OnlineLobbyScreen() {
         {phase === 'error' && <p style={{ ...hintStyle, color: '#e8a15c' }}>{errorMessage}</p>}
 
         {phase === 'menu' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 22, width: 340 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 22, width: '100%' }}>
             <div style={sectionStyle}>
               <h3 style={sectionTitleStyle}>Crear sala</h3>
               <div style={{ marginBottom: 14 }}>
@@ -252,7 +267,7 @@ export default function OnlineLobbyScreen() {
         {(phase === 'creating' || phase === 'joining') && <p style={hintStyle}>...</p>}
 
         {phase === 'lobby' && connectionRef.current && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, width: 340 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, width: '100%' }}>
             <div style={sectionStyle}>
               <div style={hintStyle}>Código de sala</div>
               <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: 3, color: '#dce8ff', textShadow: '0 2px 0 #1a3468' }}>{roomCode}</div>
@@ -286,28 +301,35 @@ export default function OnlineLobbyScreen() {
 }
 
 const wrapperStyle: React.CSSProperties = {
-  height: '100vh',
+  height: '100%',
+  position: 'relative',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
   color: '#f2ede0',
   fontFamily: 'system-ui, sans-serif',
-  backgroundImage: 'radial-gradient(ellipse at center, rgba(10,8,4,0.35) 0%, rgba(8,6,3,0.82) 100%), url(/boards/board_4p.jpg)',
-  backgroundSize: 'cover',
-  backgroundPosition: 'center',
+  overflowY: 'auto',
+  boxSizing: 'border-box',
+  padding: '16px 0',
 }
 
 // Same carved-wood card as StartScreen's own title/button panel - reused as a plain style object
 // (not a shared component) since each screen's internal layout differs enough that a shared
-// wrapper component would need as many override props as it saves.
+// wrapper component would need as many override props as it saves. Width/padding in clamp()/vw
+// units, not a fixed 340/400px - reported directly (with a screenshot of the start screen clipping
+// on a narrow phone) that a fixed size overflows small viewports; this card has the same shape of
+// bug (more content stacked in it than StartScreen's, so more prone to it, not less).
 const cardStyle: React.CSSProperties = {
+  position: 'relative',
   display: 'flex',
   flexDirection: 'column',
-  padding: '36px 44px',
+  padding: 'clamp(20px, 5vh, 36px) clamp(20px, 6vw, 44px)',
   borderRadius: 28,
   background: 'linear-gradient(180deg, rgba(255,255,255,0.05), transparent 25%), linear-gradient(165deg, rgba(58, 46, 30, 0.85), rgba(30, 23, 14, 0.85))',
   border: '2px solid #1a3468',
   boxShadow: '0 10px 30px rgba(0,0,0,0.5), inset 0 0 0 3px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)',
+  width: 'min(400px, 92vw)',
+  boxSizing: 'border-box',
 }
 
 const sectionStyle: React.CSSProperties = {
@@ -388,16 +410,17 @@ function chunkyButtonStyle(enabled: boolean): React.CSSProperties {
 
 function countButtonStyle(selected: boolean): React.CSSProperties {
   return {
-    width: 44,
-    height: 44,
-    fontSize: 17,
+    width: 'clamp(36px, 10vw, 44px)',
+    height: 'clamp(36px, 10vw, 44px)',
+    fontSize: 'clamp(14px, 4vw, 17px)',
+    flexShrink: 0,
     fontWeight: 800,
     color: selected ? '#eef4ff' : '#c8d4ec',
     background: selected
       ? 'linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0) 40%), linear-gradient(180deg, #d4e4ff 0%, #6a94e8 55%, #3868c0 100%)'
       : 'linear-gradient(180deg, rgba(255,255,255,0.25), rgba(255,255,255,0) 40%), linear-gradient(180deg, #4a6aa0 0%, #345078 55%, #223a5a 100%)',
     border: `2px solid ${selected ? '#3868c0' : '#1a3468'}`,
-    borderRadius: 12,
+    borderRadius: '50%',
     boxShadow: selected
       ? '0 3px 0 #24448c, 0 6px 10px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.6)'
       : '0 3px 0 #14253f, 0 5px 8px rgba(0,0,0,0.35), inset 0 1px 1px rgba(255,255,255,0.25)',
