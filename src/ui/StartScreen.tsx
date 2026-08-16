@@ -60,7 +60,7 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
           style={{ width: 'clamp(100px, 24vw, 168px)', height: 'clamp(100px, 24vw, 168px)', filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.5))' }}
         />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(12px, 3vh, 20px)', width: 'min(300px, 70vw)' }}>
-          <button className="chunky-btn" onClick={onPlayLocal} style={chunkyButtonStyle(true)}>
+          <button className="chunky-btn chunky-btn-pulse" onClick={onPlayLocal} style={chunkyButtonStyle(true)}>
             Jugar local
           </button>
           <button
@@ -93,7 +93,7 @@ function chunkyButtonStyle(enabled: boolean): React.CSSProperties {
     boxSizing: 'border-box',
     color: enabled ? '#eef4ff' : '#8a8a80',
     background: enabled
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0) 40%), linear-gradient(180deg, #c8dcff 0%, #4a78d8 55%, #2850a8 100%)'
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0) 40%), linear-gradient(180deg, #dcebff 0%, #3d76e6 48%, #16409c 100%)'
       : 'linear-gradient(180deg, #8a8a80, #6a6a60)',
     border: `3px solid ${enabled ? '#1a3468' : '#4a4a44'}`,
     borderRadius: 20,
