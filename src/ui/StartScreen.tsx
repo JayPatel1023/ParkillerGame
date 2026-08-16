@@ -36,7 +36,7 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
           padding: '40px 56px',
           borderRadius: 28,
           background: 'linear-gradient(180deg, rgba(255,255,255,0.05), transparent 25%), linear-gradient(165deg, rgba(58, 46, 30, 0.72), rgba(30, 23, 14, 0.72))',
-          border: '2px solid #8a5a1e',
+          border: '2px solid #1a3468',
           boxShadow: '0 10px 30px rgba(0,0,0,0.5), inset 0 0 0 3px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)',
         }}
       >
@@ -74,16 +74,16 @@ function chunkyButtonStyle(enabled: boolean): React.CSSProperties {
     fontSize: 22,
     fontWeight: 800,
     letterSpacing: 0.4,
-    color: enabled ? '#4a2e12' : '#8a8a80',
+    color: enabled ? '#eef4ff' : '#8a8a80',
     background: enabled
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0) 40%), linear-gradient(180deg, #ffe08a 0%, #ecb84a 55%, #d9982e 100%)'
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0) 40%), linear-gradient(180deg, #c8dcff 0%, #4a78d8 55%, #2850a8 100%)'
       : 'linear-gradient(180deg, #8a8a80, #6a6a60)',
-    border: `3px solid ${enabled ? '#8a5a1e' : '#4a4a44'}`,
+    border: `3px solid ${enabled ? '#1a3468' : '#4a4a44'}`,
     borderRadius: 20,
     boxShadow: enabled
-      ? '0 7px 0 #8a5a1e, 0 12px 20px rgba(0,0,0,0.45), inset 0 2px 1px rgba(255,255,255,0.55)'
+      ? '0 7px 0 #1a3468, 0 12px 20px rgba(0,0,0,0.45), inset 0 2px 1px rgba(255,255,255,0.55)'
       : '0 7px 0 #3a3a34, 0 10px 16px rgba(0,0,0,0.35)',
-    textShadow: enabled ? '0 1px 0 rgba(255,255,255,0.35)' : 'none',
+    textShadow: enabled ? '0 1px 2px rgba(8,16,40,0.5)' : 'none',
     cursor: enabled ? 'pointer' : 'default',
   }
 }
