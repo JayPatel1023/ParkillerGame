@@ -1,32 +1,41 @@
+import { StartScreenBackground } from '../scene/StartScreenBackground'
+
 // Branding placeholder - replace once Carlos sends the final logo/brand colors.
 const BRAND_TEXT = '#f2ede0'
 
-// Reported directly, twice: the background read as an unstyled blurry smear, not a designed title
-// screen. The asset behind it (public/backgrounds/start-bg.jpg) turned out to be genuinely
-// low-resolution/soft even before any CSS blur was applied to it - no amount of styling fixes a
-// blurry source image. Switched to one of the actual in-game board textures (public/boards/), which
-// is sharp, and dialed the blur/dim down since it no longer needs hiding. logo-badge.png is a clean
-// circular crop taken directly from that same board art's own corner badge (the hooded character +
-// "Parkiller" wordmark it's already drawn with) - reuses real game art instead of a plain text
-// heading standing alone.
+// Reported directly, three times: a flat blurry photo, a sharper photo, and a CSS-only pattern all
+// still read as "not three-dimensional enough" for a title screen - a real background needs actual
+// depth (perspective, lighting, shadows), which only the game's own Three.js board can genuinely
+// provide, not a 2D asset however it's processed. StartScreenBackground renders the real board mesh
+// under a slowly auto-rotating camera instead of a static image. logo-badge.png is a clean circular
+// crop taken directly from the board art's own corner badge (the hooded character + "Parkiller"
+// wordmark it's already drawn with) - reuses real game art instead of a plain text heading alone.
 export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
   const canPlayOnline = Boolean(import.meta.env.VITE_PHOTON_APP_ID)
   return (
-    <div
-      style={{
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 30,
-        color: BRAND_TEXT,
-        backgroundImage:
-          'radial-gradient(ellipse at center, rgba(10,8,4,0.35) 0%, rgba(8,6,3,0.82) 100%), url(/boards/board_4p.jpg)',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-      }}
-    >
+    <div style={{ height: '100%', position: 'relative' }}>
+      <div style={{ position: 'absolute', inset: 0 }}>
+        <StartScreenBackground />
+      </div>
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'radial-gradient(ellipse at center, rgba(10,8,4,0.15) 0%, rgba(6,8,14,0.7) 100%)',
+        }}
+      />
+      <div
+        style={{
+          position: 'relative',
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 30,
+          color: BRAND_TEXT,
+        }}
+      >
       <div
         style={{
           display: 'flex',
@@ -59,6 +68,7 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
             Jugar online
           </button>
         </div>
+      </div>
       </div>
     </div>
   )
