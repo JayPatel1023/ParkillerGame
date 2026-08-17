@@ -126,39 +126,35 @@ button {
   }
 }
 
-/* The dark card-shaped mask in StartScreen.tsx that hides each background photo's own baked-in
-   fake card (see that file's own comment) - reported directly that it still showed through on
-   desktop even after a first attempt. That attempt assumed the mask needed to match start.png's
-   own `background-position: center 65%` bias, but the real card is centered by plain flexbox
-   (50%/50%), unrelated to how the *photo* gets cropped - moving the mask to 65% only made it
-   worse. Reverted to 50%/50% (matching the real card's own position) and, the actual fix,
-   widened the fully-opaque core (was fading out starting at 0% of the radius, so anything more
-   than a sliver off-center was already see-through) so the whole card footprint stays covered
-   before the edge starts softening. */
-/* Reported directly, again: kept showing a sliver of the photo's own baked-in card past the real
-   card's edge. Sized up meaningfully this time (roughly 40% more reach than the previous pass) and
-   kept the opaque core large relative to the fade, instead of nudging the numbers slightly again -
-   but that same bigger size swallowed the candle/plant/dice tray in darkness on a phone screen,
-   where the card (and everything else) is much smaller to begin with. Desktop keeps the bigger
-   size; phones get their own smaller one, same relationship as .start-bg-photo's own breakpoint. */
+/* The dark mask in StartScreen.tsx that hides each background photo's own baked-in fake card (see
+   that file's own comment). Every previous pass used a soft radial ellipse sized generously enough
+   to fully cover the fake card underneath - but reported directly, that same generosity is exactly
+   what made the mask itself show up as an unwanted dark smudge on the wood table, since an ellipse
+   doesn't match the real card's own rectangular shape: wherever the ellipse was wider or taller
+   than the card, it painted a visibly blob-shaped halo past the card's actual edges instead of
+   staying hidden behind it.
+   Rebuilt as a rounded rectangle instead - sized close to the real card's own footprint (clamp()
+   values echo StartScreen's own card padding/content-width, not independently guessed) with just
+   enough overhang to swallow the fake card's border, blurred only enough to soften that overhang's
+   edge. A shape that traces the card's own outline reads as a shadow *behind* the card; an ellipse
+   that doesn't reads as a stain next to it. */
 .start-bg-mask {
-  background: radial-gradient(
-    ellipse clamp(280px, 50vw, 400px) clamp(380px, 60vh, 540px) at 50% 50%,
-    rgba(4, 3, 2, 0.95) 0%,
-    rgba(4, 3, 2, 0.92) 70%,
-    rgba(4, 3, 2, 0.5) 90%,
-    rgba(4, 3, 2, 0) 100%
-  );
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: clamp(220px, 33vw, 320px);
+  height: clamp(300px, 56vh, 540px);
+  border-radius: 26px;
+  background: rgba(4, 3, 2, 0.94);
+  filter: blur(22px);
 }
 
 @media (max-width: 700px), (orientation: portrait) {
   .start-bg-mask {
-    background: radial-gradient(
-      ellipse clamp(160px, 46vw, 220px) clamp(240px, 54vh, 320px) at 50% 50%,
-      rgba(4, 3, 2, 0.95) 0%,
-      rgba(4, 3, 2, 0.92) 70%,
-      rgba(4, 3, 2, 0.5) 90%,
-      rgba(4, 3, 2, 0) 100%
-    );
+    width: clamp(160px, 62vw, 220px);
+    height: clamp(230px, 58vh, 340px);
+    border-radius: 20px;
+    filter: blur(16px);
   }
 }
