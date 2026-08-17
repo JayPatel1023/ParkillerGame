@@ -107,14 +107,23 @@ button {
   }
 }
 
+/* Opacity-only, no transform: the element this class sits on directly contains BoardScene's
+   Three.js <Canvas> - react-three-fiber measures its container's size once on mount to size the
+   canvas/renderer, and that initial measurement can land mid-animation. A `transform: scale()`
+   here (an earlier version had one) visually shrinks the whole subtree during the animation, and
+   if that measurement happens to land before the scale reaches 1, the canvas gets permanently
+   undersized - no further resize ever fires afterward since the element's true layout size never
+   actually changes, only its paint-time scale did. Reported directly (with a screenshot showing a
+   real, unmistakable gap along the right/bottom edges) and confirmed by comparing the canvas's
+   measured size at t=100ms vs t=3s after mount - it was wrong immediately and stayed wrong.
+   Opacity has no such effect (it never changes getBoundingClientRect), so the fade survives
+   without the bug. */
 @keyframes game-screen-in {
   from {
     opacity: 0;
-    transform: scale(0.97);
   }
   to {
     opacity: 1;
-    transform: scale(1);
   }
 }
 

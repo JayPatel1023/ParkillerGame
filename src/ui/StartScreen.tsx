@@ -14,20 +14,21 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
   const canPlayOnline = Boolean(import.meta.env.VITE_PHOTON_APP_ID)
   return (
     <div style={{ height: '100%', position: 'relative', backgroundColor: THEME.wood }}>
-      {/* Reported directly: a gap/margin was visible on one side even with the blur-fill layer
-          below - width is the dimension that must never show a gap (a bare margin on the left/
-          right reads far worse than a photo that's slightly taller than the viewport), so the
-          sharp photo is now sized by width explicitly (`100% auto` - width always fills exactly,
-          height follows the photo's own aspect ratio and simply overflows/clips top-to-bottom
-          instead of ever leaving a horizontal gap). The blurred `cover` copy behind still fills any
-          vertical gap this leaves on narrower/taller viewports. A backgroundColor now also sits on
-          the outermost wrapper itself as a last-resort fallback, in case any layer ever fails to
-          fully cover for some other reason.
-          Reported again directly, this time on an actual phone (didn't reproduce in desktop
-          Chromium at the same viewport size) - a known WebKit/iOS Safari issue where
-          `overflow: hidden` doesn't reliably clip a child that has its own 3D transform inside a
-          `perspective` ancestor (exactly this wobble layer's situation). `clip-path` clips
-          reliably in that same scenario where plain `overflow` sometimes doesn't - added as
+      {/* `contain` (whole photo shown, never cropped/zoomed) and `cover`/`100% auto` (fills the
+          frame exactly, but on a wide screen that means scaling the photo up enough that height
+          overflows and gets cropped - i.e. zoomed in) can't both be satisfied by one copy of a
+          fixed-aspect photo at every viewport ratio - trying to force the sharp photo itself to
+          fill width exactly (a prior pass) is exactly what reintroduced the "too zoomed in" report
+          on wide desktop screens. The actual fix for "no gap, no zoom" together is the blur-fill
+          layered underneath: the sharp photo stays at `contain` (always whole, never scaled up),
+          and a heavily blurred, oversized `cover` copy of the same photo fills whatever the sharp
+          layer doesn't reach - so there's still no bare/mismatched margin, without ever zooming the
+          real photo. A backgroundColor on the outermost wrapper is a last-resort fallback in case
+          any layer ever fails to fully cover for some other reason.
+          Separately reported on an actual phone (didn't reproduce in desktop Chromium at the same
+          viewport size) - a known WebKit/iOS Safari issue where `overflow: hidden` doesn't reliably
+          clip a child that has its own 3D transform inside a `perspective` ancestor (exactly this
+          wobble layer's situation). `clip-path` clips reliably in that same scenario; added as
           reinforcement alongside overflow, not a replacement for it. */}
       <div style={{ position: 'absolute', inset: 0, perspective: 1600, overflow: 'hidden', clipPath: 'inset(0)', WebkitClipPath: 'inset(0)' }}>
         <div className="start-bg-wobble" style={{ position: 'absolute', inset: '-10%' }}>
@@ -48,7 +49,7 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
               position: 'absolute',
               inset: 0,
               backgroundImage: 'url(/backgrounds/start.png)',
-              backgroundSize: '100% auto',
+              backgroundSize: 'contain',
               backgroundRepeat: 'no-repeat',
               backgroundPosition: 'center',
             }}
