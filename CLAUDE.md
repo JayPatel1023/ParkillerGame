@@ -26,6 +26,17 @@ Dev-only routes (open the app with these URL hashes):
   and export JSON for `src/data/generated-boards.json`.
 - `#component` — `ComponentPreview`, inspect a single track-square component in isolation with
   live angle/color controls, nothing else rendered.
+- `#parkiller-editor` — `ParkillerEditor`, click-trace the Parkiller's body/hood silhouette
+  against `public/reference/parkiller-*.png` (the client's own figurine photos) with a live 3D
+  preview, for tuning `ParkillerMesh.tsx`'s `DEFAULT_PARKILLER_CONFIG`.
+- `#online` — `OnlineLobbyScreen`, create/join a Photon room for online play (see `src/online/`).
+
+The client's official rulebook (`REGLAMENTODELJUEGODELPARCHISPARKILLERINGLESINVERSO.docx`, repo
+root) and their original GameMaker Studio implementation (`Parkiller_GameMaker-main/`, kept
+in-repo as a reference only — not built or shipped) are both the authoritative source for exact
+rule behavior; several rules engine bugs have been root-caused by reading the GML source directly
+rather than guessing from the rulebook's prose alone. Reference photos for piece models live in
+`public/reference/`.
 
 ## Architecture
 
@@ -53,8 +64,16 @@ Strict layering, each layer only depends on the one below it:
    components, wired together in `App.tsx` via a simple `Screen` state machine
    (`'start' | 'selectCount' | 'game'`).
 
-4. **`src/tools/`** — dev-only tools (`WaypointEditor`, `ComponentPreview`), routed via URL hash
-   in `App.tsx`, not part of the shipped game flow.
+4. **`src/tools/`** — dev-only tools (`WaypointEditor`, `ComponentPreview`, `ParkillerEditor`),
+   routed via URL hash in `App.tsx`, not part of the shipped game flow.
+
+5. **`src/online/`** — Photon Realtime networking (`photonClient.ts`), plus `HostTurnManagerBridge`
+   (the room's Master Client runs the one authoritative `TurnManager` and broadcasts dice/move
+   inputs) and `RemoteTurnManager` (every other client replays those broadcasts against its own
+   local `TurnManager`, never trusting a network-serialized result directly — see those files' own
+   doc comments for why). Both implement `gameFlow/turnManagerLike.ts`'s `TurnManagerLike`
+   interface, which `core/gameFlow/turnManager.ts` also structurally satisfies unmodified, so
+   `src/ui/GameBoardScreen.tsx` binds to one shared interface regardless of local vs. online play.
 
 ### Board data generation
 
@@ -77,20 +96,51 @@ waypoints over the board image for visual sanity-checking.
 full simulated playthrough succeeds for all 5 boards) — separate from
 `tests/parchisRules.test.ts`, which tests the rules engine logic itself.
 
-## Rules implemented (Spanish parchís, standard variant)
+## Rules implemented (per the client's official rulebook — two white dice + the Parkiller)
 
-- A piece leaves the yard only on rolling a 6.
-- Rolling a 6 grants an extra turn; a third consecutive 6 forfeits the move and ends the turn (no
-  piece movement on that roll).
-- Landing exactly on an opponent on a non-safe square sends it back to the yard.
-- Star squares (`safeTrackIndices`) protect pieces from capture.
-- Reaching the final home-corridor square requires an exact roll — overshooting is not valid.
+This is the client's actual "Parkiller" ruleset (`REGLAMENTODELJUEGODELPARCHISPARKILLERINGLESINVERSO.docx`),
+not the classic single-die variant this milestone started with. Rule codes below (PC*/PK*) match
+that document's own section numbers; code comments in `parchisRules.ts`/`turnManager.ts` cite them
+directly, and cross-reference `Parkiller_GameMaker-main/` (the client's original implementation)
+wherever the rulebook's prose alone was ambiguous.
+
+- **Two white dice** roll together each turn; a piece can move by die A's value, die B's value, or
+  their sum — up to two different pieces (or one piece twice) per roll.
+- **PC2.1**: a piece leaves the yard only when a die shows a **5** (or the sum is 5) — not the
+  classic 6. Whenever an unspent die's value is the exit roll and a yard piece could use it, that
+  specific die is locked to the exit (a same-valued move for a different piece isn't offered as an
+  alternative for it), but the *other* die stays completely free to move any piece, in either
+  order. A lone opposing pawn already on your own entry square is not captured by this exit — they
+  simply coexist; only a *further* own pawn joining that mixed square captures the opponent, even
+  though the entry square is otherwise a safe zone.
+- **PC2/PC2.4**: never more than two pawns share a square. A barrier (2 pawns, own or mixed) blocks
+  every other piece from landing on or passing through that square — except the Parkiller, which
+  jumps over barriers freely (PK4).
+- **PC3/PK8**: capturing is mandatory whenever available — a player can't sidestep a capture by
+  moving a different, non-capturing piece instead.
+- **PC4/PC5**: reaching the final home-corridor square requires an exact roll. Capturing a pawn or
+  an opposing Parkiller grants a 20-square reward; finishing a pawn grants 10 — claimed immediately
+  with a piece already in play, or forfeited.
+- **PC2.3**: rolling doubles grants an extra turn; a third consecutive double sends the last-moved
+  piece back to its yard (exempt once it's in the home corridor).
+- **The Parkiller (PK1-8)**: one extra piece per color, moved by its own black die (rolled once per
+  actual turn, skipped on a doubles bonus turn), traveling the shared track loop in the *opposite*
+  direction from regular pawns. Landing on an opposing pawn sends it home with no reward; landing
+  on an opposing Parkiller eliminates it and grants the 20-square reward, but only via a single
+  die's own value during the roll that just produced doubles (PK6) — never the sum.
+- **PK5**: the reverse also holds — a pawn landing on an unprotected opposing Parkiller (without
+  eliminating it) is sent straight back to its own yard instead, with no reward, and the move is
+  never blocked outright, it always completes first. On a protected/safe square the two simply
+  coexist as a barrier instead (PK4).
 - First player to get all 4 pieces home wins immediately (classic mobile-app simplification, not
   the traditional tabletop full-ranking rule).
-- Not implemented: blockades (two own pieces on a square blocking opponents from passing) — scope
-  cut, flagged rather than silently skipped.
+- Not implemented: the full PC2.1 barrier-arrival matrix (e.g. "the pawn that arrived last is
+  eliminated" when two different opposing colors already share your entry square) — needs
+  arrival-order tracking not currently in the `Piece` model; scope cut, flagged rather than
+  silently skipped. Also not implemented: the rulebook appendix's V1/V2 team and two-color-per-
+  player variants.
 
 ## Not in this milestone
 
-Online play (rooms, bot fill-in for empty seats) and native store builds/publishing — these were
-milestone 2/3 under the original Unity plan and need re-scoping for this stack.
+Native store builds/publishing (would need a Capacitor/Electron wrapper around this web app).
+Online play (rooms, bot fill-in for empty seats) shipped in milestone 2 — see `src/online/`.

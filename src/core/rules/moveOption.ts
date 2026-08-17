@@ -28,4 +28,9 @@ export interface MoveResult {
    * no yard to return to. */
   capturedParkillerColor: PieceColor | null
   pieceFinished: boolean
+  /** PK5: set when the *mover itself* landed on an unprotected opposing Parkiller without
+   * eliminating it (PK6) - the move still completes, but the arriving pawn is immediately sent
+   * back to its own yard instead of staying on the track, with no reward. `movedPiece` reflects
+   * this - by the time the caller sees this result, its state is already back to InYard. */
+  eliminatedByParkiller?: boolean
 }

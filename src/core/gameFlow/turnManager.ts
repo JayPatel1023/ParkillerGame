@@ -3,7 +3,7 @@ import { Dice, type DiceLike } from '../dice'
 import type { PieceColor } from '../pieceColor'
 import { snapshotPiece, type Piece, type PieceSnapshot } from '../pieces/piece'
 import { applyMove, getValidMoves, wouldCapture } from '../rules/parchisRules'
-import type { DiceSource, MoveOption, MoveResult } from '../rules/moveOption'
+import type { MoveOption, MoveResult } from '../rules/moveOption'
 import type { RuleSettings } from '../rules/ruleSettings'
 import { hasWon, type PlayerState } from './playerState'
 
@@ -251,19 +251,38 @@ export class TurnManager {
     const state = this.diceState
     if (!state) return
 
-    const candidates: { amount: number; source: DiceSource }[] = []
-    if (!state.dieAUsed) candidates.push({ amount: state.dieA, source: 'dieA' })
-    if (!state.dieBUsed) candidates.push({ amount: state.dieB, source: 'dieB' })
-    if (!state.dieAUsed && !state.dieBUsed) candidates.push({ amount: state.dieA + state.dieB, source: 'sum' })
+    const dieAMoves = !state.dieAUsed
+      ? getValidMoves(this.board, this.currentPlayer, this.players, state.dieA, this.settings, 'dieA')
+      : null
+    const dieBMoves = !state.dieBUsed
+      ? getValidMoves(this.board, this.currentPlayer, this.players, state.dieB, this.settings, 'dieB')
+      : null
 
-    // At most one option per piece, preferring an individual die over the sum so using the sum
-    // doesn't silently swallow both dice when the player could've moved two separate pieces.
+    // PC2.1: "A pawn must move to the starting square" whenever a die's own value is the exit
+    // roll and a yard piece could use it - that die can only be spent on the exit, or on a move
+    // that would capture something (PC3/PK8 already outrank this via the filter below, so a
+    // capture must survive here too), not reassigned to a different, non-capturing piece by the
+    // same amount. The *other* die stays completely free, before or after, in either order
+    // (offerMoves runs fresh after every move, so whichever die the player didn't spend just gets
+    // offered again next time around).
+    const dieAHasExit = state.dieA === this.settings.exitRoll && (dieAMoves?.some((m) => m.kind === 'ExitYard') ?? false)
+    const dieBHasExit = state.dieB === this.settings.exitRoll && (dieBMoves?.some((m) => m.kind === 'ExitYard') ?? false)
+    const restrictToExitOrCapture = (moves: MoveOption[]) =>
+      moves.filter((m) => m.kind === 'ExitYard' || wouldCapture(this.board, m, this.players, this.parkillerCapturableThisRoll))
+
     const bestPerPiece = new Map<Piece, MoveOption>()
-    for (const candidate of candidates) {
-      const moves = getValidMoves(this.board, this.currentPlayer, this.players, candidate.amount, this.settings, candidate.source)
+    const addMoves = (moves: MoveOption[]) => {
       for (const move of moves) {
         if (!bestPerPiece.has(move.piece)) bestPerPiece.set(move.piece, move)
       }
+    }
+    if (dieAMoves) addMoves(dieAHasExit ? restrictToExitOrCapture(dieAMoves) : dieAMoves)
+    if (dieBMoves) addMoves(dieBHasExit ? restrictToExitOrCapture(dieBMoves) : dieBMoves)
+    // The sum can only combine both dice into one board-piece move once neither individual die is
+    // still obligated to a mandatory exit - otherwise it would let a player dodge that exit by
+    // spending both dice on a single already-in-play piece instead.
+    if (dieAMoves && dieBMoves && !dieAHasExit && !dieBHasExit) {
+      addMoves(getValidMoves(this.board, this.currentPlayer, this.players, state.dieA + state.dieB, this.settings, 'sum'))
     }
 
     let options = [...bestPerPiece.values()]

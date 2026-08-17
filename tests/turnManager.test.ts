@@ -194,6 +194,68 @@ describe('TurnManager - two-dice rulebook flow', () => {
   })
 })
 
+describe('TurnManager - mandatory departure (PC2.1)', () => {
+  it("a die matching the exit roll can only exit a yard piece, never reassigned to a different piece - the other die stays free in either order", () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 2 // could also move +5 -> 7, but that's not a capture
+
+    const dice = new ScriptedDice([5, 3, 1]) // dieA=5 (the exit roll), dieB=3
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let latestMoves: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((m) => (latestMoves = m))
+    manager.requestRoll()
+
+    // die A (5) is locked to exiting a yard piece - piece0's own +5 track move is not offered
+    expect(latestMoves.find((m) => m.piece === red.pieces[0] && m.diceSource === 'dieA')).toBeUndefined()
+    expect(latestMoves.filter((m) => m.kind === 'ExitYard')).toHaveLength(3) // pieces 1,2,3 still in the yard
+
+    // die B (3) stays completely free - piece0 can move with it before the mandatory exit resolves
+    const dieBMove = latestMoves.find((m) => m.piece === red.pieces[0] && m.diceSource === 'dieB')
+    expect(dieBMove?.resultingTrackPosition).toBe(5)
+    manager.submitMove(red.pieces[0])
+    expect(red.pieces[0].trackPosition).toBe(5)
+
+    // only the mandatory exit remains for the last die
+    expect(latestMoves.length).toBeGreaterThan(0)
+    expect(latestMoves.every((m) => m.kind === 'ExitYard')).toBe(true)
+    manager.submitMove(red.pieces[1])
+    expect(red.pieces[1].state).toBe('OnTrack')
+    expect(red.pieces[1].trackPosition).toBe(0)
+  })
+
+  it('a double matching the exit roll forces both yard pieces out across the two dice, not just one', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+
+    const dice = new ScriptedDice([5, 5, 1]) // double-five, all 4 red pieces start in the yard
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let latestMoves: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((m) => (latestMoves = m))
+    manager.requestRoll()
+
+    expect(latestMoves.length).toBeGreaterThan(0)
+    expect(latestMoves.every((m) => m.kind === 'ExitYard')).toBe(true)
+
+    manager.submitMove(red.pieces[0])
+    expect(red.pieces[0].state).toBe('OnTrack')
+
+    // the second die is still locked to exiting one of the remaining yard pieces
+    expect(latestMoves.length).toBeGreaterThan(0)
+    expect(latestMoves.every((m) => m.kind === 'ExitYard')).toBe(true)
+
+    manager.submitMove(red.pieces[1])
+    expect(red.pieces[1].state).toBe('OnTrack')
+    expect(red.pieces[0].trackPosition).toBe(0)
+    expect(red.pieces[1].trackPosition).toBe(0)
+  })
+})
+
 describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
   it('capturing an opponent grants a 20-square reward, offered ahead of the remaining die', () => {
     const board = buildTestBoard()
