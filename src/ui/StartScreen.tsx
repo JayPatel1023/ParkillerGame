@@ -1,5 +1,10 @@
+import { useState } from 'react'
 import { GoldPanel } from './GoldPanel'
 import { THEME } from './theme'
+
+// Where "Ayuda" (inside the settings panel below) sends the player - supplied directly, not
+// guessed.
+const HELP_URL = 'https://moonlighteditors.com/instructions-parkiller/'
 
 // Requested directly, with a full written brief and a reference photo (a candlelit wood table,
 // a dark near-black-green card with a thin gold border): the earlier translucent brown panel with
@@ -12,6 +17,10 @@ import { THEME } from './theme'
 // the 3D scene here rather than the 3D scene trying to recreate it.
 export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
   const canPlayOnline = Boolean(import.meta.env.VITE_PHOTON_APP_ID)
+  // Reported directly: the app had no settings entry point at all. Kept to exactly what was
+  // asked for - a settings button whose one item opens the help page - rather than inventing
+  // placeholder rows (sound/language toggles etc.) with no real functionality behind them yet.
+  const [showSettings, setShowSettings] = useState(false)
   return (
     <div style={{ height: '100%', position: 'relative', backgroundColor: THEME.wood }}>
       {/* `contain` (whole photo shown, never cropped/zoomed) and `cover` (fills the frame exactly,
@@ -119,6 +128,28 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
           </div>
         </GoldPanel>
       </div>
+
+      <button className="chunky-btn" onClick={() => setShowSettings(true)} title="Configuración" style={settingsButtonStyle}>
+        <GearIcon />
+      </button>
+
+      {showSettings && (
+        <div style={settingsOverlayStyle}>
+          <GoldPanel style={settingsPanelStyle}>
+            <div style={{ fontSize: 20, fontWeight: 800, color: THEME.goldBright, letterSpacing: 0.5 }}>Configuración</div>
+            <button
+              className="chunky-btn"
+              onClick={() => window.open(HELP_URL, '_blank', 'noopener,noreferrer')}
+              style={settingsRowStyle}
+            >
+              <span aria-hidden style={iconBadgeStyle}><HelpIcon /></span> Ayuda
+            </button>
+            <button className="chunky-btn" onClick={() => setShowSettings(false)} style={settingsCloseStyle}>
+              Cerrar
+            </button>
+          </GoldPanel>
+        </div>
+      )}
     </div>
   )
 }
@@ -189,6 +220,24 @@ function GlobeIcon() {
   )
 }
 
+function GearIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill={THEME.cream} aria-hidden focusable="false">
+      <path d="M12 8.4a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2Zm9.4 3.6c0 .5 0 1-.1 1.5l2.1 1.6-2 3.5-2.5-1a7.7 7.7 0 0 1-2.6 1.5l-.4 2.6H10.1l-.4-2.6a7.7 7.7 0 0 1-2.6-1.5l-2.5 1-2-3.5 2.1-1.6a8.2 8.2 0 0 1 0-3l-2.1-1.6 2-3.5 2.5 1a7.7 7.7 0 0 1 2.6-1.5L10.1 1h3.8l.4 2.6a7.7 7.7 0 0 1 2.6 1.5l2.5-1 2 3.5-2.1 1.6c.1.5.1 1 .1 1.5Z" />
+    </svg>
+  )
+}
+
+function HelpIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#eef4ff" strokeWidth="2" aria-hidden focusable="false">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.3 9.3a2.7 2.7 0 1 1 3.9 2.4c-.8.4-1.2.9-1.2 1.8" strokeLinecap="round" />
+      <circle cx="12" cy="17" r="0.9" fill="#eef4ff" stroke="none" />
+    </svg>
+  )
+}
+
 // Chunky carved-wood button, same physical-press recipe as the rest of the app (a solid, non-
 // blurred offset bottom edge reads as depth, not a bigger blurred shadow) - now recolored per
 // action: green for the local/offline action, blue for the online one, both trimmed in gold
@@ -223,4 +272,67 @@ function buttonStyle(enabled: boolean, tint: keyof typeof TINTS): React.CSSPrope
     textShadow: enabled ? '0 1px 3px rgba(0,0,0,0.5)' : 'none',
     cursor: enabled ? 'pointer' : 'default',
   }
+}
+
+// Round gold-ring icon button, top-right - same medallion language as GameBoardScreen's own exit
+// button, so a "corner icon button" reads consistently across the whole app.
+const settingsButtonStyle: React.CSSProperties = {
+  position: 'absolute',
+  top: 16,
+  right: 16,
+  width: 46,
+  height: 46,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  background: `linear-gradient(180deg, rgba(255,255,255,0.14), transparent 45%), linear-gradient(165deg, ${THEME.green}f2, ${THEME.greenDeep}f7)`,
+  border: `3px solid ${THEME.gold}`,
+  borderRadius: '50%',
+  boxShadow: `0 5px 0 ${THEME.goldDeep}, 0 9px 14px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.12)`,
+  cursor: 'pointer',
+}
+
+const settingsOverlayStyle: React.CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  background: 'rgba(0,0,0,0.6)',
+}
+
+const settingsPanelStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'stretch',
+  gap: 14,
+  padding: '26px 30px',
+  borderRadius: 20,
+  minWidth: 240,
+}
+
+const settingsRowStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+  padding: '12px 18px',
+  fontSize: 16,
+  fontWeight: 700,
+  color: THEME.cream,
+  background: `linear-gradient(165deg, ${THEME.greenLight}, ${THEME.green})`,
+  border: `2px solid ${THEME.gold}`,
+  borderRadius: 12,
+  boxShadow: `0 4px 0 ${THEME.goldDeep}, 0 7px 10px rgba(0,0,0,0.35)`,
+  cursor: 'pointer',
+}
+
+const settingsCloseStyle: React.CSSProperties = {
+  padding: '10px 18px',
+  fontSize: 14,
+  fontWeight: 700,
+  color: THEME.creamDim,
+  background: 'transparent',
+  border: `2px solid ${THEME.gold}66`,
+  borderRadius: 999,
+  cursor: 'pointer',
 }
