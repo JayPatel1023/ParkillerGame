@@ -189,22 +189,39 @@ export class PhotonConnection implements RoomTransport {
     }))
   }
 
+  // Reported directly: a joiner's seat kept showing "vacío -> bot" in the host's lobby even after
+  // that player had actually connected and claimed a color - confirmed in the SDK source
+  // (photon-realtime-module.js) that joining and a later custom-properties update are two
+  // *separate* events (onActorJoin vs. the SDK's own onActorPropertiesChange, fired for the
+  // room's PropertiesChanged event). setLocalActorProperties() is only called by a joiner *after*
+  // their own joinRoom() promise has already resolved (see OnlineLobbyScreen.tsx's joinRoom()) -
+  // by the time their color reaches the host, the host's own onActorJoin has already fired and
+  // won't fire again. This previously only re-rendered on join/leave, so that later color update
+  // never triggered a re-render at all - the lobby's own seat list state went stale and stayed
+  // that way. (startGame() itself re-reads getActors() fresh at click time, so the actual color
+  // assignment was never wrong once a real game was started - only the lobby's own live display
+  // was, but that's exactly what a host waiting on this screen has to trust before starting.)
   onActorsChanged(listener: () => void): () => void {
-    const wrappedJoin = () => listener()
-    const wrappedLeave = () => listener()
+    const fire = () => listener()
     const prevJoin = this.client.onActorJoin
     const prevLeave = this.client.onActorLeave
+    const prevPropsChange = this.client.onActorPropertiesChange
     this.client.onActorJoin = (actor) => {
       prevJoin?.(actor)
-      wrappedJoin()
+      fire()
     }
     this.client.onActorLeave = (actor, cleanup) => {
       prevLeave?.(actor, cleanup)
-      wrappedLeave()
+      fire()
+    }
+    this.client.onActorPropertiesChange = (actor) => {
+      prevPropsChange?.(actor)
+      fire()
     }
     return () => {
       this.client.onActorJoin = prevJoin
       this.client.onActorLeave = prevLeave
+      this.client.onActorPropertiesChange = prevPropsChange
     }
   }
 
