@@ -7,24 +7,8 @@ import { useTurnManager } from '../hooks/useTurnManager'
 import { BoardScene } from '../scene/BoardScene'
 import { Confetti } from './Confetti'
 import { RewardToast } from './RewardToast'
-
-// Reported directly, with a photoreal reference (ornate leather-and-gold game table, candlelit):
-// match its background mood plus its buttons' style/shape/position. This trim color used to be
-// the royal-blue accent picked for Start/Lobby - this screen now breaks from that to an actual
-// warm gold matching the new reference, since Start/Lobby weren't part of this ask.
-const BRAND_GOLD = '#c9a24b'
-
-// Lightens (positive percent) or darkens (negative) a hex color - used to derive a per-player
-// gradient/shadow/border from just that player's base swatch (core/colorPalette.ts), so the turn
-// card's roll button reads in the current player's own color like the reference's red-bordered
-// card on red's turn, without hand-authoring a gradient per color.
-function shade(hex: string, percent: number): string {
-  const num = parseInt(hex.slice(1), 16)
-  const r = Math.min(255, Math.max(0, ((num >> 16) & 0xff) + Math.round(255 * percent)))
-  const g = Math.min(255, Math.max(0, ((num >> 8) & 0xff) + Math.round(255 * percent)))
-  const b = Math.min(255, Math.max(0, (num & 0xff) + Math.round(255 * percent)))
-  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`
-}
+import { GoldPanel } from './GoldPanel'
+import { THEME } from './theme'
 
 /** A local game builds this via beginLocalGame (src/core/gameFlow/localGameSession.ts); an online
  * game builds it from a HostTurnManagerBridge/RemoteTurnManager (src/online/) plus the players
@@ -98,6 +82,11 @@ export function GameBoardScreen({
           ? `Dados: ${lastRoll.dieA} y ${lastRoll.dieB}${isDouble ? ' (dobles)' : ''} · Parkiller: ${lastRoll.blackDie}`
           : 'Tirá los dados para empezar tu turno'
 
+  // Player info belongs at the table's own edges (like players actually sitting around it), split
+  // left/right by turn order so it scales to however many are actually seated (2-6).
+  const leftPlayers = session.players.filter((_, i) => i % 2 === 0)
+  const rightPlayers = session.players.filter((_, i) => i % 2 === 1)
+
   return (
     <div className="game-screen-in" style={screenWrapperStyle}>
       <BoardScene
@@ -120,29 +109,33 @@ export function GameBoardScreen({
 
       <RewardToast pendingReward={pendingReward} forfeitedReward={forfeitedReward} />
 
-      <div style={turnCardStyle}>
-        <div style={turnCardHeaderStyle}>
-          <span style={{ ...avatarStyle, background: getColor(currentPlayer.color) }}>♟</span>
-          <div style={{ minWidth: 0 }}>
-            <div style={turnTitleStyle}>TURNO DE {currentPlayer.color.toUpperCase()}</div>
-            <div style={turnSubtitleStyle}>{statusLine}</div>
-          </div>
-        </div>
-        <button
-          className="chunky-btn"
-          onClick={() => canRoll && rollDice()}
-          disabled={!canRoll}
-          style={cardRollButtonStyle(canRoll, getColor(currentPlayer.color))}
-        >
-          {rolling ? 'RODANDO...' : 'TIRAR DADOS'}
-        </button>
-      </div>
+      <GoldPanel accent={getColor(currentPlayer.color)} style={turnBannerStyle}>
+        <span style={{ ...turnDotStyle, background: getColor(currentPlayer.color) }} />
+        <span style={{ fontWeight: 800, fontSize: 'clamp(15px, 3.4vw, 19px)', letterSpacing: 0.6 }}>
+          TURNO DE {currentPlayer.color.toUpperCase()}
+        </span>
+        <span style={{ fontSize: 13, color: THEME.creamDim, textAlign: 'center' }}>{statusLine}</span>
+      </GoldPanel>
 
-      <div style={playerRowStyle}>
-        {session.players.map((p) => (
-          <PlayerPill key={p.color} player={p} isCurrentTurn={p.color === currentPlayer.color} />
+      <div style={{ ...playerColumnStyle, left: 16 }}>
+        {leftPlayers.map((p) => (
+          <PlayerPanel key={p.color} player={p} isCurrentTurn={p.color === currentPlayer.color} />
         ))}
       </div>
+      <div style={{ ...playerColumnStyle, right: 16 }}>
+        {rightPlayers.map((p) => (
+          <PlayerPanel key={p.color} player={p} isCurrentTurn={p.color === currentPlayer.color} />
+        ))}
+      </div>
+
+      <button
+        className="chunky-btn"
+        onClick={() => canRoll && rollDice()}
+        disabled={!canRoll}
+        style={{ ...rollButtonStyle(canRoll), ...bottomRollButtonStyle }}
+      >
+        {rolling ? 'RODANDO...' : 'TIRAR DADOS'}
+      </button>
 
       <button className="chunky-btn" onClick={() => setConfirmingExit(true)} title="Salir del juego" style={exitButtonStyle}>
         ✕
@@ -150,23 +143,26 @@ export function GameBoardScreen({
 
       {confirmingExit && (
         <div style={overlayStyle}>
-          <div style={{ fontSize: 18, fontWeight: 600, color: '#f2ede0' }}>¿Seguro que querés salir?</div>
-          <div style={{ ...hintTextStyle, marginBottom: 4 }}>Se perderá la partida en curso.</div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button className="chunky-btn" onClick={() => setConfirmingExit(false)} style={secondaryButtonStyle}>
-              Cancelar
-            </button>
-            <button className="chunky-btn" onClick={onExit} style={rollButtonStyle(true)}>
-              Sí, salir
-            </button>
-          </div>
+          <GoldPanel style={dialogStyle}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: THEME.cream }}>¿Seguro que querés salir?</div>
+            <div style={{ fontSize: 13, color: THEME.creamDim, marginBottom: 4 }}>Se perderá la partida en curso.</div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="chunky-btn" onClick={() => setConfirmingExit(false)} style={secondaryButtonStyle}>
+                Cancelar
+              </button>
+              <button className="chunky-btn" onClick={onExit} style={rollButtonStyle(true)}>
+                Sí, salir
+              </button>
+            </div>
+          </GoldPanel>
         </div>
       )}
 
       {winner && (
         <div style={overlayStyle}>
           <Confetti />
-          <div
+          <GoldPanel
+            accent={getColor(winner.color)}
             style={{
               position: 'relative',
               display: 'flex',
@@ -175,9 +171,7 @@ export function GameBoardScreen({
               gap: 18,
               padding: '32px 44px',
               borderRadius: 24,
-              background: 'linear-gradient(180deg, rgba(255,255,255,0.06), transparent 25%), linear-gradient(165deg, rgba(58, 46, 30, 0.85), rgba(30, 23, 14, 0.85))',
-              border: `3px solid ${getColor(winner.color)}`,
-              boxShadow: `0 12px 34px rgba(0,0,0,0.55), 0 0 40px 4px ${getColor(winner.color)}55, inset 0 1px 0 rgba(255,255,255,0.12)`,
+              boxShadow: `0 12px 34px rgba(0,0,0,0.55), 0 0 40px 4px ${getColor(winner.color)}55, inset 0 1px 0 rgba(255,255,255,0.1)`,
             }}
           >
             <div
@@ -194,196 +188,131 @@ export function GameBoardScreen({
             <button className="chunky-btn" onClick={onExit} style={rollButtonStyle(true)}>
               Volver al inicio
             </button>
-          </div>
+          </GoldPanel>
         </div>
       )}
     </div>
   )
 }
 
-// One pill per seated player, in a single row along the table's bottom edge (wraps on narrow
-// phones) - matches the reference's row of player badges rather than the earlier per-side
-// columns. Pieces-at-home count uses data already on PlayerState (Piece.state === 'Finished'),
-// no new game-state tracking needed.
-function PlayerPill({ player, isCurrentTurn }: { player: PlayerState; isCurrentTurn: boolean }) {
-  const home = player.pieces.filter((p) => p.state === 'Finished').length
+// One panel per seated player, at the table's own left/right edges (see leftPlayers/rightPlayers
+// above) - echoes players actually sitting around a physical board. Shows only the two counts
+// that actually matter mid-game (in play vs. safely home), not every piece's exact square. The
+// current player's panel is emphasized (brighter border/glow, bolder text); everyone else is
+// shown weaker, per the brief's own "current player stronger, others weaker" note.
+function PlayerPanel({ player, isCurrentTurn }: { player: PlayerState; isCurrentTurn: boolean }) {
+  const inPlay = player.pieces.filter((p) => p.state === 'OnTrack' || p.state === 'InHomeCorridor').length
+  const atHome = player.pieces.filter((p) => p.state === 'Finished').length
   const color = getColor(player.color)
   return (
-    <div
+    <GoldPanel
+      ticks={false}
+      accent={isCurrentTurn ? color : 'rgba(201,162,75,0.32)'}
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 'clamp(5px, 1.5vw, 8px)',
-        padding: 'clamp(6px, 1.8vw, 9px) clamp(10px, 2.6vw, 14px)',
-        borderRadius: 999,
-        background: isCurrentTurn
-          ? `linear-gradient(180deg, rgba(255,255,255,0.12), transparent 30%), linear-gradient(165deg, ${color}55, rgba(24,14,9,0.92))`
-          : 'linear-gradient(180deg, rgba(255,255,255,0.05), transparent 30%), linear-gradient(165deg, rgba(48,30,20,0.9), rgba(20,12,8,0.92))',
-        border: `2px solid ${isCurrentTurn ? color : 'rgba(201,162,75,0.4)'}`,
-        boxShadow: isCurrentTurn ? `0 0 12px 1px ${color}66, 0 4px 10px rgba(0,0,0,0.4)` : '0 4px 10px rgba(0,0,0,0.35)',
-        fontFamily: 'system-ui, sans-serif',
-        color: '#f2ede0',
-        whiteSpace: 'nowrap',
+        gap: 'clamp(6px, 2vw, 10px)',
+        padding: 'clamp(5px, 1.5vw, 8px) clamp(8px, 3vw, 14px)',
+        borderRadius: 12,
+        opacity: isCurrentTurn ? 1 : 0.6,
+        boxShadow: isCurrentTurn
+          ? `0 0 14px 1px ${color}55, 0 4px 12px rgba(0,0,0,0.4)`
+          : '0 4px 10px rgba(0,0,0,0.3)',
+        minWidth: 'clamp(84px, 21vw, 118px)',
       }}
     >
-      <span
-        style={{ width: 'clamp(9px, 2.2vw, 11px)', height: 'clamp(9px, 2.2vw, 11px)', borderRadius: '50%', background: color, boxShadow: '0 0 5px rgba(0,0,0,0.5)', flexShrink: 0 }}
-      />
-      <span style={{ fontWeight: 800, fontSize: 'clamp(10px, 2.4vw, 12px)', letterSpacing: 0.3 }}>{player.color.toUpperCase()}</span>
-      <span style={{ fontSize: 'clamp(10px, 2.4vw, 12px)', color: '#d8d2c2' }}>
-        ♟ {home}/{player.pieces.length}
-      </span>
-    </div>
+      <span style={{ ...turnDotStyle, width: 'clamp(9px, 2.4vw, 12px)', height: 'clamp(9px, 2.4vw, 12px)', background: color, flexShrink: 0 }} />
+      <div style={{ lineHeight: 1.35 }}>
+        <div style={{ fontWeight: 800, fontSize: 'clamp(10px, 2.6vw, 12px)', letterSpacing: 0.3 }}>{player.color.toUpperCase()}</div>
+        <div style={{ fontSize: 'clamp(9px, 2.2vw, 10.5px)', color: THEME.creamDim }}>En juego: {inPlay}</div>
+        <div style={{ fontSize: 'clamp(9px, 2.2vw, 10.5px)', color: THEME.creamDim }}>En casa: {atHome}</div>
+      </div>
+    </GoldPanel>
   )
 }
 
-// A square board inside a landscape (or portrait) window always leaves margin beside it - no
-// camera-fit math changes that geometry. That margin is now real 3D geometry (see
-// scene/TableSurface.tsx - a large felt-toned plane under the board, extending well past the
-// camera's own frustum) rather than empty CSS space; this background is the (normally fully
-// covered) fallback behind the Canvas. Reported directly, with a photoreal reference (a dark
-// leather-and-gold game table lit by candlelight): warm near-black brown/maroon instead of the
-// earlier green, so anything that peeks past the ground plane on an unusual aspect ratio still
-// reads as "dim opulent room" rather than a mismatched flat color.
+// A square board inside a landscape (or portrait) window always leaves margin beside it - that
+// margin is now real 3D geometry (see scene/TableSurface.tsx, a dark wood table under the board)
+// rather than empty CSS space; this background is the (normally fully covered) fallback behind
+// the Canvas. Deep near-black green, matching the "dark wood / deep green / gold" palette
+// requested directly - the 3D scene's own spotlight (see BoardScene) does the actual board-
+// focused lighting; this is just what shows if the ground plane doesn't fully cover an unusual
+// aspect ratio.
 const screenWrapperStyle: React.CSSProperties = {
   height: '100%',
   position: 'relative',
-  background: 'radial-gradient(ellipse at center, rgba(64, 32, 22, 0.5) 0%, rgba(10, 5, 4, 1) 78%)',
+  background: `radial-gradient(ellipse at center, ${THEME.wood}66 0%, ${THEME.woodDeep} 78%)`,
 }
 
-// A thin gold inset line plus a soft dark vignette at the very edges - stands in for the
-// reference's ornate gold arch frame without needing bespoke corner art. Pointer-events none so
-// it never intercepts clicks meant for the HUD or the 3D scene beneath it.
+// A thin gold inset line plus a soft dark vignette at the very edges, echoing the requested
+// lighting hierarchy (board brightest, edges dimmer) without a heavy post-process effect.
+// Pointer-events none so it never intercepts clicks meant for the HUD or the 3D scene beneath it.
 const frameOverlayStyle: React.CSSProperties = {
   position: 'absolute',
   inset: 0,
   pointerEvents: 'none',
-  boxShadow: `inset 0 0 0 3px ${BRAND_GOLD}55, inset 0 0 90px 30px rgba(0,0,0,0.55)`,
+  boxShadow: `inset 0 0 0 3px ${THEME.gold}45, inset 0 0 100px 34px rgba(0,0,0,0.55)`,
 }
 
-// Reported directly, with a photoreal reference: turn info lives in one card top-left (avatar +
-// title + status + the roll action all together), not spread across a separate banner and a
-// floating button - echoes the reference's single "RED'S TURN / Roll the dice" card exactly.
-const turnCardStyle: React.CSSProperties = {
+const turnBannerStyle: React.CSSProperties = {
   position: 'absolute',
   top: 16,
-  left: 16,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 12,
-  padding: 'clamp(12px, 3vw, 18px)',
-  borderRadius: 18,
-  background:
-    'linear-gradient(180deg, rgba(255,255,255,0.07), transparent 30%), linear-gradient(165deg, rgba(48, 30, 20, 0.94), rgba(22, 13, 9, 0.96))',
-  border: `2px solid ${BRAND_GOLD}`,
-  boxShadow: `0 8px 22px rgba(0,0,0,0.5), inset 0 0 0 3px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.12)`,
-  width: 'clamp(200px, 62vw, 300px)',
-  boxSizing: 'border-box',
-  fontFamily: 'system-ui, sans-serif',
-  color: '#f2ede0',
-}
-
-const turnCardHeaderStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 12,
-}
-
-const avatarStyle: React.CSSProperties = {
-  width: 'clamp(38px, 9vw, 48px)',
-  height: 'clamp(38px, 9vw, 48px)',
-  borderRadius: '50%',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  fontSize: 'clamp(18px, 4vw, 22px)',
-  color: '#fff',
-  border: '2px solid rgba(255,255,255,0.4)',
-  boxShadow: '0 3px 8px rgba(0,0,0,0.4), inset 0 2px 3px rgba(255,255,255,0.3)',
-  flexShrink: 0,
-}
-
-const turnTitleStyle: React.CSSProperties = {
-  fontWeight: 800,
-  fontSize: 'clamp(14px, 3.6vw, 18px)',
-  letterSpacing: 0.4,
-  whiteSpace: 'nowrap',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-}
-
-const turnSubtitleStyle: React.CSSProperties = {
-  fontSize: 'clamp(11px, 2.6vw, 13px)',
-  color: '#d8d2c2',
-  marginTop: 2,
-}
-
-// One row of player pills along the table's bottom edge (see PlayerPill below), matching the
-// reference's row of player badges - wraps on narrow phones instead of overflowing.
-const playerRowStyle: React.CSSProperties = {
-  position: 'absolute',
-  bottom: 16,
   left: '50%',
   transform: 'translateX(-50%)',
   display: 'flex',
-  flexWrap: 'wrap',
-  justifyContent: 'center',
-  gap: 'clamp(6px, 1.8vw, 10px)',
-  maxWidth: 'calc(100vw - 24px)',
-  padding: '0 8px',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 4,
+  padding: '8px clamp(12px, 4vw, 28px)',
+  borderRadius: 16,
+  // Has to clear the exit button (right: 16, width 46) on both sides while staying centered.
+  maxWidth: 'min(78vw, calc(100vw - 140px))',
 }
 
-const hintTextStyle: React.CSSProperties = {
-  fontSize: 13,
-  color: '#d8d2c2',
+const playerColumnStyle: React.CSSProperties = {
+  position: 'absolute',
+  top: 'clamp(76px, 12vh, 90px)',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 'clamp(6px, 1.5vh, 10px)',
 }
 
-// Full pill shape (borderRadius 999), but now with the same solid (non-blurred) offset bottom
-// edge as StartScreen/PlayerCountSelector's own chunky buttons - that crisp edge, not a bigger
-// blurred shadow, is what actually reads as physical carved-wood depth. The two screens were
-// restyled first and this one still used the earlier blurred-shadow pass, which read as a
-// different, plainer button style right where the game's most-pressed button lives - reported
-// directly as wanting one consistent button language across every screen, not per-screen styles.
+const turnDotStyle: React.CSSProperties = {
+  width: 12,
+  height: 12,
+  borderRadius: '50%',
+  boxShadow: '0 0 6px rgba(0,0,0,0.5)',
+  flexShrink: 0,
+}
+
+const bottomRollButtonStyle: React.CSSProperties = {
+  position: 'absolute',
+  bottom: 20,
+  left: '50%',
+  transform: 'translateX(-50%)',
+  fontSize: 'clamp(15px, 4vw, 19px)',
+  padding: '14px clamp(24px, 8vw, 40px)',
+  whiteSpace: 'nowrap',
+}
+
+// Deep green + gold border + a soft gold glow, matching the "premium board game" palette instead
+// of the earlier plain blue pill - this is the single most important action in the game, so it
+// keeps the same physical carved-edge depth language as every other chunky-btn but in its own
+// distinct color, not shared with any secondary action.
 function rollButtonStyle(enabled: boolean): React.CSSProperties {
   return {
     padding: '12px 24px',
     fontSize: 16,
     fontWeight: 800,
-    letterSpacing: 0.3,
-    color: enabled ? '#eef4ff' : '#9a9a90',
+    letterSpacing: 0.4,
+    color: enabled ? THEME.cream : '#9a9a90',
     background: enabled
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0) 40%), linear-gradient(180deg, #dcebff 0%, #3d76e6 48%, #16409c 100%)'
+      ? `linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 40%), linear-gradient(180deg, ${THEME.greenLight} 0%, ${THEME.green} 55%, ${THEME.greenDeep} 100%)`
       : 'linear-gradient(165deg, #6b6b62, #4a4a44)',
-    border: `3px solid ${enabled ? '#1a3468' : '#3a3a34'}`,
+    border: `3px solid ${enabled ? THEME.gold : '#3a3a34'}`,
     borderRadius: 999,
     boxShadow: enabled
-      ? '0 5px 0 #1a3468, 0 9px 14px rgba(0,0,0,0.4), inset 0 2px 1px rgba(255,255,255,0.55)'
-      : '0 5px 0 #3a3a34, inset 0 1px 2px rgba(0,0,0,0.3)',
-    textShadow: enabled ? '0 1px 2px rgba(8,16,40,0.5)' : 'none',
-    cursor: enabled ? 'pointer' : 'default',
-  }
-}
-
-// Lives inside turnCardStyle - colored to the current player's own swatch (via shade()) rather
-// than a fixed brand color, echoing the reference's red-themed button on red's turn.
-function cardRollButtonStyle(enabled: boolean, colorHex: string): React.CSSProperties {
-  const dark = shade(colorHex, -0.5)
-  const light = shade(colorHex, 0.35)
-  return {
-    width: '100%',
-    boxSizing: 'border-box',
-    padding: '12px 20px',
-    fontSize: 'clamp(14px, 3.6vw, 17px)',
-    fontWeight: 800,
-    letterSpacing: 0.5,
-    color: enabled ? '#fff6e8' : '#9a9a90',
-    background: enabled
-      ? `linear-gradient(180deg, rgba(255,255,255,0.45), rgba(255,255,255,0) 40%), linear-gradient(180deg, ${light} 0%, ${colorHex} 55%, ${dark} 100%)`
-      : 'linear-gradient(165deg, #6b6b62, #4a4a44)',
-    border: `3px solid ${enabled ? dark : '#3a3a34'}`,
-    borderRadius: 12,
-    boxShadow: enabled
-      ? `0 5px 0 ${dark}, 0 9px 14px rgba(0,0,0,0.4), inset 0 2px 1px rgba(255,255,255,0.4)`
+      ? `0 5px 0 ${THEME.goldDeep}, 0 0 20px 2px rgba(201,162,75,0.35), 0 9px 14px rgba(0,0,0,0.4), inset 0 2px 1px rgba(255,255,255,0.3)`
       : '0 5px 0 #3a3a34, inset 0 1px 2px rgba(0,0,0,0.3)',
     textShadow: enabled ? '0 1px 2px rgba(0,0,0,0.5)' : 'none',
     cursor: enabled ? 'pointer' : 'default',
@@ -394,18 +323,18 @@ const secondaryButtonStyle: React.CSSProperties = {
   padding: '11px 22px',
   fontSize: 15,
   fontWeight: 700,
-  color: '#f2ede0',
-  background: 'linear-gradient(165deg, rgba(255,255,255,0.1), rgba(255,255,255,0) 60%), rgba(58, 46, 30, 0.6)',
-  border: `3px solid ${BRAND_GOLD}`,
+  color: THEME.cream,
+  background: `linear-gradient(165deg, rgba(255,255,255,0.08), rgba(255,255,255,0) 60%), ${THEME.wood}99`,
+  border: `3px solid ${THEME.gold}`,
   borderRadius: 999,
-  boxShadow: '0 5px 0 #1a3468, 0 8px 12px rgba(0,0,0,0.35), inset 0 1px 1px rgba(255,255,255,0.2)',
+  boxShadow: `0 5px 0 ${THEME.goldDeep}, 0 8px 12px rgba(0,0,0,0.35), inset 0 1px 1px rgba(255,255,255,0.15)`,
   cursor: 'pointer',
 }
 
-// Round medallion badge instead of a rectangular "Salir" pill - matches the fleur-de-lis/star
-// corner ornaments already painted into the board art, and clears the boxy dead space a text
-// button left in the corner (reported directly, alongside the panel/roll-button shapes). Same
-// solid offset-edge depth as the pill buttons, just circular.
+// Round medallion badge instead of a rectangular "Salir" pill - kept as an explicit ✕ (not
+// relabeled to a generic hamburger/menu icon) since there's no broader menu behind it yet, just
+// this one exit action - relabeling it would promise options that don't exist. Same gold-ring
+// styling as every other chunky-btn on this screen, just circular.
 const exitButtonStyle: React.CSSProperties = {
   position: 'absolute',
   top: 16,
@@ -417,12 +346,11 @@ const exitButtonStyle: React.CSSProperties = {
   justifyContent: 'center',
   fontSize: 17,
   fontWeight: 700,
-  background:
-    'linear-gradient(180deg, rgba(255,255,255,0.22), transparent 45%), linear-gradient(165deg, rgba(64, 50, 32, 0.95), rgba(36, 28, 18, 0.95))',
-  border: `3px solid ${BRAND_GOLD}`,
+  background: `linear-gradient(180deg, rgba(255,255,255,0.14), transparent 45%), linear-gradient(165deg, ${THEME.green}f2, ${THEME.greenDeep}f7)`,
+  border: `3px solid ${THEME.gold}`,
   borderRadius: '50%',
-  boxShadow: '0 5px 0 #1a3468, 0 9px 14px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.15)',
-  color: '#f2ede0',
+  boxShadow: `0 5px 0 ${THEME.goldDeep}, 0 9px 14px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.12)`,
+  color: THEME.cream,
   cursor: 'pointer',
   fontFamily: 'system-ui, sans-serif',
   lineHeight: 1,
@@ -436,5 +364,14 @@ const overlayStyle: React.CSSProperties = {
   alignItems: 'center',
   justifyContent: 'center',
   gap: 8,
-  background: 'rgba(0,0,0,0.55)',
+  background: 'rgba(0,0,0,0.6)',
+}
+
+const dialogStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 8,
+  padding: '24px 28px',
+  borderRadius: 20,
 }
