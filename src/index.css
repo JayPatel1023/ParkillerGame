@@ -143,8 +143,8 @@ button {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: clamp(220px, 33vw, 320px);
-  height: clamp(300px, 56vh, 540px);
+  width: clamp(220px, 33vw, 360px);
+  height: clamp(300px, 56vh, 600px);
   border-radius: 26px;
   background: rgba(4, 3, 2, 0.94);
   filter: blur(22px);
