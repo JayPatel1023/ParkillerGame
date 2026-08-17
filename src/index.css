@@ -77,36 +77,6 @@ button {
   animation: cta-pulse 2.4s ease-in-out infinite;
 }
 
-/* StartScreen's background photo - a slow, small perspective swing (rotateX/rotateY never go far
-   enough to put the flat image edge-on) standing in for the old 3D rotating-board scene's "alive"
-   feel, now applied to the photo itself instead of replacing it. See StartScreen.tsx's own comment
-   on why the swing stays this small. */
-@keyframes bg-orbit-wobble {
-  0% {
-    transform: rotateX(2deg) rotateY(-4deg) scale(1.02);
-  }
-  25% {
-    transform: rotateX(4deg) rotateY(1deg) scale(1.02);
-  }
-  50% {
-    transform: rotateX(2deg) rotateY(4deg) scale(1.02);
-  }
-  75% {
-    transform: rotateX(-1deg) rotateY(1deg) scale(1.02);
-  }
-  100% {
-    transform: rotateX(2deg) rotateY(-4deg) scale(1.02);
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .start-bg-wobble {
-    animation: bg-orbit-wobble 22s ease-in-out infinite;
-    transform-origin: 50% 50%;
-    will-change: transform;
-  }
-}
-
 /* Opacity-only, no transform: the element this class sits on directly contains BoardScene's
    Three.js <Canvas> - react-three-fiber measures its container's size once on mount to size the
    canvas/renderer, and that initial measurement can land mid-animation. A `transform: scale()`
