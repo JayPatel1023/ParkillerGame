@@ -135,12 +135,30 @@ button {
    widened the fully-opaque core (was fading out starting at 0% of the radius, so anything more
    than a sliver off-center was already see-through) so the whole card footprint stays covered
    before the edge starts softening. */
+/* Reported directly, again: kept showing a sliver of the photo's own baked-in card past the real
+   card's edge. Sized up meaningfully this time (roughly 40% more reach than the previous pass) and
+   kept the opaque core large relative to the fade, instead of nudging the numbers slightly again -
+   but that same bigger size swallowed the candle/plant/dice tray in darkness on a phone screen,
+   where the card (and everything else) is much smaller to begin with. Desktop keeps the bigger
+   size; phones get their own smaller one, same relationship as .start-bg-photo's own breakpoint. */
 .start-bg-mask {
   background: radial-gradient(
-    ellipse clamp(220px, 42vw, 310px) clamp(310px, 52vh, 420px) at 50% 50%,
-    rgba(4, 3, 2, 0.94) 0%,
-    rgba(4, 3, 2, 0.9) 66%,
-    rgba(4, 3, 2, 0.4) 87%,
+    ellipse clamp(280px, 50vw, 400px) clamp(380px, 60vh, 540px) at 50% 50%,
+    rgba(4, 3, 2, 0.95) 0%,
+    rgba(4, 3, 2, 0.92) 70%,
+    rgba(4, 3, 2, 0.5) 90%,
     rgba(4, 3, 2, 0) 100%
   );
+}
+
+@media (max-width: 700px), (orientation: portrait) {
+  .start-bg-mask {
+    background: radial-gradient(
+      ellipse clamp(160px, 46vw, 220px) clamp(240px, 54vh, 320px) at 50% 50%,
+      rgba(4, 3, 2, 0.95) 0%,
+      rgba(4, 3, 2, 0.92) 70%,
+      rgba(4, 3, 2, 0.5) 90%,
+      rgba(4, 3, 2, 0) 100%
+    );
+  }
 }
