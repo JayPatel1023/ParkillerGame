@@ -38,12 +38,14 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
           backgroundImage: 'url(/backgrounds/start.png)',
           backgroundSize: 'cover',
           backgroundRepeat: 'no-repeat',
-          // Reported directly, with a screenshot: on a shorter real browser window, `cover`'s
-          // crop was eating into the bottom "ROLL DICE" tray - the most important part of the
-          // composition, not something to sacrifice. Biased down instead of re-centering, so
-          // cover keeps cropping the same *amount* (still zero margin, no scale change) but takes
-          // it from the plainer top background instead of the bottom.
-          backgroundPosition: 'center 72%',
+          // Reported directly, with screenshots, in both directions: on a shorter real browser
+          // window, `cover`'s crop was eating into the bottom "ROLL DICE" tray (fixed by biasing
+          // down from center) - and then eating into the top candle once biased too far. On a
+          // short-enough window there just isn't room to show both ends uncropped at once (cover
+          // has a fixed total crop budget - biasing away from one edge always means biasing
+          // *toward* the other), so this is the empirically-tuned middle ground that keeps both
+          // recognizable rather than fully sacrificing either one.
+          backgroundPosition: 'center 65%',
         }}
       />
       <div
