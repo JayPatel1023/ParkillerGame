@@ -89,7 +89,7 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
           />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(12px, 3vh, 18px)', width: 'min(300px, 70vw)', marginTop: 'clamp(4px, 1vh, 10px)' }}>
             <button className="chunky-btn chunky-btn-pulse" onClick={onPlayLocal} style={buttonStyle(true, 'green')}>
-              <span aria-hidden style={iconBadgeStyle}>👥</span> JUGAR LOCAL
+              <span aria-hidden style={iconBadgeStyle}><PeopleIcon /></span> JUGAR LOCAL
             </button>
             <button
               className="chunky-btn"
@@ -98,7 +98,7 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
               onClick={() => (window.location.hash = '#online')}
               style={buttonStyle(canPlayOnline, 'blue')}
             >
-              <span aria-hidden style={iconBadgeStyle}>🌐</span> JUGAR ONLINE
+              <span aria-hidden style={iconBadgeStyle}><GlobeIcon /></span> JUGAR ONLINE
             </button>
           </div>
         </GoldPanel>
@@ -147,8 +147,30 @@ const iconBadgeStyle: React.CSSProperties = {
   height: 24,
   borderRadius: '50%',
   background: 'rgba(0,0,0,0.28)',
-  fontSize: '0.82em',
   flexShrink: 0,
+}
+
+// Plain emoji (👥/🌐) rendered as a completely different, sometimes barely-recognizable glyph
+// depending on the platform's own emoji font (reported directly - looked like a robot face rather
+// than two people on the reporter's system). Custom SVGs render identically everywhere instead.
+function PeopleIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="#eef4ff" aria-hidden focusable="false">
+      <circle cx="9" cy="8" r="3.2" />
+      <path d="M9 12.5c-3.3 0-6 1.8-6 4v1.5h9.5V16.5c0-.7.2-1.4.6-2c-.9-1.2-2.4-2-4.1-2z" />
+      <circle cx="16.3" cy="9" r="2.6" opacity="0.85" />
+      <path d="M16.3 13c-1 0-1.9.3-2.6.8.9 1 1.4 2.3 1.4 3.7v1H21v-1.5c0-2-2.1-4-4.7-4z" opacity="0.85" />
+    </svg>
+  )
+}
+
+function GlobeIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#eef4ff" strokeWidth="1.7" aria-hidden focusable="false">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18M12 3c2.8 2.8 2.8 15.2 0 18M12 3c-2.8 2.8-2.8 15.2 0 18" />
+    </svg>
+  )
 }
 
 // Chunky carved-wood button, same physical-press recipe as the rest of the app (a solid, non-
