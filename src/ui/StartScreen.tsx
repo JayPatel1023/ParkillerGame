@@ -71,7 +71,7 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
             flexDirection: 'column',
             alignItems: 'center',
             gap: 'clamp(6px, 1.8vh, 16px)',
-            padding: 'clamp(14px, 3.6vh, 40px) clamp(16px, 6vw, 52px)',
+            padding: 'clamp(14px, 3.6vh, 48px) clamp(16px, 6vw, 62px)',
             borderRadius: 22,
             maxWidth: '92vw',
           }}
@@ -84,7 +84,7 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
           </div>
           <div
             style={{
-              fontSize: 'clamp(19px, 5.2vw, 36px)',
+              fontSize: 'clamp(19px, 5.2vw, 42px)',
               fontWeight: 800,
               letterSpacing: 4,
               color: THEME.goldBright,
@@ -98,9 +98,9 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
           <img
             src="/logo-badge.png"
             alt="Parkiller"
-            style={{ width: 'clamp(58px, 16vw, 156px)', height: 'clamp(58px, 16vw, 156px)', filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.5))', marginTop: 4 }}
+            style={{ width: 'clamp(58px, 16vw, 180px)', height: 'clamp(58px, 16vw, 180px)', filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.5))', marginTop: 4 }}
           />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(7px, 1.8vh, 18px)', width: 'min(300px, 70vw)', marginTop: 'clamp(2px, 0.8vh, 10px)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(7px, 1.8vh, 18px)', width: 'min(360px, 72vw)', marginTop: 'clamp(2px, 0.8vh, 10px)' }}>
             <button className="chunky-btn chunky-btn-pulse" onClick={onPlayLocal} style={buttonStyle(true, 'green')}>
               <span aria-hidden style={iconBadgeStyle}><PeopleIcon /></span> JUGAR LOCAL
             </button>
@@ -242,8 +242,8 @@ function buttonStyle(enabled: boolean, tint: keyof typeof TINTS): React.CSSPrope
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    padding: 'clamp(9px, 2vh, 18px) clamp(16px, 4vw, 36px)',
-    fontSize: 'clamp(13px, 3.6vw, 20px)',
+    padding: 'clamp(9px, 2vh, 22px) clamp(16px, 4vw, 42px)',
+    fontSize: 'clamp(13px, 3.6vw, 23px)',
     fontWeight: 800,
     letterSpacing: 0.4,
     width: '100%',
