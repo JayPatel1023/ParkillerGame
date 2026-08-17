@@ -47,10 +47,10 @@ export function GoldPanel({
 function CornerTick({ corner, color }: { corner: 'tl' | 'tr' | 'bl' | 'br'; color: string }) {
   const base: CSSProperties = {
     position: 'absolute',
-    width: 12,
-    height: 12,
+    width: 16,
+    height: 16,
     pointerEvents: 'none',
-    opacity: 0.8,
+    opacity: 0.9,
   }
   const edges: Record<string, CSSProperties> = {
     tl: { top: -2, left: -2, borderTop: `2px solid ${color}`, borderLeft: `2px solid ${color}`, borderTopLeftRadius: 6 },

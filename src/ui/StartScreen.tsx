@@ -47,32 +47,34 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            gap: 'clamp(12px, 3vh, 20px)',
+            gap: 'clamp(10px, 2.4vh, 16px)',
             padding: 'clamp(22px, 5vh, 40px) clamp(22px, 7vw, 52px)',
             borderRadius: 22,
             maxWidth: '92vw',
           }}
         >
+          <GoldDivider />
           <CrownIcon />
           <div
             style={{
               fontSize: 'clamp(24px, 6vw, 36px)',
               fontWeight: 800,
-              letterSpacing: 3,
+              letterSpacing: 4,
               color: THEME.goldBright,
-              textShadow: '0 2px 10px rgba(0,0,0,0.6)',
+              textShadow: '0 1px 0 rgba(255,255,255,0.35), 0 -1px 1px rgba(0,0,0,0.5), 0 3px 8px rgba(0,0,0,0.6)',
             }}
           >
             PARKILLER
           </div>
+          <GoldDivider accent />
           <img
             src="/logo-badge.png"
             alt="Parkiller"
-            style={{ width: 'clamp(96px, 22vw, 156px)', height: 'clamp(96px, 22vw, 156px)', filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.5))' }}
+            style={{ width: 'clamp(96px, 22vw, 156px)', height: 'clamp(96px, 22vw, 156px)', filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.5))', marginTop: 4 }}
           />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(12px, 3vh, 18px)', width: 'min(300px, 70vw)', marginTop: 'clamp(4px, 1vh, 10px)' }}>
             <button className="chunky-btn chunky-btn-pulse" onClick={onPlayLocal} style={buttonStyle(true, 'green')}>
-              <span aria-hidden style={{ fontSize: '0.95em' }}>👥</span> Jugar local
+              <span aria-hidden style={iconBadgeStyle}>👥</span> JUGAR LOCAL
             </button>
             <button
               className="chunky-btn"
@@ -81,7 +83,7 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
               onClick={() => (window.location.hash = '#online')}
               style={buttonStyle(canPlayOnline, 'blue')}
             >
-              <span aria-hidden style={{ fontSize: '0.95em' }}>🌐</span> Jugar online
+              <span aria-hidden style={iconBadgeStyle}>🌐</span> JUGAR ONLINE
             </button>
           </div>
         </GoldPanel>
@@ -90,12 +92,48 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
   )
 }
 
+// Requested directly, side by side with a more polished reference: the plain flat crown silhouette
+// read as too simple - the reference has a jeweled crown (small circles on each point) plus a base
+// band, and gold divider lines framing the title instead of the title floating on its own.
 function CrownIcon() {
   return (
-    <svg width="32" height="24" viewBox="0 0 30 22" aria-hidden focusable="false">
-      <path d="M2 20 L1 7 L8 12 L15 2 L22 12 L29 7 L28 20 Z" fill={THEME.gold} stroke={THEME.goldBright} strokeWidth="1" />
+    <svg width="36" height="28" viewBox="0 0 34 26" aria-hidden focusable="false">
+      <path d="M3 22 L2 8 L9 13 L17 2 L25 13 L32 8 L31 22 Z" fill={THEME.gold} stroke={THEME.goldBright} strokeWidth="1" />
+      <rect x="2" y="21" width="30" height="3" rx="1.2" fill={THEME.gold} stroke={THEME.goldBright} strokeWidth="0.5" />
+      <circle cx="2" cy="8" r="2" fill={THEME.goldBright} />
+      <circle cx="17" cy="2" r="2.3" fill={THEME.goldBright} />
+      <circle cx="32" cy="8" r="2" fill={THEME.goldBright} />
     </svg>
   )
+}
+
+// A plain thin line above the crown; with `accent`, a small diamond marker centered on the line -
+// the pair frame the title block like a small heraldic rule, matching the reference's card layout.
+function GoldDivider({ accent = false }: { accent?: boolean }) {
+  if (!accent) {
+    return <div style={{ width: '100%', height: 1, background: `linear-gradient(90deg, transparent, ${THEME.gold}, transparent)` }} />
+  }
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', width: '100%', gap: 8 }}>
+      <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg, transparent, ${THEME.gold})` }} />
+      <span style={{ width: 6, height: 6, transform: 'rotate(45deg)', background: THEME.gold, flexShrink: 0 }} />
+      <div style={{ flex: 1, height: 1, background: `linear-gradient(270deg, transparent, ${THEME.gold})` }} />
+    </div>
+  )
+}
+
+// A subtle dark circular badge behind each button's icon, matching the reference's "icon in its
+// own coin" look instead of the emoji sitting bare against the button's gradient.
+const iconBadgeStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 24,
+  height: 24,
+  borderRadius: '50%',
+  background: 'rgba(0,0,0,0.28)',
+  fontSize: '0.82em',
+  flexShrink: 0,
 }
 
 // Chunky carved-wood button, same physical-press recipe as the rest of the app (a solid, non-
