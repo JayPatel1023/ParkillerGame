@@ -13,23 +13,22 @@ import { THEME } from './theme'
 export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
   const canPlayOnline = Boolean(import.meta.env.VITE_PHOTON_APP_ID)
   return (
-    <div style={{ height: '100%', position: 'relative' }}>
-      {/* `cover` (fills 100%, but reported directly as cropping/zooming the photo too much) and
-          `contain` (shows the whole photo, but reported directly as leaving visible letterbox bars
-          on mismatched aspect ratios) can't both be satisfied by one image at one size - they're
-          the two ends of the same trade-off. The standard fix or this exact conflict (same trick
-          Spotify/Apple Music use for non-matching album art): two layers of the *same* photo - a
-          heavily blurred `cover` copy behind, sized to always fill the frame with no bare margin,
-          and the real photo on top at `contain`, always shown whole and never cropped/zoomed. Both
-          sit inside one oversized (inset -6%) wrapper carrying the slow 3D wobble (see index.css'
-          bg-orbit-wobble - a flat photo can't actually spin 360 like the old 3D scene could, so
-          this is a small tilt instead), so the two layers always move together as one unit. */}
+    <div style={{ height: '100%', position: 'relative', backgroundColor: THEME.wood }}>
+      {/* Reported directly: a gap/margin was visible on one side even with the blur-fill layer
+          below - width is the dimension that must never show a gap (a bare margin on the left/
+          right reads far worse than a photo that's slightly taller than the viewport), so the
+          sharp photo is now sized by width explicitly (`100% auto` - width always fills exactly,
+          height follows the photo's own aspect ratio and simply overflows/clips top-to-bottom
+          instead of ever leaving a horizontal gap). The blurred `cover` copy behind still fills any
+          vertical gap this leaves on narrower/taller viewports. A backgroundColor now also sits on
+          the outermost wrapper itself as a last-resort fallback, in case any layer ever fails to
+          fully cover for some other reason. */}
       <div style={{ position: 'absolute', inset: 0, perspective: 1600, overflow: 'hidden' }}>
-        <div className="start-bg-wobble" style={{ position: 'absolute', inset: '-6%' }}>
+        <div className="start-bg-wobble" style={{ position: 'absolute', inset: '-10%' }}>
           <div
             style={{
               position: 'absolute',
-              inset: '-20%',
+              inset: '-25%',
               backgroundColor: THEME.wood,
               backgroundImage: 'url(/backgrounds/start.png)',
               backgroundSize: 'cover',
@@ -43,7 +42,7 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
               position: 'absolute',
               inset: 0,
               backgroundImage: 'url(/backgrounds/start.png)',
-              backgroundSize: 'contain',
+              backgroundSize: '100% auto',
               backgroundRepeat: 'no-repeat',
               backgroundPosition: 'center',
             }}
