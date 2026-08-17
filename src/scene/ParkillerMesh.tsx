@@ -133,19 +133,21 @@ export const DEFAULT_PARKILLER_CONFIG: ParkillerGeometryConfig = {
   // highlight - reported directly that any visible red inside the hood read as wrong.
   cavity: { position: [0, 2.32, 0.34], scale: [0.17, 0.32, 0.13] },
   face: { position: [0, 2.32, 0.34], scale: [0.12, 0.22, 0.08] },
-  // Both arms bend forward and sharply inward from the shoulder so the hands overlap into one
-  // small rounded clasped mass at the front, roughly chest-height - every view on the sheet shows
-  // a single compact bump, not two separate visible fists. Hand z-offset has to clear the body's
-  // own radius at that height (~0.5-0.55, see BODY_PROFILE_RAW) or it reads as buried inside the
-  // body instead of resting on its front.
+  // Reported directly: the clasped-hands-in-front pose read as wrong against the client's actual
+  // reference photo (public/reference/parkiller-full.png, a physical figurine turnaround) - every
+  // angle of that photo shows two distinct hands hanging separately at the sides, roughly hip
+  // height, not merged into one central bump. Arms now hang mostly straight down from the
+  // shoulder with only a slight forward lean, splaying outward (not inward) so each hand clears
+  // the robe's own flared radius at hip height (~0.6-0.66, see BODY_PROFILE_RAW) and reads as its
+  // own separate rounded mitt against the silhouette.
   arms: [
     {
-      arm: { position: [0.22, 1.55, 0.32], rotation: [0.5, 0, 0.3], scale: [0.13, 0.55, 0.15] },
-      hand: { position: [0.07, 1.15, 0.58], scale: [0.15, 0.19, 0.15] },
+      arm: { position: [0.35, 1.4, 0.08], rotation: [0.15, 0, -0.38], scale: [0.14, 0.62, 0.16] },
+      hand: { position: [0.72, 0.85, 0.22], scale: [0.17, 0.21, 0.17] },
     },
     {
-      arm: { position: [-0.22, 1.55, 0.32], rotation: [0.5, 0, -0.3], scale: [0.13, 0.55, 0.15] },
-      hand: { position: [-0.07, 1.15, 0.58], scale: [0.15, 0.19, 0.15] },
+      arm: { position: [-0.35, 1.4, 0.08], rotation: [0.15, 0, 0.38], scale: [0.14, 0.62, 0.16] },
+      hand: { position: [-0.72, 0.85, 0.22], scale: [0.17, 0.21, 0.17] },
     },
   ],
   fold: { position: [0, 0.75, 0.52], scale: [0.1, 0.5, 0.06] },
