@@ -44,6 +44,7 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
       >
         <GoldPanel
           style={{
+            position: 'relative',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
@@ -53,8 +54,12 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
             maxWidth: '92vw',
           }}
         >
-          <GoldDivider />
-          <CrownIcon />
+          {/* Straddles the card's own top border (half above, half below) instead of sitting as a
+              separate divider-framed row - matches a reference showing the crown as a crest
+              overlapping the frame edge. */}
+          <div style={{ position: 'absolute', top: -15, left: '50%', transform: 'translateX(-50%)' }}>
+            <CrownIcon />
+          </div>
           <div
             style={{
               fontSize: 'clamp(24px, 6vw, 36px)',
@@ -62,6 +67,7 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
               letterSpacing: 4,
               color: THEME.goldBright,
               textShadow: '0 1px 0 rgba(255,255,255,0.35), 0 -1px 1px rgba(0,0,0,0.5), 0 3px 8px rgba(0,0,0,0.6)',
+              marginTop: 'clamp(8px, 2vh, 14px)',
             }}
           >
             PARKILLER
@@ -107,8 +113,8 @@ function CrownIcon() {
   )
 }
 
-// A plain thin line above the crown; with `accent`, a small diamond marker centered on the line -
-// the pair frame the title block like a small heraldic rule, matching the reference's card layout.
+// A thin rule under the title with a small fleur-de-lis centered on it - echoes the board art's
+// own fleur-de-lis corner ornaments (see CLAUDE.md) instead of a plain diamond.
 function GoldDivider({ accent = false }: { accent?: boolean }) {
   if (!accent) {
     return <div style={{ width: '100%', height: 1, background: `linear-gradient(90deg, transparent, ${THEME.gold}, transparent)` }} />
@@ -116,7 +122,7 @@ function GoldDivider({ accent = false }: { accent?: boolean }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', width: '100%', gap: 8 }}>
       <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg, transparent, ${THEME.gold})` }} />
-      <span style={{ width: 6, height: 6, transform: 'rotate(45deg)', background: THEME.gold, flexShrink: 0 }} />
+      <span style={{ color: THEME.gold, fontSize: 13, lineHeight: 1, flexShrink: 0 }} aria-hidden>⚜</span>
       <div style={{ flex: 1, height: 1, background: `linear-gradient(270deg, transparent, ${THEME.gold})` }} />
     </div>
   )
