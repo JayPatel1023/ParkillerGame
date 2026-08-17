@@ -23,40 +23,24 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
   const [showSettings, setShowSettings] = useState(false)
   return (
     <div style={{ height: '100%', position: 'relative', backgroundColor: THEME.wood }}>
-      {/* `contain` (whole photo shown, never cropped/zoomed) and `cover` (fills the frame exactly,
-          but on a wide screen that means scaling the photo up enough that height overflows and
-          gets cropped - i.e. zoomed in) can't both be satisfied by one copy of a fixed-aspect photo
-          at every viewport ratio. The fix for "no gap, no zoom" together is the blur-fill layered
-          underneath: the sharp photo stays at `contain` (always whole, never scaled up), and a
-          heavily blurred, oversized `cover` copy of the same photo fills whatever the sharp layer
-          doesn't reach - so there's still no bare/mismatched margin, without ever zooming the real
-          photo. A backgroundColor on the outermost wrapper is a last-resort fallback in case any
-          layer ever fails to fully cover for some other reason.
-          (Previously carried a slow 3D perspective wobble - removed directly on request.) */}
-      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
-        <div
-          style={{
-            position: 'absolute',
-            inset: '-25%',
-            backgroundColor: THEME.wood,
-            backgroundImage: 'url(/backgrounds/start.png)',
-            backgroundSize: 'cover',
-            backgroundRepeat: 'no-repeat',
-            backgroundPosition: 'center',
-            filter: 'blur(45px) brightness(0.8) saturate(1.15)',
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            backgroundImage: 'url(/backgrounds/start.png)',
-            backgroundSize: 'contain',
-            backgroundRepeat: 'no-repeat',
-            backgroundPosition: 'center',
-          }}
-        />
-      </div>
+      {/* Went through `contain` (whole photo, but leaves letterbox bars on a mismatched aspect
+          ratio) and a blurred-fill hybrid (contain + a blurred `cover` copy behind it to fill
+          those bars) - reported directly, more than once, that any visible bars/seam still read
+          as "not actually filling the screen" even brightened. `cover` alone is the only way to
+          guarantee zero visible margin at every viewport, full stop - the trade-off is that some
+          of the photo's own edges (the candle, the books) get cropped on an aspect ratio very
+          different from the photo's own ~1.5:1, which is the accepted cost. */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundColor: THEME.wood,
+          backgroundImage: 'url(/backgrounds/start.png)',
+          backgroundSize: 'cover',
+          backgroundRepeat: 'no-repeat',
+          backgroundPosition: 'center',
+        }}
+      />
       <div
         style={{
           position: 'absolute',
