@@ -144,9 +144,9 @@ button {
   left: 50%;
   transform: translate(-50%, -50%);
   width: clamp(220px, 33vw, 360px);
-  height: clamp(300px, 56vh, 600px);
+  height: clamp(300px, 60vh, 660px);
   border-radius: 26px;
-  background: rgba(4, 3, 2, 0.94);
+  background: rgba(2, 2, 1, 0.99);
   filter: blur(22px);
 }
 
