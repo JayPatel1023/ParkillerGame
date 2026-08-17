@@ -9,7 +9,6 @@ import type { Piece } from '../core/pieces/piece'
 import type { PieceColor } from '../core/pieceColor'
 import type { MoveAnimationRequest } from '../hooks/useTurnManager'
 import { BoardMesh } from './BoardMesh'
-import { TableSurface } from './TableSurface'
 import { PieceMesh } from './PieceMesh'
 import { ParkillerMesh } from './ParkillerMesh'
 import { DiceMesh } from './DiceMesh'
@@ -367,7 +366,7 @@ export function BoardScene({
   for (const player of players) addToStack(parkillerStackKey(player.parkiller), parkillerOccupantId(player.color))
 
   return (
-    <Canvas shadows>
+    <Canvas shadows gl={{ alpha: true }}>
       {/* Orthographic, exactly vertically overhead instead of the earlier angled perspective
           camera: a piece sits at some height above the flat board (BASE_HEIGHT + its own
           bounce/geometry), and under a perspective camera an elevated object visibly shifts away
@@ -382,7 +381,11 @@ export function BoardScene({
       <FitBoardCamera />
       <ambientLight intensity={0.7} />
       <directionalLight position={[4, 8, 2]} intensity={1.1} castShadow />
-      <TableSurface />
+      {/* Reported directly, calling the procedural wood table "한심하다" (pathetic): no more 3D
+          ground plane at all - the Canvas is transparent (gl alpha:true) and the real photo
+          (moon.png, supplied directly) is the page's own CSS background behind it instead, same
+          approach as StartScreen's own background photo. The board now reads as floating over a
+          real photo rather than a procedurally-textured plane. */}
       <Suspense fallback={null}>
         <BoardMesh imageUrl={definition.boardImage} />
       </Suspense>
