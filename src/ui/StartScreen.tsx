@@ -42,9 +42,8 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
           a card-shaped region behind where the real card sits down to nearly black, erasing the
           fake card underneath, while leaving the surrounding props (candle, lamp, books) at their
           normal brightness - only the background is meant to be used here, not its own baked-in
-          card. Shape/sizing lives in index.css's .start-bg-mask (see its own comment) - a rounded
-          rectangle close to the real card's own footprint, not a full-viewport gradient. */}
-      <div className="start-bg-mask" />
+          card. Sizing lives in index.css's .start-bg-mask (see its own comment). */}
+      <div className="start-bg-mask" style={{ position: 'absolute', inset: 0 }} />
       <div
         style={{
           position: 'absolute',
