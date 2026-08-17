@@ -22,8 +22,14 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
           instead of ever leaving a horizontal gap). The blurred `cover` copy behind still fills any
           vertical gap this leaves on narrower/taller viewports. A backgroundColor now also sits on
           the outermost wrapper itself as a last-resort fallback, in case any layer ever fails to
-          fully cover for some other reason. */}
-      <div style={{ position: 'absolute', inset: 0, perspective: 1600, overflow: 'hidden' }}>
+          fully cover for some other reason.
+          Reported again directly, this time on an actual phone (didn't reproduce in desktop
+          Chromium at the same viewport size) - a known WebKit/iOS Safari issue where
+          `overflow: hidden` doesn't reliably clip a child that has its own 3D transform inside a
+          `perspective` ancestor (exactly this wobble layer's situation). `clip-path` clips
+          reliably in that same scenario where plain `overflow` sometimes doesn't - added as
+          reinforcement alongside overflow, not a replacement for it. */}
+      <div style={{ position: 'absolute', inset: 0, perspective: 1600, overflow: 'hidden', clipPath: 'inset(0)', WebkitClipPath: 'inset(0)' }}>
         <div className="start-bg-wobble" style={{ position: 'absolute', inset: '-10%' }}>
           <div
             style={{
