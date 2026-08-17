@@ -14,12 +14,21 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
   const canPlayOnline = Boolean(import.meta.env.VITE_PHOTON_APP_ID)
   return (
     <div style={{ height: '100%', position: 'relative' }}>
+      {/* Reported directly: `cover` was scaling the photo up (and cropping it) far more than
+          expected on wide viewports, since the image's own aspect ratio (1536x1024, ~1.5:1) is
+          much squarer than a typical wide desktop window - `cover` always fills the frame exactly,
+          so the wider the viewport the more it has to zoom in and crop top/bottom to do that.
+          `contain` shows the whole photo at every viewport instead, with the backdrop color (close
+          to the photo's own near-black corner tone) filling any letterbox space instead of
+          cropping. */}
       <div
         style={{
           position: 'absolute',
           inset: 0,
+          backgroundColor: THEME.woodDeep,
           backgroundImage: 'url(/backgrounds/start.png)',
-          backgroundSize: 'cover',
+          backgroundSize: 'contain',
+          backgroundRepeat: 'no-repeat',
           backgroundPosition: 'center',
         }}
       />
