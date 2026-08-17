@@ -14,29 +14,41 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
   const canPlayOnline = Boolean(import.meta.env.VITE_PHOTON_APP_ID)
   return (
     <div style={{ height: '100%', position: 'relative' }}>
-      {/* Requested directly: bring back some of the old 3D rotating-board background's "alive"
-          quality, but a single flat photo can't actually spin 360 like that scene could - past
-          about 90 the image would be edge-on/invisible, well before that it'd read as broken. A
-          gentle perspective wobble (small rotateX/rotateY swing, well short of ever going edge-on)
-          is the tasteful middle ground: keeps the exact photo, adds real 3D motion. The layer
-          itself is oversized (inset -6%) so tilting never reveals its own edge/gap at the
-          viewport boundary. `cover` (not `contain`) so the photo always fills 100% of the frame in
-          both directions - reported directly that `contain`'s letterbox bars (visible on wide
-          screens, where the photo's own ~1.5:1 aspect is narrower than the viewport) read as an
-          unwanted margin; cropping some of the photo's own edges is the accepted trade-off. */}
+      {/* `cover` (fills 100%, but reported directly as cropping/zooming the photo too much) and
+          `contain` (shows the whole photo, but reported directly as leaving visible letterbox bars
+          on mismatched aspect ratios) can't both be satisfied by one image at one size - they're
+          the two ends of the same trade-off. The standard fix or this exact conflict (same trick
+          Spotify/Apple Music use for non-matching album art): two layers of the *same* photo - a
+          heavily blurred `cover` copy behind, sized to always fill the frame with no bare margin,
+          and the real photo on top at `contain`, always shown whole and never cropped/zoomed. Both
+          sit inside one oversized (inset -6%) wrapper carrying the slow 3D wobble (see index.css'
+          bg-orbit-wobble - a flat photo can't actually spin 360 like the old 3D scene could, so
+          this is a small tilt instead), so the two layers always move together as one unit. */}
       <div style={{ position: 'absolute', inset: 0, perspective: 1600, overflow: 'hidden' }}>
-        <div
-          className="start-bg-wobble"
-          style={{
-            position: 'absolute',
-            inset: '-6%',
-            backgroundColor: THEME.wood,
-            backgroundImage: 'url(/backgrounds/start.png)',
-            backgroundSize: 'cover',
-            backgroundRepeat: 'no-repeat',
-            backgroundPosition: 'center',
-          }}
-        />
+        <div className="start-bg-wobble" style={{ position: 'absolute', inset: '-6%' }}>
+          <div
+            style={{
+              position: 'absolute',
+              inset: '-20%',
+              backgroundColor: THEME.wood,
+              backgroundImage: 'url(/backgrounds/start.png)',
+              backgroundSize: 'cover',
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'center',
+              filter: 'blur(60px) brightness(0.55) saturate(1.1)',
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundImage: 'url(/backgrounds/start.png)',
+              backgroundSize: 'contain',
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'center',
+            }}
+          />
+        </div>
       </div>
       <div
         style={{
