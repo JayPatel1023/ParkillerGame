@@ -38,7 +38,12 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
           backgroundImage: 'url(/backgrounds/start.png)',
           backgroundSize: 'cover',
           backgroundRepeat: 'no-repeat',
-          backgroundPosition: 'center',
+          // Reported directly, with a screenshot: on a shorter real browser window, `cover`'s
+          // crop was eating into the bottom "ROLL DICE" tray - the most important part of the
+          // composition, not something to sacrifice. Biased down instead of re-centering, so
+          // cover keeps cropping the same *amount* (still zero margin, no scale change) but takes
+          // it from the plainer top background instead of the bottom.
+          backgroundPosition: 'center 72%',
         }}
       />
       <div
