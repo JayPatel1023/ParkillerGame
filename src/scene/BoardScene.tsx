@@ -198,13 +198,22 @@ const INTRO_STAGGER = 0.09 // seconds between each piece's drop-in entrance, for
 // section (where the track's local direction is roughly axis-aligned) - computeTileCorners in
 // boardGeometry.ts already has to account for this same curvature when sizing a tile's own
 // rendered shape, and stacking needs the same local frame, not the board's global axes.
+//
+// Reported directly, again, with a screenshot: a pawn and the Parkiller sharing a square still
+// read as one piece sitting on top of the other, not two pieces beside each other. The first two
+// slots below (used for the by-far most common case, exactly 2 occupants - a pawn joining a
+// Parkiller, or two pawns forming a barrier) used to be [0, 0] and a diagonal offset - one piece
+// stayed dead center while only the *other* moved, so the centered one still read as "under" its
+// neighbor instead of the two reading as a symmetric pair. Every slot now moves away from center
+// in a mirrored pair, so with 2 occupants both are offset - equally, in opposite directions -
+// instead of one sitting exactly where a lone occupant normally would.
 const STACK_OFFSETS: [number, number][] = [
-  [0, 0],
-  [-0.16, -0.16],
-  [0.16, -0.16],
-  [-0.16, 0.16],
-  [0.16, 0.16],
-  [0, -0.22],
+  [-0.1, -0.1],
+  [0.1, 0.1],
+  [0.1, -0.1],
+  [-0.1, 0.1],
+  [0, 0.18],
+  [0, -0.18],
 ]
 
 // Unit tangent (along the path) and normal (across it) at a given waypoint index, from its
