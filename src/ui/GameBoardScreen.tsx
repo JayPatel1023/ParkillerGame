@@ -175,15 +175,15 @@ export function GameBoardScreen({
 
 // A square board inside a landscape (or portrait) window always leaves margin beside it - no
 // camera-fit math changes that geometry. That margin is now real 3D geometry (see
-// scene/TableSurface.tsx - a large wood-grain plane under the board, extending well past the
+// scene/TableSurface.tsx - a large grass-toned plane under the board, extending well past the
 // camera's own frustum) rather than empty CSS space, which is the actual fix for the flat-black-
 // margins report; this background is just the (normally fully covered) fallback behind the
-// Canvas, darkened to the same warm wood tone so anything that peeks past the table plane on an
+// Canvas, colored to the same grass tone so anything that peeks past the ground plane on an
 // unusual aspect ratio still blends in instead of showing as a different color.
 const screenWrapperStyle: React.CSSProperties = {
   height: '100%',
   position: 'relative',
-  background: 'radial-gradient(ellipse at center, rgba(42, 28, 16, 0.4) 0%, rgba(12, 8, 5, 1) 75%)',
+  background: 'radial-gradient(ellipse at center, rgba(40, 84, 32, 0.4) 0%, rgba(10, 22, 8, 1) 75%)',
 }
 
 // Reported directly (twice now): the whole game felt too serious/stiff, not the "relajado,
