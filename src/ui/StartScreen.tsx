@@ -60,8 +60,8 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            gap: 'clamp(10px, 2.4vh, 16px)',
-            padding: 'clamp(22px, 5vh, 40px) clamp(22px, 7vw, 52px)',
+            gap: 'clamp(6px, 1.8vh, 16px)',
+            padding: 'clamp(14px, 3.6vh, 40px) clamp(16px, 6vw, 52px)',
             borderRadius: 22,
             maxWidth: '92vw',
           }}
@@ -74,12 +74,12 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
           </div>
           <div
             style={{
-              fontSize: 'clamp(24px, 6vw, 36px)',
+              fontSize: 'clamp(19px, 5.2vw, 36px)',
               fontWeight: 800,
               letterSpacing: 4,
               color: THEME.goldBright,
               textShadow: '0 1px 0 rgba(255,255,255,0.35), 0 -1px 1px rgba(0,0,0,0.5), 0 3px 8px rgba(0,0,0,0.6)',
-              marginTop: 'clamp(8px, 2vh, 14px)',
+              marginTop: 'clamp(6px, 1.5vh, 14px)',
             }}
           >
             PARKILLER
@@ -88,9 +88,9 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
           <img
             src="/logo-badge.png"
             alt="Parkiller"
-            style={{ width: 'clamp(96px, 22vw, 156px)', height: 'clamp(96px, 22vw, 156px)', filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.5))', marginTop: 4 }}
+            style={{ width: 'clamp(58px, 16vw, 156px)', height: 'clamp(58px, 16vw, 156px)', filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.5))', marginTop: 4 }}
           />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(12px, 3vh, 18px)', width: 'min(300px, 70vw)', marginTop: 'clamp(4px, 1vh, 10px)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(7px, 1.8vh, 18px)', width: 'min(300px, 70vw)', marginTop: 'clamp(2px, 0.8vh, 10px)' }}>
             <button className="chunky-btn chunky-btn-pulse" onClick={onPlayLocal} style={buttonStyle(true, 'green')}>
               <span aria-hidden style={iconBadgeStyle}><PeopleIcon /></span> JUGAR LOCAL
             </button>
@@ -232,8 +232,8 @@ function buttonStyle(enabled: boolean, tint: keyof typeof TINTS): React.CSSPrope
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    padding: 'clamp(14px, 3vh, 18px) clamp(20px, 5vw, 36px)',
-    fontSize: 'clamp(16px, 4vw, 20px)',
+    padding: 'clamp(9px, 2vh, 18px) clamp(16px, 4vw, 36px)',
+    fontSize: 'clamp(13px, 3.6vw, 20px)',
     fontWeight: 800,
     letterSpacing: 0.4,
     width: '100%',

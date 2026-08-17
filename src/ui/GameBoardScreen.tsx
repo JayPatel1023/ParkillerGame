@@ -237,18 +237,20 @@ function PlayerPill({ player, isCurrentTurn }: { player: PlayerState; isCurrentT
   )
 }
 
-// A square board inside a landscape (or portrait) window always leaves margin beside it - no
-// camera-fit math changes that geometry. That margin is now real 3D geometry (see
-// scene/TableSurface.tsx - a large felt-toned plane under the board, extending well past the
-// camera's own frustum) rather than empty CSS space; this background is the (normally fully
-// covered) fallback behind the Canvas. Reported directly, with a photoreal reference (a dark
-// leather-and-gold game table lit by candlelight): warm near-black brown/maroon instead of the
-// earlier green, so anything that peeks past the ground plane on an unusual aspect ratio still
-// reads as "dim opulent room" rather than a mismatched flat color.
+// Reported directly, calling the procedural 3D wood table "한심하다" (pathetic): the game's own
+// ground plane (scene/TableSurface.tsx) is gone entirely now - BoardScene's Canvas is transparent
+// and this real photo (moon.png, supplied directly) is the page's own CSS background behind it
+// instead, same approach as StartScreen's own background photo. `cover` so it always fills the
+// screen (see StartScreen's own comment history on cover vs. contain trade-offs - same
+// reasoning applies here).
 const screenWrapperStyle: React.CSSProperties = {
   height: '100%',
   position: 'relative',
-  background: 'radial-gradient(ellipse at center, rgba(64, 32, 22, 0.5) 0%, rgba(10, 5, 4, 1) 78%)',
+  backgroundColor: '#05070c',
+  backgroundImage: 'url(/backgrounds/moon.png)',
+  backgroundSize: 'cover',
+  backgroundPosition: 'center',
+  backgroundRepeat: 'no-repeat',
 }
 
 // A thin gold inset line plus a soft dark vignette at the very edges - stands in for the
