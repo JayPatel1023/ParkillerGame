@@ -14,24 +14,27 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
   const canPlayOnline = Boolean(import.meta.env.VITE_PHOTON_APP_ID)
   return (
     <div style={{ height: '100%', position: 'relative' }}>
-      {/* Reported directly: `cover` was scaling the photo up (and cropping it) far more than
-          expected on wide viewports, since the image's own aspect ratio (1536x1024, ~1.5:1) is
-          much squarer than a typical wide desktop window - `cover` always fills the frame exactly,
-          so the wider the viewport the more it has to zoom in and crop top/bottom to do that.
-          `contain` shows the whole photo at every viewport instead, with the backdrop color (close
-          to the photo's own near-black corner tone) filling any letterbox space instead of
-          cropping. */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          backgroundColor: THEME.woodDeep,
-          backgroundImage: 'url(/backgrounds/start.png)',
-          backgroundSize: 'contain',
-          backgroundRepeat: 'no-repeat',
-          backgroundPosition: 'center',
-        }}
-      />
+      {/* Requested directly: bring back some of the old 3D rotating-board background's "alive"
+          quality, but a single flat photo can't actually spin 360 like that scene could - past
+          about 90 the image would be edge-on/invisible, well before that it'd read as broken. A
+          gentle perspective wobble (small rotateX/rotateY swing, well short of ever going edge-on)
+          is the tasteful middle ground: keeps the exact photo, adds real 3D motion. The layer
+          itself is oversized (inset -6%) so tilting never reveals its own edge/gap at the
+          viewport boundary. `contain` (not `cover`) still avoids the earlier crop/zoom issue. */}
+      <div style={{ position: 'absolute', inset: 0, perspective: 1600, overflow: 'hidden' }}>
+        <div
+          className="start-bg-wobble"
+          style={{
+            position: 'absolute',
+            inset: '-6%',
+            backgroundColor: THEME.woodDeep,
+            backgroundImage: 'url(/backgrounds/start.png)',
+            backgroundSize: 'contain',
+            backgroundRepeat: 'no-repeat',
+            backgroundPosition: 'center',
+          }}
+        />
+      </div>
       <div
         style={{
           position: 'absolute',
