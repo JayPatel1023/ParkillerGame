@@ -177,6 +177,23 @@ export class PhotonConnection implements RoomTransport {
     return this.client.myRoom().getCustomProperties()
   }
 
+  // Reported directly, with a real two-player test: a joiner ended up controlled by a bot instead
+  // of themselves, even after the earlier seat-list-refresh fix. Root cause - a *second*, more
+  // serious bug than that one: OnlineLobbyScreen previously derived the joiner's own player count
+  // (and therefore which color set to pick from) by reading a *custom* room property
+  // (setRoomProperties({ playerCount }), set by the host right after createRoom() resolves). A
+  // joiner racing in quickly enough could read that property before it had synced, silently
+  // falling back to a default of 4 players and picking a color from the wrong (4-player) color
+  // set entirely - one that doesn't even appear in the real (e.g. 2-player) game, so it never
+  // matches when the host later checks who's claimed what, and that seat gets bot-filled despite
+  // a real second player being connected the whole time. maxPlayers is Photon's own built-in room
+  // property (see photon-realtime.d.ts's own comment) instead, set atomically at room-creation
+  // time - a joiner reading it can never race the host's own createRoom() the way a custom
+  // property set *after* the room exists can.
+  getMaxPlayers(): number {
+    return this.client.myRoom().maxPlayers
+  }
+
   setLocalActorProperties(props: Record<string, unknown>): void {
     this.client.myActor().setCustomProperties(props)
   }
