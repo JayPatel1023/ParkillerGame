@@ -34,8 +34,8 @@ function createGrassTexture(): THREE.CanvasTexture {
   const glow = ctx.createRadialGradient(size / 2, size / 2, size * 0.05, size / 2, size / 2, size * 0.62)
   glow.addColorStop(0, '#4a8a3a')
   glow.addColorStop(0.35, '#3c7530')
-  glow.addColorStop(0.7, '#285420')
-  glow.addColorStop(1, '#142c10')
+  glow.addColorStop(0.7, '#24431f')
+  glow.addColorStop(1, '#1f140d')
   ctx.fillStyle = glow
   ctx.fillRect(0, 0, size, size)
 
