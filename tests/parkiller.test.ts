@@ -142,6 +142,36 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     expect(grants).toEqual([{ amount: 20, reason: 'capture' }])
   })
 
+  it('an opposing Parkiller guarding the exit sends a mandatorily-exiting pawn straight back to the yard (PK5)', () => {
+    // Unlike buildTestBoard() above, Red's own entry square (0) is deliberately NOT a safe square
+    // here - matching real generated board data, where an entry square is frequently unprotected
+    // (e.g. every entry on the 4-player board). Reported directly: a pawn forced to exit onto a
+    // square an opposing Parkiller happened to be sitting on came back eliminated, wasting the
+    // roll - this is that exact scenario end to end, not just the underlying rule in isolation.
+    const board: BoardData = {
+      playerCount: 2,
+      trackLength: 20,
+      lanes: {
+        Red: { color: 'Red', entryTrackIndex: 0, homeEntranceTrackIndex: 19, corridorLength: 6 },
+        Blue: { color: 'Blue', entryTrackIndex: 10, homeEntranceTrackIndex: 9, corridorLength: 6 },
+      },
+      safeTrackIndices: new Set([10]),
+    }
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    blue.parkiller.trackPosition = 0 // sitting right on Red's own exit
+
+    const dice = new ScriptedDice([5, 2, 1]) // dieA=5 exits a yard piece onto position 0
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    manager.requestRoll()
+    const result = manager.submitMove(red.pieces[0])
+
+    expect(result?.eliminatedByParkiller).toBe(true)
+    expect(red.pieces[0].state).toBe('InYard')
+    expect(blue.parkiller.state).toBe('InPlay') // the Parkiller itself is unharmed
+  })
+
   it('a pawn move landing on an opposing Parkiller without doubles does not eliminate it', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)
