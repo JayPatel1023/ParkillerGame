@@ -114,29 +114,27 @@ export interface ParkillerGeometryConfig {
 export const DEFAULT_PARKILLER_CONFIG: ParkillerGeometryConfig = {
   bodyProfile: BODY_PROFILE_RAW,
   hoodProfile: HOOD_PROFILE_RAW,
-  // Dark hollow inside the hood, and a hint of a face just forward of it. No tilt: an upward tilt
-  // was tried in an earlier round to keep this visible from the board's own steep (~49° off
-  // vertical) camera angle, but it made the flattened cavity sphere poke past the hood's own
-  // silhouette as a stray fin/petal shape from other viewing angles - reported directly, with
-  // photos.
-  cavity: { position: [0, 2.28, 0.4], scale: [0.27, 0.19, 0.1] },
-  face: { position: [0, 2.28, 0.47], scale: [0.21, 0.16, 0.07] },
-  // Arms are asymmetric in the reference photo, consistently across every angle of its own
-  // turnaround sheet, not just a pose quirk of one shot: one arm stays tucked close to the body
-  // around chest height, the other hangs all the way down past hip height with a noticeably
-  // larger mitten-shaped hand at the end. Kept as-is rather than symmetrized - it's a real,
-  // repeated feature of the reference, and an asymmetric silhouette also reads as more distinct
-  // from a plain pawn than a mirrored pair would.
+  // Re-derived from a clean, direct front-on product photo (much clearer than the earlier
+  // turnaround sheet's angled shots) - reported directly that the previous side-splayed arms and
+  // shallow cavity read as nothing like it. That photo shows the hood opening as a large, tall,
+  // deep archway (roughly 35%-80% down the hood, close to what was already here) and both hands
+  // brought in close together in front of the belly, not held out to the sides at all - a clasped/
+  // resting pose, not the earlier one-tucked-one-hanging silhouette.
+  cavity: { position: [0, 2.32, 0.38], scale: [0.24, 0.22, 0.11] },
+  face: { position: [0, 2.32, 0.44], scale: [0.19, 0.18, 0.08] },
+  // Both arms angle forward and inward from the shoulder to meet near the front-center of the
+  // belly - symmetric, matching the direct front photo (the earlier asymmetric "one hangs low"
+  // pose came from misreading a 3/4-angle shot on the turnaround sheet as a side-hanging arm).
+  // Hand z-offset has to clear the body's own radius at that height (~0.55-0.57, see
+  // BODY_PROFILE_RAW) or it reads as buried inside the body instead of resting on its front.
   arms: [
     {
-      // Right arm - tucked, shorter.
-      arm: { position: [0.62, 1.18, 0.05], rotation: [0, 0, 0.3], scale: [0.2, 0.54, 0.22] },
-      hand: { position: [0.75, 0.88, 0.08], scale: [0.16, 0.22, 0.16] },
+      arm: { position: [0.34, 1.15, 0.36], rotation: [0.55, 0, 0.35], scale: [0.19, 0.58, 0.21] },
+      hand: { position: [0.15, 0.78, 0.65], scale: [0.17, 0.22, 0.17] },
     },
     {
-      // Left arm - long, hanging past hip height with a larger mitten.
-      arm: { position: [-0.66, 0.95, 0.08], rotation: [0, 0, -0.35], scale: [0.19, 0.75, 0.21] },
-      hand: { position: [-0.82, 0.42, 0.15], scale: [0.19, 0.25, 0.19] },
+      arm: { position: [-0.34, 1.15, 0.36], rotation: [0.55, 0, -0.35], scale: [0.19, 0.58, 0.21] },
+      hand: { position: [-0.15, 0.78, 0.65], scale: [0.17, 0.22, 0.17] },
     },
   ],
   fold: { position: [0, 1.1, 0.46], scale: [0.11, 0.55, 0.07] },
