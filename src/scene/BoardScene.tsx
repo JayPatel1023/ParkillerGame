@@ -10,6 +10,7 @@ import type { PieceColor } from '../core/pieceColor'
 import type { MoveAnimationRequest } from '../hooks/useTurnManager'
 import { BoardMesh } from './BoardMesh'
 import { TableSurface } from './TableSurface'
+import { DiceTray } from './DiceTray'
 import { PieceMesh } from './PieceMesh'
 import { ParkillerMesh } from './ParkillerMesh'
 import { DiceMesh } from './DiceMesh'
@@ -380,8 +381,14 @@ export function BoardScene({
           tilt at all, so position can stay exactly [0, 10, 0]. Zoom itself is computed in
           FitBoardCamera from the live canvas size, not a fixed constant. */}
       <FitBoardCamera />
-      <ambientLight intensity={0.7} />
-      <directionalLight position={[4, 8, 2]} intensity={1.1} castShadow />
+      {/* Reported directly, with a full written brief: the whole scene read as one flat brightness
+          instead of the board being the clear visual focus. Dimmer ambient fill plus a focused warm
+          spotlight on the board (falloff handled by the light itself, not a post-process vignette)
+          means the board reads brightest, and real light falloff naturally dims the wood table
+          further out - a lighting hierarchy instead of a uniformly-lit scene. */}
+      <ambientLight intensity={0.45} />
+      <spotLight position={[0, 9, 1]} angle={0.62} penumbra={0.6} intensity={2.4} color="#fff2d8" castShadow decay={1.6} />
+      <directionalLight position={[-3, 5, -3]} intensity={0.3} color="#cfd8ff" />
       <TableSurface />
       <Suspense fallback={null}>
         <BoardMesh imageUrl={definition.boardImage} />
@@ -527,6 +534,7 @@ export function BoardScene({
         )
       })}
 
+      <DiceTray position={[0, 0, 2.55]} />
       <DiceMesh value={diceValues[0]} rolling={rolling} nudge={nudgeDice} onClick={onRollDice} column={-0.5} />
       <DiceMesh value={diceValues[1]} rolling={rolling} nudge={nudgeDice} onClick={onRollDice} column={0.5} />
       <DiceMesh value={diceValues[2]} rolling={rolling} nudge={nudgeDice} onClick={onRollDice} column={0} row={1} black />

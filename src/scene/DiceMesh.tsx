@@ -14,19 +14,14 @@ declare global {
   }
 }
 
-// Two prior positions both sat *past* the board's own edge (world X or Z > 3), which put them at
-// the mercy of the tilted camera's own margin past the board - inconsistent across viewport shapes
-// (reported directly, twice: resting on real track squares on one edge, then pushed half off-screen
-// on the other). Sitting *inside* the board's own footprint instead removes that dependency
-// entirely: as long as the board itself is on screen (guaranteed by FitBoardCamera), so is this
-// spot. The bottom-right corner has the most consistent clearance from any real track square across
-// all five boards, but the exact corner also has the board art's own "Parkiller" logo badge sitting
-// there (reported directly: the dice were drawn right on top of it) - nudged in from the corner to
-// the gap between that badge and the fleur-de-lis ornament above it instead, checked clear of both
-// the real track (nearest point 0.091 normalized units away on the tightest board, 4p) and the
-// artwork.
-const CORNER_X = 2.37
-const CORNER_Z = 1.98
+// Was the board's own back-right corner (sat *inside* the board's footprint, in the gap between
+// the "Parkiller" logo badge and the fleur-de-lis ornament above it - the only spot with
+// consistent clearance from the real track across all five boards). Moved front-and-center per a
+// full written brief: dice shouldn't just sit wherever there's room on the board art, they belong
+// in their own dedicated tray at the bottom-center of the view (see DiceTray, added in BoardScene)
+// - still real 3D objects on the board's own near edge, not an unrelated HTML overlay.
+const CORNER_X = 0
+const CORNER_Z = 2.55
 const DIE_SPACING = 0.55
 // The black die sits on its own row behind the two white ones (see `row` below) - a taller row
 // gap than the plain column spacing, since the black die is now physically bigger and would
