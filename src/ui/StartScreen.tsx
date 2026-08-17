@@ -28,26 +28,13 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
           those bars) - reported directly, more than once, that any visible bars/seam still read
           as "not actually filling the screen" even brightened. `cover` alone is the only way to
           guarantee zero visible margin at every viewport, full stop - the trade-off is that some
-          of the photo's own edges (the candle, the books) get cropped on an aspect ratio very
-          different from the photo's own ~1.5:1, which is the accepted cost. */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          backgroundColor: THEME.wood,
-          backgroundImage: 'url(/backgrounds/start.png)',
-          backgroundSize: 'cover',
-          backgroundRepeat: 'no-repeat',
-          // Reported directly, with screenshots, in both directions: on a shorter real browser
-          // window, `cover`'s crop was eating into the bottom "ROLL DICE" tray (fixed by biasing
-          // down from center) - and then eating into the top candle once biased too far. On a
-          // short-enough window there just isn't room to show both ends uncropped at once (cover
-          // has a fixed total crop budget - biasing away from one edge always means biasing
-          // *toward* the other), so this is the empirically-tuned middle ground that keeps both
-          // recognizable rather than fully sacrificing either one.
-          backgroundPosition: 'center 65%',
-        }}
-      />
+          of the photo's own edges get cropped on an aspect ratio very different from the photo's
+          own ~1.5:1, which is the accepted cost on desktop. On phones specifically, reported
+          directly (with a screenshot) that this cropped/framed badly - a landscape photo has to
+          be cropped far more to fill a tall portrait screen than one actually composed for that
+          shape. start-mobile.png (supplied directly) is that portrait composition; the swap
+          itself lives in index.css's .start-bg-photo (media queries can't go in inline styles). */}
+      <div className="start-bg-photo" style={{ position: 'absolute', inset: 0, backgroundColor: THEME.wood, backgroundSize: 'cover', backgroundRepeat: 'no-repeat' }} />
       <div
         style={{
           position: 'absolute',
