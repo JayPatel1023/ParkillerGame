@@ -64,7 +64,18 @@ export function GameBoardScreen({
     clearParkillerAnimation,
   } = useTurnManager(session.turnManager)
 
-  const canRoll = pendingMoves.length === 0 && !winner && !rolling && !moveAnimation
+  // Reported directly, from a real two-player online test: a player could click "roll" (or a
+  // board piece) during someone else's turn - the Master correctly rejects the resulting network
+  // intent, but the *clicking* player's own UI had no way to know that, and worse, a rejected roll
+  // never fires the diceRolled event that clears useTurnManager's own `rolling` flag, so that
+  // player's roll button got stuck disabled/spinning for the rest of the game. `localPlayerColor`
+  // is undefined for local pass-and-play (one shared device controls every color, so there's
+  // nothing to restrict) and set to this client's own seat color for online play - see
+  // TurnManagerLike's own doc comment.
+  const localColor = session.turnManager.localPlayerColor
+  const isMyTurn = localColor == null || localColor === currentPlayer.color
+
+  const canRoll = isMyTurn && pendingMoves.length === 0 && !winner && !rolling && !moveAnimation
 
   // Idle nudge: reported directly - a player who steps away or just spaces out mid-turn leaves
   // everyone else staring at a board that never visibly asks for input. Restarts whenever canRoll
@@ -86,24 +97,35 @@ export function GameBoardScreen({
   ]
   const isDouble = lastRoll !== null && lastRoll.dieA === lastRoll.dieB
 
+  // Only the current turn's own piece choices are ever meant to be actionable - every online
+  // client replays the same broadcast dice roll locally (see MoveAnimationInfo's own comment), so
+  // pendingMoves gets populated identically on every client regardless of whose turn it actually
+  // is. Without this gate, a piece would glow as selectable (and be clickable) on a client whose
+  // turn it isn't - the Master would reject the resulting move intent, but the clicking player's
+  // own board never should have offered it in the first place.
+  const visiblePendingMoves = isMyTurn ? pendingMoves : []
+
   // What the turn banner's subtitle says - one place for this instead of scattering the same
-  // priority order (doubles warning > reward > move prompt > roll prompt) across JSX conditionals.
+  // priority order (doubles warning > not-my-turn > reward > move prompt > roll prompt) across
+  // JSX conditionals.
   const statusLine = eliminatedByDoubles
     ? `Tercer dobles seguido: ${eliminatedByDoubles.color} pierde una ficha`
-    : pendingReward
-      ? 'Elegí una ficha para tu recompensa'
-      : pendingMoves.length > 0
-        ? 'Elegí una ficha para mover'
-        : lastRoll && !rolling
-          ? `Dados: ${lastRoll.dieA} y ${lastRoll.dieB}${isDouble ? ' (dobles)' : ''} · Parkiller: ${lastRoll.blackDie}`
-          : 'Tirá los dados para empezar tu turno'
+    : !isMyTurn
+      ? `Esperando el turno de ${currentPlayer.color}...`
+      : pendingReward
+        ? 'Elegí una ficha para tu recompensa'
+        : pendingMoves.length > 0
+          ? 'Elegí una ficha para mover'
+          : lastRoll && !rolling
+            ? `Dados: ${lastRoll.dieA} y ${lastRoll.dieB}${isDouble ? ' (dobles)' : ''} · Parkiller: ${lastRoll.blackDie}`
+            : 'Tirá los dados para empezar tu turno'
 
   return (
     <div className="game-screen-in" style={screenWrapperStyle}>
       <BoardScene
         definition={definition}
         players={session.players}
-        pendingMoves={pendingMoves}
+        pendingMoves={visiblePendingMoves}
         onSelectPiece={chooseMove}
         currentPlayerColor={currentPlayer.color}
         diceValues={diceValues}

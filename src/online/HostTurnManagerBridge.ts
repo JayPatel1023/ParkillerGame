@@ -51,13 +51,25 @@ export class HostTurnManagerBridge implements TurnManagerLike {
    * host-local and trusted, not a network intent that could be stale or spoofed. */
   private readonly actorColors: Map<number, PieceColor>
   private readonly unsubscribeMessage: () => void
+  /** See TurnManagerLike's own doc comment - which color this specific (Master) client itself
+   * controls, so its own UI can gate the roll button/piece selection the same way a remote
+   * client's has to, instead of only the network-intent validation below catching it. */
+  readonly localPlayerColor: PieceColor | null
 
-  constructor(inner: TurnManager, dice: RecordingDice, players: PlayerState[], transport: RoomTransport, actorColors: Map<number, PieceColor>) {
+  constructor(
+    inner: TurnManager,
+    dice: RecordingDice,
+    players: PlayerState[],
+    transport: RoomTransport,
+    actorColors: Map<number, PieceColor>,
+    localPlayerColor: PieceColor | null = null,
+  ) {
     this.inner = inner
     this.dice = dice
     this.players = players
     this.transport = transport
     this.actorColors = actorColors
+    this.localPlayerColor = localPlayerColor
 
     this.turnStarted = inner.turnStarted
     this.diceRolled = inner.diceRolled

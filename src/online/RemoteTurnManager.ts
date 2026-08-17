@@ -1,6 +1,7 @@
 import type { PlayerState } from '../core/gameFlow/playerState'
 import { TurnManager } from '../core/gameFlow/turnManager'
 import type { TurnManagerLike } from '../core/gameFlow/turnManagerLike'
+import type { PieceColor } from '../core/pieceColor'
 import type { Piece } from '../core/pieces/piece'
 import type { MoveResult } from '../core/rules/moveOption'
 import type { QueueDice } from './dice'
@@ -38,12 +39,23 @@ export class RemoteTurnManager implements TurnManagerLike {
   private readonly players: PlayerState[]
   private readonly transport: RoomTransport
   private readonly unsubscribeMessage: () => void
+  /** See TurnManagerLike's own doc comment - which color this specific client controls, so its
+   * own UI can gate the roll button/piece selection instead of only finding out its intent was
+   * silently rejected by the Master after the fact. */
+  readonly localPlayerColor: PieceColor | null
 
-  constructor(inner: TurnManager, diceQueue: QueueDice, players: PlayerState[], transport: RoomTransport) {
+  constructor(
+    inner: TurnManager,
+    diceQueue: QueueDice,
+    players: PlayerState[],
+    transport: RoomTransport,
+    localPlayerColor: PieceColor | null = null,
+  ) {
     this.inner = inner
     this.diceQueue = diceQueue
     this.players = players
     this.transport = transport
+    this.localPlayerColor = localPlayerColor
 
     this.turnStarted = inner.turnStarted
     this.diceRolled = inner.diceRolled
