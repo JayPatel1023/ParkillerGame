@@ -54,24 +54,22 @@ button {
 }
 
 /* StartScreen's primary CTA - a slow breathing glow to draw the eye first, per researched "bold
-   accent + visual hierarchy" guidance (see StartScreen.tsx's own comment on chunky-btn-pulse).
-   Gold-tinted to match the current dark-wood/deep-green/gold palette (see ui/theme.ts) - was blue,
-   left over from an earlier royal-blue palette pass. */
+   accent + visual hierarchy" guidance (see StartScreen.tsx's own comment on chunky-btn-pulse). */
 @keyframes cta-pulse {
   0%,
   100% {
     box-shadow:
-      0 6px 0 #7a5f26,
+      0 7px 0 #1a3468,
       0 12px 20px rgba(0, 0, 0, 0.45),
-      inset 0 2px 1px rgba(255, 255, 255, 0.35),
-      0 0 0 rgba(232, 207, 138, 0);
+      inset 0 2px 1px rgba(255, 255, 255, 0.55),
+      0 0 0 rgba(74, 120, 216, 0);
   }
   50% {
     box-shadow:
-      0 6px 0 #7a5f26,
+      0 7px 0 #1a3468,
       0 12px 20px rgba(0, 0, 0, 0.45),
-      inset 0 2px 1px rgba(255, 255, 255, 0.35),
-      0 0 26px 6px rgba(232, 207, 138, 0.55);
+      inset 0 2px 1px rgba(255, 255, 255, 0.55),
+      0 0 26px 6px rgba(120, 165, 255, 0.55);
   }
 }
 

@@ -4,7 +4,6 @@ import * as THREE from 'three'
 import { BOARD_DEFINITIONS } from '../data/boards'
 import { getColor } from '../core/colorPalette'
 import { BoardMesh } from './BoardMesh'
-import { TableSurface } from './TableSurface'
 import { toWorldPosition, FLAT_SURFACE_HEIGHT } from './boardGeometry'
 
 // Requested directly: a flat photo (blurred or not) or a CSS pattern both read as "not
@@ -51,15 +50,11 @@ export function StartScreenBackground() {
   return (
     <Canvas shadows gl={{ antialias: true }} dpr={[1, 1.5]} camera={{ fov: 45 }}>
       <RotatingCamera />
-      {/* Same warm, board-focused lighting as the in-game scene (see BoardScene) - a dim ambient
-          fill plus a focused warm spotlight, so the menu background reads as the same cozy
-          candlelit table the game itself sits on, not a separately-lit backdrop. */}
-      <ambientLight intensity={0.4} />
-      <spotLight position={[0, 8, 1.5]} angle={0.65} penumbra={0.6} intensity={2.2} color="#fff2d8" castShadow decay={1.6} />
-      <directionalLight position={[-3, 4, -2]} intensity={0.25} color="#cfd8ff" />
-      <fog attach="fog" args={[new THREE.Color('#100a06'), 7, 22]} />
+      <ambientLight intensity={0.6} />
+      <directionalLight position={[4, 8, 2]} intensity={1.1} castShadow />
+      <directionalLight position={[-3, 4, -2]} intensity={0.35} />
+      <fog attach="fog" args={[new THREE.Color('#05070c'), 7, 22]} />
       <Suspense fallback={null}>
-        <TableSurface />
         <BoardMesh imageUrl={definition.boardImage} />
         <DecorativePieces />
       </Suspense>
