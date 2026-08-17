@@ -29,6 +29,12 @@ declare module 'photon-realtime' {
 
     interface Room {
       masterClientId: number
+      /** Built into Photon's own room state (set atomically via createRoom's own options - see
+       * fillCreateRoomOptions in the SDK source), unlike a custom property that needs a separate
+       * setCustomProperties() call after the room already exists. Reliable to read the instant a
+       * client joins, with no risk of racing that separate call - see photonClient.ts's own
+       * getMaxPlayers() for why this matters. */
+      maxPlayers: number
       getCustomProperties(): Record<string, unknown>
       setCustomProperties(props: Record<string, unknown>): void
     }

@@ -127,7 +127,6 @@ export default function OnlineLobbyScreen() {
     connection
       .createRoom(code, playerCount)
       .then(() => {
-        connection.setRoomProperties({ playerCount })
         connection.setLocalActorProperties({ color: TURN_ORDER_BY_COUNT[playerCount][0] })
         setRoomCode(code)
         setPhase('lobby')
@@ -146,7 +145,13 @@ export default function OnlineLobbyScreen() {
     connection
       .joinRoom(code)
       .then(() => {
-        const count = (connection.getRoomProperties().playerCount as number | undefined) ?? 4
+        // Reported directly, from a real two-player test: reading a *custom* room property here
+        // (set by the host right after createRoom() resolves) could race a fast-joining client,
+        // silently defaulting to the wrong player count and picking a color from the wrong color
+        // set entirely - see photonClient.ts's own getMaxPlayers() comment for the full story.
+        // maxPlayers is set atomically as part of room creation itself, so there's nothing here
+        // to race.
+        const count = connection.getMaxPlayers() || 4
         const colors = TURN_ORDER_BY_COUNT[count]
         const taken = new Set(connection.getActors().map((a) => a.customProperties.color as PieceColor | undefined))
         const myColor = colors.find((c) => !taken.has(c)) ?? colors[colors.length - 1]
