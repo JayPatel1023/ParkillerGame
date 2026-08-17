@@ -1,6 +1,5 @@
 import { useMemo } from 'react'
 import * as THREE from 'three'
-import { BOARD_SIZE } from './boardGeometry'
 
 // Reported directly, with screenshots: the actual game screen still had flat black margins around
 // the board on any viewport wider/taller than the board's own square aspect - a plain CSS radial
@@ -12,92 +11,64 @@ import { BOARD_SIZE } from './boardGeometry'
 // sitting just under the board, extending far past it in every direction, so the board reads as
 // resting on a real surface rather than floating over a flat color.
 //
-// Went through several passes: a realistic dark-walnut wood (reported as reading "basically black"
-// once actually rendered - three.js's default ACES filmic tonemapping compresses dark tones
-// further than they look authored), a brighter warm wood, then an outdoor grass/lawn setting. All
-// landed on this pass instead: a real dark-wood tabletop, per a full written brief asking for a
-// "cozy/warm/elegant premium board game on a real wooden table" feel rather than an outdoor scene.
+// Went through two color passes before this one: a realistic dark-walnut wood (reported as reading
+// "basically black" once actually rendered - three.js's default ACES filmic tonemapping compresses
+// dark tones further than they look authored) and a brighter warm wood (reported directly as still
+// not feeling vibrant/alive enough - "색갈이 여전히 맘에 없다"). Landed on an outdoor grass/lawn
+// setting instead, picked directly from three mocked-up options (green felt, warm mahogany, bright
+// grass) rendered and compared side by side rather than guessed blind again.
 const GROUND_SIZE = 40
-const GROUND_Y = -0.02 // just under the mat's own y (see MAT_Y) - avoids z-fighting
-const MAT_Y = -0.008 // between the ground and the board's own y=0 plane
+const GROUND_Y = -0.015 // just under BASE_HEIGHT/the board's own y=0 plane - avoids z-fighting
 
-function createWoodTableTexture(): THREE.CanvasTexture {
+function createGrassTexture(): THREE.CanvasTexture {
   const size = 1024
   const canvas = document.createElement('canvas')
   canvas.width = size
   canvas.height = size
   const ctx = canvas.getContext('2d')!
 
-  // Warm "candlelit table" pool of light - brightest under the board, fading to a near-black
-  // wood tone at the edges, baked directly into the texture rather than left to scene lighting
-  // (which reads too dark on a plane this size relative to the light tuned for the much smaller
+  // Bright "sunlit lawn" pool of light - brightest at center (under the board), fading toward the
+  // edges, baked directly into the texture rather than left to scene lighting (which reads too
+  // dark on a plane this size relative to the light sources tuned for the much-smaller
   // board/pieces).
-  const glow = ctx.createRadialGradient(size / 2, size / 2, size * 0.06, size / 2, size / 2, size * 0.62)
-  glow.addColorStop(0, '#5a3f26')
-  glow.addColorStop(0.35, '#432d1a')
-  glow.addColorStop(0.7, '#2a1c11')
-  glow.addColorStop(1, '#120c07')
+  const glow = ctx.createRadialGradient(size / 2, size / 2, size * 0.05, size / 2, size / 2, size * 0.62)
+  glow.addColorStop(0, '#4a8a3a')
+  glow.addColorStop(0.35, '#3c7530')
+  glow.addColorStop(0.7, '#24431f')
+  glow.addColorStop(1, '#1f140d')
   ctx.fillStyle = glow
   ctx.fillRect(0, 0, size, size)
 
-  // Long, soft wood-grain streaks - kept subtle and low-frequency (large spacing, low opacity) so
-  // they read as material variation, not a repeating pattern.
-  for (let i = 0; i < 30; i++) {
+  // A few long, soft blade-texture streaks - kept subtle and low-frequency (large spacing, low
+  // opacity) so they read as material variation, not a repeating pattern.
+  for (let i = 0; i < 26; i++) {
     const y = Math.random() * size
-    const amp = 10 + Math.random() * 22
-    const alpha = 0.05 + Math.random() * 0.08
-    ctx.strokeStyle = Math.random() > 0.5 ? `rgba(150,110,70,${alpha})` : `rgba(20,12,7,${alpha})`
-    ctx.lineWidth = 2 + Math.random() * 4
+    const amp = 14 + Math.random() * 26
+    const alpha = 0.05 + Math.random() * 0.07
+    ctx.strokeStyle = Math.random() > 0.5 ? `rgba(120,190,90,${alpha})` : `rgba(15,40,10,${alpha})`
+    ctx.lineWidth = 3 + Math.random() * 5
     ctx.beginPath()
     ctx.moveTo(0, y)
     for (let x = 0; x <= size; x += 48) {
-      ctx.lineTo(x, y + Math.sin(x * 0.01 + i) * amp)
+      ctx.lineTo(x, y + Math.sin(x * 0.012 + i) * amp)
     }
     ctx.stroke()
   }
 
   const texture = new THREE.CanvasTexture(canvas)
   // No repeat wrapping - a single large gradient-lit texture across the whole plane reads as one
-  // continuous table under one warm light source; tiling it produced visible seams every repeat
-  // since the radial glow doesn't tile seamlessly.
-  texture.needsUpdate = true
-  return texture
-}
-
-// A thin dark-green felt mat sitting between the wood table and the board itself, slightly larger
-// than the board's own footprint - reads as "a real board resting on a mat on a table" instead of
-// the board floating directly over bare wood. Solid color (not a second canvas texture) is enough
-// at this size; it only shows as a slim border ring around the board.
-function createMatTexture(): THREE.CanvasTexture {
-  const size = 64
-  const canvas = document.createElement('canvas')
-  canvas.width = size
-  canvas.height = size
-  const ctx = canvas.getContext('2d')!
-  const glow = ctx.createRadialGradient(size / 2, size / 2, size * 0.1, size / 2, size / 2, size * 0.7)
-  glow.addColorStop(0, '#1f3326')
-  glow.addColorStop(1, '#0e1a12')
-  ctx.fillStyle = glow
-  ctx.fillRect(0, 0, size, size)
-  const texture = new THREE.CanvasTexture(canvas)
+  // continuous lawn under one light source; tiling it (as an earlier version did) produced visible
+  // seams every repeat since the radial glow doesn't tile seamlessly.
   texture.needsUpdate = true
   return texture
 }
 
 export function TableSurface() {
-  const woodTexture = useMemo(() => createWoodTableTexture(), [])
-  const matTexture = useMemo(() => createMatTexture(), [])
-  const matSize = BOARD_SIZE * 1.1
+  const texture = useMemo(() => createGrassTexture(), [])
   return (
-    <>
-      <mesh position={[0, GROUND_Y, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[GROUND_SIZE, GROUND_SIZE]} />
-        <meshStandardMaterial map={woodTexture} roughness={0.65} metalness={0.05} />
-      </mesh>
-      <mesh position={[0, MAT_Y, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[matSize, matSize]} />
-        <meshStandardMaterial map={matTexture} roughness={0.92} metalness={0} />
-      </mesh>
-    </>
+    <mesh position={[0, GROUND_Y, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      <planeGeometry args={[GROUND_SIZE, GROUND_SIZE]} />
+      <meshStandardMaterial map={texture} roughness={0.85} metalness={0} />
+    </mesh>
   )
 }
