@@ -1,4 +1,5 @@
 import type { Piece } from '../pieces/piece'
+import type { PieceColor } from '../pieceColor'
 import type { MoveOption, MoveResult } from '../rules/moveOption'
 import type { DiceRoll, MoveAnimationInfo, ParkillerMoveResult, RewardGrant } from './turnManager'
 import type { PlayerState } from './playerState'
@@ -31,6 +32,14 @@ export interface TurnManagerLike {
   readonly rewardForfeited: Listenable<RewardGrant>
   readonly gameWon: Listenable<PlayerState>
   readonly currentPlayer: PlayerState
+  /** Which color *this specific client* controls, for online play - undefined/null means "no
+   * restriction" (a local pass-and-play TurnManager doesn't set this at all, since one shared
+   * device controls every color; see GameBoardScreen.tsx's own use of this for why online play
+   * needs it: every client replays the same broadcast dice roll locally, so without this, any
+   * connected client's UI would show the current turn's pieces as selectable and its own roll
+   * button as enabled, even for a color that isn't theirs - the Master still rejects the resulting
+   * network intent, but the *initiating* client's own UI had no way to know not to let them try). */
+  readonly localPlayerColor?: PieceColor | null
   start(): void
   requestRoll(): void
   submitMove(chosenPiece: Piece): MoveResult | null
