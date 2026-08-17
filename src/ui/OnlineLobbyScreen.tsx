@@ -36,24 +36,26 @@ function generateRoomCode(): string {
   return code
 }
 
-// Reported directly, from a real two-player test: a joiner ended up fighting the host over the
-// host's own color, while their actual seat sat bot-controlled the whole time. Root cause: the
-// previous version picked a color by reading *other* actors' own `color` custom property (to see
-// which ones were already "taken") - but a joiner reads that immediately after their own join
-// resolves, and the host's color property is a *separate* network call that can still be
-// mid-flight at that exact moment. A joiner racing in quickly enough would see the host's actor
-// with no color set yet, conclude nothing was taken, and pick the same color the host already
-// has - two actors silently claiming one seat, leaving the *other* real seat (the one the joiner
-// should have gotten) unclaimed and bot-filled.
-// actorNr has no such race: it's Photon's own intrinsic actor identifier, assigned as part of the
-// join operation itself (not a custom property needing a separate sync), so every client's own
-// join response already includes it reliably. Ranking by actorNr instead - the room's creator is
-// always the actor with the lowest actorNr (Photon's own rule), so this naturally assigns them
-// colors[0] too, matching "the room creator goes first."
-function colorForActor(connection: PhotonConnection, colors: PieceColor[]): PieceColor {
-  const actorNrs = connection.getActors().map((a) => a.actorNr).sort((a, b) => a - b)
-  const rank = actorNrs.indexOf(connection.localActorNr)
-  return colors[rank] ?? colors[colors.length - 1]
+// Every seat's color is a pure function of actorNr rank - the lowest actorNr in the room (always
+// the creator, Photon's own rule) gets colors[0], matching "the room creator goes first", and so
+// on. actorNr is Photon's own intrinsic actor identifier, assigned synchronously as part of the
+// join operation itself - every client's own view of `connection.getActors()` already has it
+// reliably for every actor in the room, with no extra network round trip to wait on.
+//
+// Reported directly, twice now, from real multi-client tests: earlier versions instead had each
+// client privately compute its own color and broadcast it via a `color` custom property, which
+// every OTHER client (crucially including the host, right before clicking "Empezar partida") had
+// to read back. That's a real network round trip with a real race window - a joiner clicking in
+// fast, or the host clicking "start" fast enough after seeing a joiner appear in the seat list,
+// could read that property before it arrived, leaving an actually-connected human's seat looking
+// unclaimed and falling back to a bot. Computing every seat's color directly from the room's own
+// actor list (already reliably synced) removes that round trip - and the race it enabled -
+// entirely, rather than trying to narrow the timing window.
+function colorsByActorNr(actorNrs: readonly number[], colors: readonly PieceColor[]): Map<number, PieceColor> {
+  const sorted = [...actorNrs].sort((a, b) => a - b)
+  const map = new Map<number, PieceColor>()
+  sorted.forEach((actorNr, rank) => map.set(actorNr, colors[rank] ?? colors[colors.length - 1]))
+  return map
 }
 
 type Phase = 'connecting' | 'error' | 'menu' | 'creating' | 'joining' | 'lobby' | 'game'
@@ -133,9 +135,7 @@ export default function OnlineLobbyScreen() {
     const players = colors.map((color) => createPlayerState(color, board))
     const diceQueue = new QueueDice()
     const inner = new TurnManager(board, players, defaultRuleSettings(), diceQueue)
-    // Set synchronously into this client's own local actor cache back in joinRoom()'s
-    // setLocalActorProperties() call, before any network round trip - safe to read back here.
-    const myColor = connection.getActors().find((a) => a.isLocal)?.customProperties.color as PieceColor | undefined
+    const myColor = colorsByActorNr(connection.getActors().map((a) => a.actorNr), colors).get(connection.localActorNr)
     const bridge = new RemoteTurnManager(inner, diceQueue, players, connection, myColor ?? null)
     bridge.start()
     setSession({ turnManager: bridge, players })
@@ -150,7 +150,6 @@ export default function OnlineLobbyScreen() {
     connection
       .createRoom(code, playerCount)
       .then(() => {
-        connection.setLocalActorProperties({ color: colorForActor(connection, TURN_ORDER_BY_COUNT[playerCount]) })
         setRoomCode(code)
         setPhase('lobby')
       })
@@ -171,9 +170,6 @@ export default function OnlineLobbyScreen() {
         // maxPlayers is set atomically as part of room creation itself (see photonClient.ts's own
         // getMaxPlayers() comment) - nothing to race reading that.
         const count = connection.getMaxPlayers() || 4
-        const colors = TURN_ORDER_BY_COUNT[count]
-        const myColor = colorForActor(connection, colors)
-        connection.setLocalActorProperties({ color: myColor })
         setRoomCode(code)
         setPlayerCount(count)
         setPhase('lobby')
@@ -193,11 +189,7 @@ export default function OnlineLobbyScreen() {
     const dice = new RecordingDice()
     const inner = new TurnManager(board, players, defaultRuleSettings(), dice)
 
-    const actorColors = new Map<number, PieceColor>()
-    for (const actor of connection.getActors()) {
-      const color = actor.customProperties.color as PieceColor | undefined
-      if (color) actorColors.set(actor.actorNr, color)
-    }
+    const actorColors = colorsByActorNr(connection.getActors().map((a) => a.actorNr), colors)
     const myColor = actorColors.get(connection.localActorNr) ?? null
     const bridge = new HostTurnManagerBridge(inner, dice, players, connection, actorColors, myColor)
 
@@ -297,18 +289,21 @@ export default function OnlineLobbyScreen() {
               <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: 3, color: '#dce8ff', textShadow: '0 2px 0 #1a3468' }}>{roomCode}</div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {TURN_ORDER_BY_COUNT[playerCount].map((color) => {
-                const occupant = seats.find((a) => a.customProperties.color === color)
-                return (
-                  <div key={color} style={seatRowStyle}>
-                    <span style={{ ...seatDotStyle, background: getColor(color) }} />
-                    <span style={{ fontWeight: 700, flex: 1 }}>{color}</span>
-                    <span style={{ color: occupant ? '#bfe8bf' : '#a89a80', fontSize: 13 }}>
-                      {occupant ? (occupant.isLocal ? '(vos)' : 'jugador conectado') : 'vacío -> bot'}
-                    </span>
-                  </div>
-                )
-              })}
+              {(() => {
+                const seatColors = colorsByActorNr(seats.map((a) => a.actorNr), TURN_ORDER_BY_COUNT[playerCount])
+                return TURN_ORDER_BY_COUNT[playerCount].map((color) => {
+                  const occupant = seats.find((a) => seatColors.get(a.actorNr) === color)
+                  return (
+                    <div key={color} style={seatRowStyle}>
+                      <span style={{ ...seatDotStyle, background: getColor(color) }} />
+                      <span style={{ fontWeight: 700, flex: 1 }}>{color}</span>
+                      <span style={{ color: occupant ? '#bfe8bf' : '#a89a80', fontSize: 13 }}>
+                        {occupant ? (occupant.isLocal ? '(vos)' : 'jugador conectado') : 'vacío -> bot'}
+                      </span>
+                    </div>
+                  )
+                })
+              })()}
             </div>
             {connectionRef.current.isMasterClient() ? (
               <button className="chunky-btn" onClick={startGame} style={chunkyButtonStyle(true)}>
