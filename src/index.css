@@ -102,3 +102,26 @@ button {
     animation: game-screen-in 0.5s cubic-bezier(0.16, 1, 0.3, 1);
   }
 }
+
+/* StartScreen's background photo - reported directly, with a phone screenshot: the landscape
+   photo (start.png, ~1.5:1) cropped/framed badly on a tall phone screen, since `cover` has to
+   crop far more of a landscape image to fill a portrait frame than a photo actually composed for
+   that shape. A separate portrait-composed photo (start-mobile.png, supplied directly) swaps in
+   below the breakpoint instead of cropping the landscape one harder - can't be done with the
+   inline backgroundImage alone (no media queries on inline styles), hence this CSS class instead. */
+.start-bg-photo {
+  background-image: url(/backgrounds/start.png);
+  /* Empirically tuned for start.png's own composition (candle top-left, ROLL DICE tray at the
+     very bottom) - see StartScreen.tsx's own comment on why this exact value. Doesn't apply to
+     start-mobile.png below, which has different content at different proportions. */
+  background-position: center 65%;
+}
+
+@media (max-width: 700px), (orientation: portrait) {
+  .start-bg-photo {
+    background-image: url(/backgrounds/start-mobile.png);
+    /* start-mobile.png's own aspect ratio already closely matches a phone viewport, so cover
+       barely has to crop it - centered is enough, no tuning needed like the desktop photo. */
+    background-position: center;
+  }
+}
