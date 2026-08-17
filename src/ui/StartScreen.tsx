@@ -35,6 +35,15 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
           shape. start-mobile.png (supplied directly) is that portrait composition; the swap
           itself lives in index.css's .start-bg-photo (media queries can't go in inline styles). */}
       <div className="start-bg-photo" style={{ position: 'absolute', inset: 0, backgroundColor: THEME.wood, backgroundSize: 'cover', backgroundRepeat: 'no-repeat' }} />
+      {/* Reported directly, with a screenshot: the background photo has its own card baked into
+          it (a mockup composition, not a plain empty table), and that fake card doesn't line up
+          with the real one - "PARKILLER" ghosted through doubled, and the fake card's own edges
+          peeked out past the real one's. There's no way to edit the photo itself, so this darkens
+          a card-shaped region behind where the real card sits down to nearly black, erasing the
+          fake card underneath, while leaving the surrounding props (candle, lamp, books) at their
+          normal brightness - only the background is meant to be used here, not its own baked-in
+          card. Sizing lives in index.css's .start-bg-mask (see its own comment). */}
+      <div className="start-bg-mask" style={{ position: 'absolute', inset: 0 }} />
       <div
         style={{
           position: 'absolute',
