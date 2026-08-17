@@ -24,7 +24,10 @@ export function GoldPanel({
         background: `linear-gradient(180deg, rgba(255,255,255,0.05), transparent 30%), linear-gradient(165deg, ${THEME.green}f0, ${THEME.greenDeep}f7)`,
         border: `2px solid ${accent}`,
         borderRadius: 16,
-        boxShadow: '0 8px 24px rgba(0,0,0,0.55), inset 0 0 0 3px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.08)',
+        // The extra inset ring a few px in from the edge is a cheap stand-in for the reference's
+        // double-line frame (an outer border plus a fainter inner one) without a second nested
+        // element.
+        boxShadow: `0 8px 24px rgba(0,0,0,0.55), inset 0 0 0 3px rgba(0,0,0,0.35), inset 0 0 0 6px ${accent}30, inset 0 1px 0 rgba(255,255,255,0.08)`,
         color: THEME.cream,
         fontFamily: 'system-ui, sans-serif',
         boxSizing: 'border-box',
@@ -44,19 +47,29 @@ export function GoldPanel({
   )
 }
 
+// A curled double-line flourish with a small dot at each tip, rotated per corner from one shared
+// SVG - requested directly, side by side with a reference showing filigree-style corner ornaments
+// instead of the earlier plain right-angle brackets.
 function CornerTick({ corner, color }: { corner: 'tl' | 'tr' | 'bl' | 'br'; color: string }) {
   const base: CSSProperties = {
     position: 'absolute',
-    width: 16,
-    height: 16,
+    width: 22,
+    height: 22,
     pointerEvents: 'none',
     opacity: 0.9,
   }
-  const edges: Record<string, CSSProperties> = {
-    tl: { top: -2, left: -2, borderTop: `2px solid ${color}`, borderLeft: `2px solid ${color}`, borderTopLeftRadius: 6 },
-    tr: { top: -2, right: -2, borderTop: `2px solid ${color}`, borderRight: `2px solid ${color}`, borderTopRightRadius: 6 },
-    bl: { bottom: -2, left: -2, borderBottom: `2px solid ${color}`, borderLeft: `2px solid ${color}`, borderBottomLeftRadius: 6 },
-    br: { bottom: -2, right: -2, borderBottom: `2px solid ${color}`, borderRight: `2px solid ${color}`, borderBottomRightRadius: 6 },
+  const placement: Record<string, CSSProperties> = {
+    tl: { top: 2, left: 2, transform: 'rotate(0deg)' },
+    tr: { top: 2, right: 2, transform: 'rotate(90deg)' },
+    br: { bottom: 2, right: 2, transform: 'rotate(180deg)' },
+    bl: { bottom: 2, left: 2, transform: 'rotate(270deg)' },
   }
-  return <span style={{ ...base, ...edges[corner] }} />
+  return (
+    <svg viewBox="0 0 22 22" style={{ ...base, ...placement[corner] }} aria-hidden focusable="false">
+      <path d="M1 15 C1 6 6 1 15 1" stroke={color} strokeWidth="1.4" fill="none" strokeLinecap="round" />
+      <path d="M1 9 C1 4 4 1 9 1" stroke={color} strokeWidth="1" fill="none" strokeLinecap="round" opacity="0.6" />
+      <circle cx="15" cy="1" r="1.5" fill={color} />
+      <circle cx="1" cy="15" r="1.5" fill={color} />
+    </svg>
+  )
 }
