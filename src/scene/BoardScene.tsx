@@ -534,7 +534,12 @@ export function BoardScene({
         <TrackDebugPath trackWaypoints={definition.trackWaypoints} safeTrackIndices={definition.safeTrackIndices} />
       )}
       {SHOW_HOME_CORRIDOR_DEBUG && <HomeCorridorDebugPath definition={definition} />}
-      <OrbitControls enablePan={false} minPolarAngle={0.2} maxPolarAngle={1.2} />
+      {/* Reported directly, with screenshots: scroll-zoom had no distance limit at all - zooming
+          out far enough shrank the board to a speck (or past the far clipping plane entirely,
+          leaving just the table and HUD), and there was nothing stopping a stray scroll from
+          getting there. minDistance/maxDistance cap both ends - close enough to inspect a piece,
+          far enough to see the whole board with margin, never so far it disappears. */}
+      <OrbitControls enablePan={false} minPolarAngle={0.2} maxPolarAngle={1.2} minDistance={3.5} maxDistance={22} />
     </Canvas>
   )
 }
