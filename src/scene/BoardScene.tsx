@@ -190,6 +190,14 @@ const INTRO_STAGGER = 0.09 // seconds between each piece's drop-in entrance, for
 // per-board minimum). Also widened again after pulling the default camera back further (see
 // CAMERA_DISTANCE) for a separate report - everything on the board reads smaller on screen at that
 // distance, so the same world-space offset became less visually distinct than when it was tuned.
+//
+// [along, across] the local track direction at that specific square, NOT fixed world [x, z] - see
+// localStackOffset below. Reported directly, with a screenshot: on a curved stretch of track, two
+// stacked pawns rendered well off the tile entirely, onto the plain board background next to it.
+// A fixed world-space offset only happens to line up with a tile's own footprint on a straight
+// section (where the track's local direction is roughly axis-aligned) - computeTileCorners in
+// boardGeometry.ts already has to account for this same curvature when sizing a tile's own
+// rendered shape, and stacking needs the same local frame, not the board's global axes.
 const STACK_OFFSETS: [number, number][] = [
   [0, 0],
   [-0.16, -0.16],
@@ -198,6 +206,45 @@ const STACK_OFFSETS: [number, number][] = [
   [0.16, 0.16],
   [0, -0.22],
 ]
+
+// Unit tangent (along the path) and normal (across it) at a given waypoint index, from its
+// immediate neighbors - same direction-only math as computeTileCorners' own dirOf, reused here so
+// a stacking offset lands relative to the tile's actual orientation instead of the world's fixed
+// axes. Waypoints are normalized [0..1] image coordinates, but toWorldPosition scales both axes
+// identically (no distortion), so a unit direction computed here is exactly the same unit
+// direction in world space too - safe to apply world-unit offset magnitudes directly against it.
+function localTangentNormal(waypoints: [number, number][], index: number): { tangent: [number, number]; normal: [number, number] } {
+  const n = waypoints.length
+  const prev = waypoints[(index - 1 + n) % n] ?? waypoints[index]
+  const next = waypoints[(index + 1) % n] ?? waypoints[index]
+  const dx = next[0] - prev[0]
+  const dy = next[1] - prev[1]
+  const len = Math.hypot(dx, dy) || 1e-9
+  const tangent: [number, number] = [dx / len, dy / len]
+  return { tangent, normal: [-tangent[1], tangent[0]] }
+}
+
+// Rotates a STACK_OFFSETS entry (given in local [along, across] terms) into a world-space [x, z]
+// offset, using the track's own local direction at that waypoint instead of the world's fixed
+// axes - see STACK_OFFSETS' own comment for why. `waypoints` is null for a piece the caller
+// couldn't resolve a lane for (shouldn't normally happen); falls back to the raw offset as-is.
+function localStackOffset(waypoints: [number, number][] | null, index: number, along: number, across: number): [number, number] {
+  if (!waypoints || !waypoints[index]) return [along, across]
+  const { tangent, normal } = localTangentNormal(waypoints, index)
+  return [along * tangent[0] + across * normal[0], along * tangent[1] + across * normal[1]]
+}
+
+// Which waypoint array/index a piece's own current square is measured against, for
+// localStackOffset above - OnTrack pieces use the shared track loop, InHomeCorridor pieces use
+// their own color's private corridor lane (also curved on several boards, same issue either way).
+function stackWaypointsFor(piece: Piece, definition: BoardDefinition): { waypoints: [number, number][]; index: number } | null {
+  if (piece.state === 'OnTrack') return { waypoints: definition.trackWaypoints, index: piece.trackPosition }
+  if (piece.state === 'InHomeCorridor') {
+    const lane = definition.playerLanes.find((l) => l.color === piece.color)
+    return lane ? { waypoints: lane.homeCorridorWaypoints, index: piece.corridorPosition } : null
+  }
+  return null
+}
 
 // Only OnTrack pieces stand on a raised TrackTile mesh (see BASE_HEIGHT); every other state rests
 // directly on the flat board texture and needs FLAT_SURFACE_HEIGHT instead, or it visibly floats
@@ -477,7 +524,9 @@ export function BoardScene({
         const group = stackKey ? stackGroups.get(stackKey) : undefined
         const restPosition: [number, number, number] = worldPos
         if (group && group.length > 1) {
-          const [ox, oz] = STACK_OFFSETS[group.indexOf(pawnOccupantId(piece)) % STACK_OFFSETS.length]
+          const [along, across] = STACK_OFFSETS[group.indexOf(pawnOccupantId(piece)) % STACK_OFFSETS.length]
+          const stackWp = stackWaypointsFor(piece, definition)
+          const [ox, oz] = localStackOffset(stackWp?.waypoints ?? null, stackWp?.index ?? -1, along, across)
           restPosition[0] += ox
           restPosition[2] += oz
         }
@@ -541,7 +590,8 @@ export function BoardScene({
         const parkillerStackGroupKey = parkillerStackKey(player.parkiller)
         const parkillerGroup = parkillerStackGroupKey ? stackGroups.get(parkillerStackGroupKey) : undefined
         if (parkillerGroup && parkillerGroup.length > 1) {
-          const [ox, oz] = STACK_OFFSETS[parkillerGroup.indexOf(parkillerOccupantId(player.color)) % STACK_OFFSETS.length]
+          const [along, across] = STACK_OFFSETS[parkillerGroup.indexOf(parkillerOccupantId(player.color)) % STACK_OFFSETS.length]
+          const [ox, oz] = localStackOffset(definition.trackWaypoints, player.parkiller.trackPosition, along, across)
           restPosition[0] += ox
           restPosition[2] += oz
         }
