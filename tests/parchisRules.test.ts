@@ -194,6 +194,124 @@ describe('parchisRules', () => {
     })
   })
 
+  describe('departure / entry square (PC2.1)', () => {
+    it('exiting the yard onto a lone opponent pawn does not capture it - they simply coexist', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+      blue.pieces[0].state = 'OnTrack'
+      blue.pieces[0].trackPosition = 0 // Red's own entry square, which is also a safe square
+
+      const settings = defaultRuleSettings()
+      const move = getValidMoves(board, red, [red, blue], 5, settings).find((m) => m.kind === 'ExitYard')!
+      const result = applyMove(board, move, [red, blue], settings, true)
+
+      expect(result.capturedPiece).toBeNull()
+      expect(blue.pieces[0].state).toBe('OnTrack')
+      expect(red.pieces[0].state).toBe('OnTrack')
+    })
+
+    it('two of the player\'s own pawns already on the entry square block a third pawn from exiting', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      red.pieces[0].state = 'OnTrack'
+      red.pieces[0].trackPosition = 0
+      red.pieces[1].state = 'OnTrack'
+      red.pieces[1].trackPosition = 0
+
+      const settings = defaultRuleSettings()
+      const moves = getValidMoves(board, red, [red], 5, settings)
+      expect(moves.find((m) => m.kind === 'ExitYard')).toBeUndefined()
+    })
+
+    it('one own pawn plus one opponent pawn on the entry square still allows exit, capturing the opponent', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+      red.pieces[0].state = 'OnTrack'
+      red.pieces[0].trackPosition = 0
+      blue.pieces[0].state = 'OnTrack'
+      blue.pieces[0].trackPosition = 0
+
+      const settings = defaultRuleSettings()
+      const exitMove = getValidMoves(board, red, [red, blue], 5, settings).find((m) => m.kind === 'ExitYard')
+      expect(exitMove).toBeTruthy()
+
+      const result = applyMove(board, exitMove!, [red, blue], settings, true)
+      expect(result.capturedPiece).toBe(blue.pieces[0])
+    })
+
+    it('two opposing pawns already on the entry square block exit as a foreign barrier', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+      blue.pieces[0].state = 'OnTrack'
+      blue.pieces[0].trackPosition = 0
+      blue.pieces[1].state = 'OnTrack'
+      blue.pieces[1].trackPosition = 0
+
+      const settings = defaultRuleSettings()
+      const moves = getValidMoves(board, red, [red, blue], 5, settings)
+      expect(moves.find((m) => m.kind === 'ExitYard')).toBeUndefined()
+    })
+  })
+
+  describe('landing on an opposing Parkiller (PK5)', () => {
+    it('sends the mover back to the yard when it lands on an unprotected opposing Parkiller without eliminating it', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+      red.pieces[0].state = 'OnTrack'
+      red.pieces[0].trackPosition = 2
+      blue.parkiller.trackPosition = 5 // not a safe square on this test board
+
+      const settings = defaultRuleSettings()
+      const move = getValidMoves(board, red, [red, blue], 3, settings)[0] // 2 -> 5
+      const result = applyMove(board, move, [red, blue], settings, false) // no doubles window open
+
+      expect(result.eliminatedByParkiller).toBe(true)
+      expect(result.capturedParkillerColor).toBeNull()
+      expect(red.pieces[0].state).toBe('InYard')
+      expect(red.pieces[0].trackPosition).toBe(-1)
+      expect(blue.parkiller.state).toBe('InPlay') // the Parkiller itself is untouched
+    })
+
+    it('does not send the mover home when it lands on an opposing Parkiller sitting on a safe square', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+      red.pieces[0].state = 'OnTrack'
+      red.pieces[0].trackPosition = 7
+      blue.parkiller.trackPosition = 10 // a safe square on this test board
+
+      const settings = defaultRuleSettings()
+      const move = getValidMoves(board, red, [red, blue], 3, settings)[0] // 7 -> 10
+      const result = applyMove(board, move, [red, blue], settings, false)
+
+      expect(result.eliminatedByParkiller).toBeFalsy()
+      expect(red.pieces[0].state).toBe('OnTrack')
+      expect(red.pieces[0].trackPosition).toBe(10)
+    })
+
+    it('does not send the mover home when the same move instead eliminates the Parkiller (PK6 takes priority)', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+      red.pieces[0].state = 'OnTrack'
+      red.pieces[0].trackPosition = 2
+      blue.parkiller.trackPosition = 5
+
+      const settings = defaultRuleSettings()
+      const move = getValidMoves(board, red, [red, blue], 3, settings, 'dieA')[0] // 2 -> 5, single die
+      const result = applyMove(board, move, [red, blue], settings, true) // doubles window open
+
+      expect(result.capturedParkillerColor).toBe('Blue')
+      expect(result.eliminatedByParkiller).toBeFalsy()
+      expect(red.pieces[0].state).toBe('OnTrack')
+      expect(red.pieces[0].trackPosition).toBe(5)
+    })
+  })
+
   describe('mandatory capture (PC3/PK8)', () => {
     it('flags a move landing on an opposing piece as a capture', () => {
       const board = buildTestBoard()

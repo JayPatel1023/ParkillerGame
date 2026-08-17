@@ -40,6 +40,17 @@ function ownPiecesInCorridor(allPlayers: readonly PlayerState[], color: PieceCol
   return count
 }
 
+function piecesOfColorOnTrackSquare(allPlayers: readonly PlayerState[], color: PieceColor, trackPosition: number): number {
+  let count = 0
+  for (const player of allPlayers) {
+    if (player.color !== color) continue
+    for (const piece of player.pieces) {
+      if (piece.state === 'OnTrack' && piece.trackPosition === trackPosition) count++
+    }
+  }
+  return count
+}
+
 // `amount` is a single usable step count - the caller (TurnManager) decides whether that's one
 // die's face value or the sum of both, and passes `diceSource` along purely so the resulting
 // MoveOption records which of this roll's dice it would spend. This function itself has no
@@ -63,9 +74,17 @@ export function getValidMoves(
 
     if (piece.state === 'InYard') {
       if (amount === settings.exitRoll) {
-        // Exiting still has to land somewhere legal - the entry square follows the exact same
-        // barrier/occupancy rule as any other track square.
-        if (piecesOnTrackSquare(allPlayers, lane.entryTrackIndex) < 2) {
+        // PC2.1: blocked only by 2 of the player's own pawns already there (an already-formed
+        // barrier), or by 2 opposing pawns with none of the player's own (a foreign barrier this
+        // exit can't break). A single opposing pawn already there is NOT blocked - the exiting
+        // pawn simply joins it (2 total) with no capture yet; only a further, 3rd own pawn
+        // joining that same mixed square captures the opponent (see applyMove) - verified
+        // directly against the reference implementation, which does not capture a lone opponent
+        // on a plain single exit, only once a 2nd own pawn joins it.
+        const ownOnEntry = piecesOfColorOnTrackSquare(allPlayers, player.color, lane.entryTrackIndex)
+        const totalOnEntry = piecesOnTrackSquare(allPlayers, lane.entryTrackIndex)
+        const blockedByOccupancy = ownOnEntry >= 2 || (totalOnEntry >= 2 && ownOnEntry === 0)
+        if (!blockedByOccupancy) {
           moves.push({
             piece,
             kind: 'ExitYard',
@@ -155,7 +174,10 @@ export function wouldCapture(
       return true
   }
 
-  if (board.safeTrackIndices.has(pos)) return false
+  // PC2.2: safe zones protect pawns from capture *except* on a player's own starting square, the
+  // instant that player exits a pawn onto it - an ExitYard landing always targets the mover's own
+  // lane's entry square, so this exception never needs a color check of its own.
+  if (move.kind !== 'ExitYard' && board.safeTrackIndices.has(pos)) return false
   for (const opponent of allPlayers) {
     if (opponent.color === move.piece.color) continue
     for (const opponentPiece of opponent.pieces) {
@@ -177,12 +199,17 @@ export function applyMove(
 
   switch (move.kind) {
     case 'ExitYard':
-    case 'TrackMove':
+    case 'TrackMove': {
       piece.state = 'OnTrack'
       piece.trackPosition = move.resultingTrackPosition
       piece.corridorPosition = -1
+      // PC2.1: the entry-square safe-zone exception only fires once this exit is *joining* an
+      // own pawn already there (piecesOfColorOnTrackSquare now counts the mover itself too, so
+      // >1 means at least one other same-color pawn was already on the square) - a first, lone
+      // exit onto an opponent's pawn there does not capture it, they simply coexist.
+      const joiningOwnPawn = move.kind === 'ExitYard' && piecesOfColorOnTrackSquare(allPlayers, piece.color, move.resultingTrackPosition) > 1
       result.capturedPiece = settings.captureSendsToYard
-        ? captureAt(board, piece, move.resultingTrackPosition, allPlayers)
+        ? captureAt(board, piece, move.resultingTrackPosition, allPlayers, joiningOwnPawn)
         : null
       // PK6/PK8: a common piece only eliminates the Parkiller during the roll that just produced
       // doubles (the reference implementation's own doblete_mata_parkiller flag) - landing on it
@@ -192,7 +219,21 @@ export function applyMove(
       result.capturedParkillerColor = allowParkillerCapture && usesSingleDie
         ? captureParkillerAt(piece, move.resultingTrackPosition, allPlayers)
         : null
+      // PK5: landing on an unprotected opposing Parkiller without eliminating it (PK6, just
+      // above) turns the tables instead - the arriving pawn is sent straight back to its own
+      // yard, with no reward. Verified directly against the reference implementation's
+      // ingresaFicha(): the move is never blocked outright, it always completes first and only
+      // then bounces the arriving pawn home.
+      if (!result.capturedParkillerColor) {
+        const dangerColor = unprotectedOpposingParkillerColorAt(board, piece.color, move.resultingTrackPosition, allPlayers)
+        if (dangerColor) {
+          piece.state = 'InYard'
+          piece.trackPosition = -1
+          result.eliminatedByParkiller = true
+        }
+      }
       break
+    }
 
     case 'CorridorMove':
       piece.state = 'InHomeCorridor'
@@ -216,8 +257,12 @@ function captureAt(
   mover: Piece,
   trackPosition: number,
   allPlayers: readonly PlayerState[],
+  bypassSafeZone: boolean,
 ): Piece | null {
-  if (board.safeTrackIndices.has(trackPosition)) return null
+  // PC2.2: a shelter owner's own exit breaks that square's usual protection, but only once a 2nd
+  // own pawn is actually joining a pawn already there (see applyMove's joiningOwnPawn) - every
+  // other landing, including a first lone exit onto a single opponent, still respects it.
+  if (!bypassSafeZone && board.safeTrackIndices.has(trackPosition)) return null
 
   for (const opponent of allPlayers) {
     if (opponent.color === mover.color) continue
@@ -245,6 +290,24 @@ function captureParkillerAt(mover: Piece, trackPosition: number, allPlayers: rea
       opponent.parkiller.state = 'Eliminated'
       return opponent.color
     }
+  }
+  return null
+}
+
+// PK5: read-only check for whether landing here puts the mover in danger - an opposing Parkiller,
+// still in play, on an unprotected square. Safe/protected squares are exempt (PK4: the two simply
+// form a barrier instead), and this only ever matters for the destination square itself, not any
+// square passed through along the way.
+function unprotectedOpposingParkillerColorAt(
+  board: BoardData,
+  color: PieceColor,
+  trackPosition: number,
+  allPlayers: readonly PlayerState[],
+): PieceColor | null {
+  if (board.safeTrackIndices.has(trackPosition)) return null
+  for (const opponent of allPlayers) {
+    if (opponent.color === color) continue
+    if (opponent.parkiller.state === 'InPlay' && opponent.parkiller.trackPosition === trackPosition) return opponent.color
   }
   return null
 }

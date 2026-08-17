@@ -66,6 +66,12 @@ describe('generated board data', () => {
       const colors = def.playerLanes.map((l) => l.color)
       const players = colors.map((color) => createPlayerState(color, board))
       const mover = players[0]
+      // This test only cares about the waypoint data itself (does a full lap actually reach
+      // home), not PK5 - without this, a plain single-step walk can wander onto another color's
+      // still-untouched Parkiller (parked at that color's own home-entrance) and get bounced back
+      // to the yard mid-walk, which a bare `amount=1` retry loop can't recover from (re-exiting
+      // needs a 5, not a 1).
+      for (const player of players) player.parkiller.state = 'Eliminated'
 
       // exit the yard (rulebook: 2 white dice, a 5 on either die exits - not the classic six)
       let moves = getValidMoves(board, mover, players, 5, settings)
