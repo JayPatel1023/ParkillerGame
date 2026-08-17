@@ -27,7 +27,7 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
           style={{
             position: 'absolute',
             inset: '-6%',
-            backgroundColor: THEME.woodDeep,
+            backgroundColor: THEME.wood,
             backgroundImage: 'url(/backgrounds/start.png)',
             backgroundSize: 'contain',
             backgroundRepeat: 'no-repeat',
@@ -39,7 +39,7 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
         style={{
           position: 'absolute',
           inset: 0,
-          background: 'radial-gradient(ellipse at center, rgba(10,8,4,0.08) 0%, rgba(4,3,2,0.74) 100%)',
+          background: 'radial-gradient(ellipse at center, rgba(10,8,4,0.03) 0%, rgba(8,6,4,0.42) 100%)',
         }}
       />
       <div
