@@ -34,7 +34,7 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
             backgroundSize: 'cover',
             backgroundRepeat: 'no-repeat',
             backgroundPosition: 'center',
-            filter: 'blur(60px) brightness(0.55) saturate(1.1)',
+            filter: 'blur(45px) brightness(0.8) saturate(1.15)',
           }}
         />
         <div
