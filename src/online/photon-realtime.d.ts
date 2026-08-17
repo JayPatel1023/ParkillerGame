@@ -73,6 +73,11 @@ declare module 'photon-realtime' {
       onEvent: (code: number, content: unknown, actorNr: number) => void
       onActorJoin: (actor: Actor) => void
       onActorLeave: (actor: Actor, cleanup: boolean) => void
+      /** Fires when an actor's custom properties change *after* they've already joined (e.g. a
+       * seat-color claim sent right after joinRoom() resolves) - a separate event from
+       * onActorJoin, which only fires once for the join itself. See photonClient.ts's own
+       * onActorsChanged for why both are needed. */
+      onActorPropertiesChange: (actor: Actor) => void
       /** Fires for operation-level failures (bad room code, full room, ...) that never touch
        * onStateChange at all - see photonClient.ts's own comment on joinOrCreate for why both are
        * needed. errorCode 0 (ErrorCode.Ok) means success. */
