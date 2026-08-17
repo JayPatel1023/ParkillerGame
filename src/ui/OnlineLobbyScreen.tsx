@@ -113,7 +113,10 @@ export default function OnlineLobbyScreen() {
     const players = colors.map((color) => createPlayerState(color, board))
     const diceQueue = new QueueDice()
     const inner = new TurnManager(board, players, defaultRuleSettings(), diceQueue)
-    const bridge = new RemoteTurnManager(inner, diceQueue, players, connection)
+    // Set synchronously into this client's own local actor cache back in joinRoom()'s
+    // setLocalActorProperties() call, before any network round trip - safe to read back here.
+    const myColor = connection.getActors().find((a) => a.isLocal)?.customProperties.color as PieceColor | undefined
+    const bridge = new RemoteTurnManager(inner, diceQueue, players, connection, myColor ?? null)
     bridge.start()
     setSession({ turnManager: bridge, players })
     setPhase('game')
@@ -180,7 +183,8 @@ export default function OnlineLobbyScreen() {
       const color = actor.customProperties.color as PieceColor | undefined
       if (color) actorColors.set(actor.actorNr, color)
     }
-    const bridge = new HostTurnManagerBridge(inner, dice, players, connection, actorColors)
+    const myColor = actorColors.get(connection.localActorNr) ?? null
+    const bridge = new HostTurnManagerBridge(inner, dice, players, connection, actorColors, myColor)
 
     // Any color nobody claimed a seat for becomes a bot - this is what "bots fill empty seats" means.
     const claimedColors = new Set(actorColors.values())
