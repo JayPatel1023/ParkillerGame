@@ -31,18 +31,21 @@ function yawTowards(from: [number, number, number], to: [number, number, number]
   return Math.atan2(dx, dz)
 }
 
-// Body/hood profiles were re-derived directly from Carlos's own dimensioned reference photo
-// (parkiller.png, checked in at the repo root - a real product-shot turnaround with a labeled
-// 40mm-tall/22mm-wide front elevation), not hand-copied from anyone's code. The back-view
-// turntable panel (cleanest silhouette - no face-cavity hole and the near-symmetric pose keeps
-// both arms mostly out of frame) was traced pixel-row-by-pixel and converted to normalized
-// (radius, height) pairs at this same MODEL_RAW_HEIGHT scale.
+// Re-derived directly from a new, far clearer reference the client sent - a proper turnaround
+// sheet (front/3-4/side/back, a wireframe pass, a top-down view, and a dimensioned front
+// elevation: 40mm tall, 22mm wide at the base) rather than the single angled product photo the
+// previous pass worked from. Reported directly, again, that the previous shape ("전혀 클라이언트가
+// 원하는 스타일이못된다" - not at all the client's style) read as too narrow for its height and had
+// a bulge partway up the hood instead of a clean taper to a point - both visible once actually
+// measured against this sheet: the dimensioned elevation's own 22mm/40mm ratio (0.55, i.e. a base
+// *radius* of ~0.275x total height) is noticeably wider than this model's old ~0.195 ratio, and
+// every one of the sheet's views shows the hood narrowing continuously from shoulder to tip with
+// no mid-height bulge at all.
 //
-// Still reported as not matching after that pass - hand-guessing a sculptural profile from a
-// static photo, screenshot-then-reason, has hit diminishing returns across several rounds. See
-// ParkillerEditor.tsx (#parkiller-editor) for a click-to-trace tool against the same reference
-// photo with a live 3D preview, the same fix the board waypoints got once smooth-curve
-// approximation stopped being good enough for them either.
+// Hand-guessing a sculptural profile from static photos, screenshot-then-reason, has hit
+// diminishing returns before - see ParkillerEditor.tsx (#parkiller-editor) for a click-to-trace
+// tool against a reference photo with a live 3D preview, the same fix the board waypoints got once
+// smooth-curve approximation stopped being good enough for them either.
 //
 // Reported directly (in an earlier round, kept for context): scaling by the model's own footprint
 // radius (its widest point, matched to PARKILLER_BASE_RADIUS the way a regular pawn's profile is
@@ -56,28 +59,36 @@ const PAWN_HEIGHT = 0.9116 * (0.065 / 0.335) * 1.43
 const MODEL_RAW_HEIGHT = 2.9
 const MODEL_SCALE = (PAWN_HEIGHT * 1.4) / MODEL_RAW_HEIGHT
 
+// A continuous bell-like flare from a wide, near-flat base up to narrow shoulders - not the old
+// profile's straight vertical-walled cylinder through the midsection, which is nowhere in any of
+// the sheet's views. First two points share y=0 (center, then base radius) so the lathe closes
+// into a flat bottom disc, the same technique PieceMesh.tsx's own pawn profile uses.
 const BODY_PROFILE_RAW: [number, number][] = [
-  [0.05, 0.0],
-  [0.52, 0.04],
-  [0.567, 0.15],
-  [0.567, 0.9],
-  [0.55, 1.3],
-  [0.5, 1.55],
-  [0.43, 1.75],
-  [0.34, 1.9],
-  [0.26, 2.0],
+  [0.0, 0.0],
+  [0.74, 0.0],
+  [0.78, 0.1],
+  [0.75, 0.35],
+  [0.68, 0.65],
+  [0.6, 0.95],
+  [0.5, 1.22],
+  [0.4, 1.45],
+  [0.3, 1.68],
+  [0.23, 1.85],
+  [0.2, 2.0],
 ]
 
+// Tapers continuously from the shoulder to a sharp point, matching every view on the sheet - the
+// old profile's radius actually *increased* from 0.26 to 0.29 between y=2.0 and y=2.32 before
+// tapering, which is exactly the mid-hood bulge reported as wrong.
 const HOOD_PROFILE_RAW: [number, number][] = [
-  [0.26, 2.0],
-  [0.29, 2.11],
-  [0.29, 2.22],
-  [0.29, 2.32],
-  [0.26, 2.43],
-  [0.23, 2.53],
-  [0.19, 2.64],
-  [0.14, 2.74],
-  [0.08, 2.85],
+  [0.2, 2.0],
+  [0.22, 2.05],
+  [0.21, 2.15],
+  [0.19, 2.3],
+  [0.16, 2.45],
+  [0.12, 2.6],
+  [0.08, 2.72],
+  [0.04, 2.82],
   [0.0, 2.9],
 ]
 
@@ -114,30 +125,30 @@ export interface ParkillerGeometryConfig {
 export const DEFAULT_PARKILLER_CONFIG: ParkillerGeometryConfig = {
   bodyProfile: BODY_PROFILE_RAW,
   hoodProfile: HOOD_PROFILE_RAW,
-  // Re-derived from a clean, direct front-on product photo (much clearer than the earlier
-  // turnaround sheet's angled shots) - reported directly that the previous side-splayed arms and
-  // shallow cavity read as nothing like it. That photo shows the hood opening as a large, tall,
-  // deep archway (roughly 35%-80% down the hood, close to what was already here) and both hands
-  // brought in close together in front of the belly, not held out to the sides at all - a clasped/
-  // resting pose, not the earlier one-tucked-one-hanging silhouette.
-  cavity: { position: [0, 2.32, 0.38], scale: [0.24, 0.22, 0.11] },
-  face: { position: [0, 2.32, 0.44], scale: [0.19, 0.18, 0.08] },
-  // Both arms angle forward and inward from the shoulder to meet near the front-center of the
-  // belly - symmetric, matching the direct front photo (the earlier asymmetric "one hangs low"
-  // pose came from misreading a 3/4-angle shot on the turnaround sheet as a side-hanging arm).
-  // Hand z-offset has to clear the body's own radius at that height (~0.55-0.57, see
-  // BODY_PROFILE_RAW) or it reads as buried inside the body instead of resting on its front.
+  // Every view on the new turnaround sheet shows the hood opening as a tall, narrow, rounded
+  // oval sitting in the upper half of the hood (not the old wide/shallow archway) - and, just as
+  // importantly, completely empty and dark inside, no visible face or color at all. `face` stays
+  // in the config (ParkillerEditor.tsx still has a control bound to it) but is rendered dark below
+  // instead of removed, so it visually disappears into the cavity rather than showing as a red
+  // highlight - reported directly that any visible red inside the hood read as wrong.
+  cavity: { position: [0, 2.32, 0.34], scale: [0.17, 0.32, 0.13] },
+  face: { position: [0, 2.32, 0.34], scale: [0.12, 0.22, 0.08] },
+  // Both arms bend forward and sharply inward from the shoulder so the hands overlap into one
+  // small rounded clasped mass at the front, roughly chest-height - every view on the sheet shows
+  // a single compact bump, not two separate visible fists. Hand z-offset has to clear the body's
+  // own radius at that height (~0.5-0.55, see BODY_PROFILE_RAW) or it reads as buried inside the
+  // body instead of resting on its front.
   arms: [
     {
-      arm: { position: [0.34, 1.15, 0.36], rotation: [0.55, 0, 0.35], scale: [0.19, 0.58, 0.21] },
-      hand: { position: [0.15, 0.78, 0.65], scale: [0.17, 0.22, 0.17] },
+      arm: { position: [0.22, 1.55, 0.32], rotation: [0.5, 0, 0.3], scale: [0.13, 0.55, 0.15] },
+      hand: { position: [0.07, 1.15, 0.58], scale: [0.15, 0.19, 0.15] },
     },
     {
-      arm: { position: [-0.34, 1.15, 0.36], rotation: [0.55, 0, -0.35], scale: [0.19, 0.58, 0.21] },
-      hand: { position: [-0.15, 0.78, 0.65], scale: [0.17, 0.22, 0.17] },
+      arm: { position: [-0.22, 1.55, 0.32], rotation: [0.5, 0, -0.3], scale: [0.13, 0.55, 0.15] },
+      hand: { position: [-0.07, 1.15, 0.58], scale: [0.15, 0.19, 0.15] },
     },
   ],
-  fold: { position: [0, 1.1, 0.46], scale: [0.11, 0.55, 0.07] },
+  fold: { position: [0, 0.75, 0.52], scale: [0.1, 0.5, 0.06] },
   modelScale: MODEL_SCALE,
 }
 
@@ -208,7 +219,7 @@ export function ParkillerModel({ color, config }: { color: PieceColor; config: P
       </mesh>
       <mesh position={config.face.position} scale={config.face.scale} castShadow>
         <sphereGeometry args={[1, 32, 24]} />
-        <primitive object={mainMaterial} attach="material" />
+        <primitive object={darkMaterial} attach="material" />
       </mesh>
 
       {config.arms.map((armConfig, i) => (
