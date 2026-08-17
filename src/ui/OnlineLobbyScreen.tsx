@@ -36,6 +36,26 @@ function generateRoomCode(): string {
   return code
 }
 
+// Reported directly, from a real two-player test: a joiner ended up fighting the host over the
+// host's own color, while their actual seat sat bot-controlled the whole time. Root cause: the
+// previous version picked a color by reading *other* actors' own `color` custom property (to see
+// which ones were already "taken") - but a joiner reads that immediately after their own join
+// resolves, and the host's color property is a *separate* network call that can still be
+// mid-flight at that exact moment. A joiner racing in quickly enough would see the host's actor
+// with no color set yet, conclude nothing was taken, and pick the same color the host already
+// has - two actors silently claiming one seat, leaving the *other* real seat (the one the joiner
+// should have gotten) unclaimed and bot-filled.
+// actorNr has no such race: it's Photon's own intrinsic actor identifier, assigned as part of the
+// join operation itself (not a custom property needing a separate sync), so every client's own
+// join response already includes it reliably. Ranking by actorNr instead - the room's creator is
+// always the actor with the lowest actorNr (Photon's own rule), so this naturally assigns them
+// colors[0] too, matching "the room creator goes first."
+function colorForActor(connection: PhotonConnection, colors: PieceColor[]): PieceColor {
+  const actorNrs = connection.getActors().map((a) => a.actorNr).sort((a, b) => a - b)
+  const rank = actorNrs.indexOf(connection.localActorNr)
+  return colors[rank] ?? colors[colors.length - 1]
+}
+
 type Phase = 'connecting' | 'error' | 'menu' | 'creating' | 'joining' | 'lobby' | 'game'
 
 export default function OnlineLobbyScreen() {
@@ -130,7 +150,7 @@ export default function OnlineLobbyScreen() {
     connection
       .createRoom(code, playerCount)
       .then(() => {
-        connection.setLocalActorProperties({ color: TURN_ORDER_BY_COUNT[playerCount][0] })
+        connection.setLocalActorProperties({ color: colorForActor(connection, TURN_ORDER_BY_COUNT[playerCount]) })
         setRoomCode(code)
         setPhase('lobby')
       })
@@ -148,16 +168,11 @@ export default function OnlineLobbyScreen() {
     connection
       .joinRoom(code)
       .then(() => {
-        // Reported directly, from a real two-player test: reading a *custom* room property here
-        // (set by the host right after createRoom() resolves) could race a fast-joining client,
-        // silently defaulting to the wrong player count and picking a color from the wrong color
-        // set entirely - see photonClient.ts's own getMaxPlayers() comment for the full story.
-        // maxPlayers is set atomically as part of room creation itself, so there's nothing here
-        // to race.
+        // maxPlayers is set atomically as part of room creation itself (see photonClient.ts's own
+        // getMaxPlayers() comment) - nothing to race reading that.
         const count = connection.getMaxPlayers() || 4
         const colors = TURN_ORDER_BY_COUNT[count]
-        const taken = new Set(connection.getActors().map((a) => a.customProperties.color as PieceColor | undefined))
-        const myColor = colors.find((c) => !taken.has(c)) ?? colors[colors.length - 1]
+        const myColor = colorForActor(connection, colors)
         connection.setLocalActorProperties({ color: myColor })
         setRoomCode(code)
         setPlayerCount(count)
