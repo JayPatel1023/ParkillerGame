@@ -133,21 +133,28 @@ export const DEFAULT_PARKILLER_CONFIG: ParkillerGeometryConfig = {
   // highlight - reported directly that any visible red inside the hood read as wrong.
   cavity: { position: [0, 2.32, 0.34], scale: [0.17, 0.32, 0.13] },
   face: { position: [0, 2.32, 0.34], scale: [0.12, 0.22, 0.08] },
-  // Reported directly: the clasped-hands-in-front pose read as wrong against the client's actual
-  // reference photo (public/reference/parkiller-full.png, a physical figurine turnaround) - every
-  // angle of that photo shows two distinct hands hanging separately at the sides, roughly hip
-  // height, not merged into one central bump. Arms now hang mostly straight down from the
-  // shoulder with only a slight forward lean, splaying outward (not inward) so each hand clears
-  // the robe's own flared radius at hip height (~0.6-0.66, see BODY_PROFILE_RAW) and reads as its
-  // own separate rounded mitt against the silhouette.
+  // Reported directly, twice now: the clasped-hands-in-front pose read as wrong against the
+  // client's reference photo (public/reference/parkiller-full.png, a physical figurine
+  // turnaround) - every angle of that photo shows two distinct hands hanging separately at the
+  // sides, roughly hip height. The first attempt to fix this guessed the arm's rotation.x/z by
+  // eye and landed nowhere near enough to actually point the capsule downward (still ~148-150°
+  // off from "hanging down"), which read as short spikes jutting up near the shoulder rather
+  // than arms reaching down to the hands - reported back as "looks like a scarecrow". This time
+  // the rotation is computed, not guessed: pick a shoulder point (near the body's own surface at
+  // shoulder height) and a hand point (at hip height, clearing the body's own flared radius
+  // there, ~0.6-0.66 - see BODY_PROFILE_RAW), then derive the exact quaternion/Euler that points
+  // the capsule's default +Y axis from one to the other (verified directly against three's own
+  // Euler.setFromQuaternion, not hand-derived trig - a 2-angle-only derivation silently drops the
+  // rotation.y component whenever the target direction doesn't lie exactly in the X-Z-free plane,
+  // which is exactly what produced the wrong-by-150° result above).
   arms: [
     {
-      arm: { position: [0.35, 1.4, 0.08], rotation: [0.15, 0, -0.38], scale: [0.14, 0.62, 0.16] },
-      hand: { position: [0.72, 0.85, 0.22], scale: [0.17, 0.21, 0.17] },
+      arm: { position: [0.515, 1.12, 0.18], rotation: [0.255, -0.781, -2.537], scale: [0.12, 0.42, 0.14] },
+      hand: { position: [0.65, 0.82, 0.24], scale: [0.17, 0.21, 0.17] },
     },
     {
-      arm: { position: [-0.35, 1.4, 0.08], rotation: [0.15, 0, 0.38], scale: [0.14, 0.62, 0.16] },
-      hand: { position: [-0.72, 0.85, 0.22], scale: [0.17, 0.21, 0.17] },
+      arm: { position: [-0.515, 1.12, 0.18], rotation: [0.255, 0.781, 2.537], scale: [0.12, 0.42, 0.14] },
+      hand: { position: [-0.65, 0.82, 0.24], scale: [0.17, 0.21, 0.17] },
     },
   ],
   fold: { position: [0, 0.75, 0.52], scale: [0.1, 0.5, 0.06] },
