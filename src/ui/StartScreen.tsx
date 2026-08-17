@@ -1,4 +1,3 @@
-import { StartScreenBackground } from '../scene/StartScreenBackground'
 import { GoldPanel } from './GoldPanel'
 import { THEME } from './theme'
 
@@ -7,15 +6,23 @@ import { THEME } from './theme'
 // plain blue buttons read as a generic web form, not a premium tabletop game. logo-badge.png is a
 // clean circular crop taken directly from the board art's own corner badge (the hooded character +
 // "Parkiller" wordmark it's already drawn with) - reused here rather than commissioning new art.
-// StartScreenBackground renders the real board mesh + table under a slowly auto-rotating camera
-// (see that file's own comment on why a flat image/CSS pattern couldn't give real depth).
+// Background: that same reference photo itself, supplied directly as a static asset
+// (public/backgrounds/start.png) - the earlier 3D rotating-board background (StartScreenBackground)
+// was only ever a stand-in built because no such photo existed yet; now that one does, it replaces
+// the 3D scene here rather than the 3D scene trying to recreate it.
 export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
   const canPlayOnline = Boolean(import.meta.env.VITE_PHOTON_APP_ID)
   return (
     <div style={{ height: '100%', position: 'relative' }}>
-      <div style={{ position: 'absolute', inset: 0 }}>
-        <StartScreenBackground />
-      </div>
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundImage: 'url(/backgrounds/start.png)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+        }}
+      />
       <div
         style={{
           position: 'absolute',
