@@ -1,6 +1,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
 import { Line, OrbitControls, PerspectiveCamera, Text } from '@react-three/drei'
+import * as THREE from 'three'
 import type { BoardDefinition } from '../core/board/boardDefinition'
 import type { PlayerState } from '../core/gameFlow/playerState'
 import type { ParkillerMoveResult } from '../core/gameFlow/turnManager'
@@ -8,7 +9,7 @@ import type { MoveOption } from '../core/rules/moveOption'
 import type { Piece } from '../core/pieces/piece'
 import type { PieceColor } from '../core/pieceColor'
 import type { MoveAnimationRequest } from '../hooks/useTurnManager'
-import { BoardMesh } from './BoardMesh'
+import { BoardMesh, BOARD_THICKNESS } from './BoardMesh'
 import { PieceMesh } from './PieceMesh'
 import { ParkillerMesh } from './ParkillerMesh'
 import { DiceMesh } from './DiceMesh'
@@ -22,7 +23,7 @@ import {
   getParkillerWaypoint,
   getPieceWaypoint,
 } from './piecePosition'
-import { toWorldPosition, estimateSquareSize, computeTileCorners, BASE_HEIGHT, FLAT_SURFACE_HEIGHT } from './boardGeometry'
+import { toWorldPosition, estimateSquareSize, computeTileCorners, BASE_HEIGHT, FLAT_SURFACE_HEIGHT, BOARD_SIZE } from './boardGeometry'
 import { getColor } from '../core/colorPalette'
 
 // Requested look is a real tabletop perspective shot (dramatic near/far foreshortening, board
@@ -59,6 +60,36 @@ function FitBoardCamera() {
   const y = distance * Math.cos(DEFAULT_POLAR_ANGLE)
   const z = distance * Math.sin(DEFAULT_POLAR_ANGLE)
   return <PerspectiveCamera makeDefault position={[0, y, z]} fov={FOV_DEGREES} near={0.1} far={50} />
+}
+
+// A soft-edged dark ellipse baked into a canvas texture, not a real-time WebGL shadow - see the
+// comment where this is used for why. Reads as a contact shadow/ambient-occlusion pool grounding
+// the board against the CSS photo underneath, without depending on the shadow map at all.
+function createContactShadowTexture(): THREE.CanvasTexture {
+  const size = 256
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')!
+  const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
+  gradient.addColorStop(0, 'rgba(0,0,0,0.55)')
+  gradient.addColorStop(0.6, 'rgba(0,0,0,0.32)')
+  gradient.addColorStop(1, 'rgba(0,0,0,0)')
+  ctx.fillStyle = gradient
+  ctx.fillRect(0, 0, size, size)
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.needsUpdate = true
+  return texture
+}
+
+function ContactShadow() {
+  const texture = useMemo(() => createContactShadowTexture(), [])
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -BOARD_THICKNESS - 0.004, 0]}>
+      <planeGeometry args={[BOARD_SIZE * 1.35, BOARD_SIZE * 1.35]} />
+      <meshBasicMaterial map={texture} transparent depthWrite={false} />
+    </mesh>
+  )
 }
 
 // Debug aid: draws a line through every trackWaypoint in array order, plus a dot at each one (larger
@@ -385,7 +416,18 @@ export function BoardScene({
           ground plane at all - the Canvas is transparent (gl alpha:true) and the real photo
           (moon.png, supplied directly) is the page's own CSS background behind it instead, same
           approach as StartScreen's own background photo. The board now reads as floating over a
-          real photo rather than a procedurally-textured plane. */}
+          real photo rather than a procedurally-textured plane.
+          Removing the ground plane also removed the one thing the board's own shadow used to fall
+          on, though - reported directly, right after, that the board now looked like it was
+          floating rather than resting on the cloth. A real-time shadowMaterial catcher plane
+          turned out not to work here - confirmed via a plain test box that its own shadow lands
+          correctly on the board's top surface (the light/shadow system itself is fine), but the
+          thin board casts nothing onto a receiver placed below it, even far below and with
+          explicit shadow-camera bounds/bias - a peter-panning/culling quirk with this specific
+          thin-geometry-over-receiver setup, not worth chasing further. A baked soft-edged dark
+          ellipse texture (ContactShadow below) gives the same "resting on the table" cue directly,
+          with no dependency on the WebGL shadow map at all. */}
+      <ContactShadow />
       <Suspense fallback={null}>
         <BoardMesh imageUrl={definition.boardImage} />
       </Suspense>
