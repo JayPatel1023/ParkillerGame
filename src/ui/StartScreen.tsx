@@ -20,7 +20,10 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
           gentle perspective wobble (small rotateX/rotateY swing, well short of ever going edge-on)
           is the tasteful middle ground: keeps the exact photo, adds real 3D motion. The layer
           itself is oversized (inset -6%) so tilting never reveals its own edge/gap at the
-          viewport boundary. `contain` (not `cover`) still avoids the earlier crop/zoom issue. */}
+          viewport boundary. `cover` (not `contain`) so the photo always fills 100% of the frame in
+          both directions - reported directly that `contain`'s letterbox bars (visible on wide
+          screens, where the photo's own ~1.5:1 aspect is narrower than the viewport) read as an
+          unwanted margin; cropping some of the photo's own edges is the accepted trade-off. */}
       <div style={{ position: 'absolute', inset: 0, perspective: 1600, overflow: 'hidden' }}>
         <div
           className="start-bg-wobble"
@@ -29,7 +32,7 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
             inset: '-6%',
             backgroundColor: THEME.wood,
             backgroundImage: 'url(/backgrounds/start.png)',
-            backgroundSize: 'contain',
+            backgroundSize: 'cover',
             backgroundRepeat: 'no-repeat',
             backgroundPosition: 'center',
           }}
