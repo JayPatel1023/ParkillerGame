@@ -70,6 +70,24 @@ export function GameBoardScreen({
   ]
   const isDouble = lastRoll !== null && lastRoll.dieA === lastRoll.dieB
 
+  // What the turn banner's subtitle says - one place for this instead of scattering the same
+  // priority order (doubles warning > reward > move prompt > roll prompt) across JSX conditionals.
+  const statusLine = eliminatedByDoubles
+    ? `Tercer dobles seguido: ${eliminatedByDoubles.color} pierde una ficha`
+    : pendingReward
+      ? 'Elegí una ficha para tu recompensa'
+      : pendingMoves.length > 0
+        ? 'Elegí una ficha para mover'
+        : lastRoll && !rolling
+          ? `Dados: ${lastRoll.dieA} y ${lastRoll.dieB}${isDouble ? ' (dobles)' : ''} · Parkiller: ${lastRoll.blackDie}`
+          : 'Tirá los dados para empezar tu turno'
+
+  // Reported directly, with a full mockup: player info belongs at the table's own edges (like
+  // players actually sitting around it), not bunched into one corner panel. Split left/right by
+  // turn order so it scales to however many are actually seated (2-6), not just a fixed 4.
+  const leftPlayers = session.players.filter((_, i) => i % 2 === 0)
+  const rightPlayers = session.players.filter((_, i) => i % 2 === 1)
+
   return (
     <div className="game-screen-in" style={screenWrapperStyle}>
       <BoardScene
@@ -90,31 +108,33 @@ export function GameBoardScreen({
 
       <RewardToast pendingReward={pendingReward} forfeitedReward={forfeitedReward} />
 
-      <div style={hudPanelStyle}>
-        <div style={turnRowStyle}>
-          <span style={{ ...turnDotStyle, background: getColor(currentPlayer.color) }} />
-          <span style={{ fontWeight: 600, fontSize: 16 }}>Turno: {currentPlayer.color}</span>
-        </div>
-        {lastRoll && !rolling && (
-          <div style={hintTextStyle}>
-            Dados: {lastRoll.dieA} y {lastRoll.dieB}
-            {isDouble && ' (dobles)'} · Parkiller: {lastRoll.blackDie}
-          </div>
-        )}
-        {eliminatedByDoubles && (
-          <div style={{ ...hintTextStyle, color: '#e8a15c' }}>
-            Tercer dobles seguido: {eliminatedByDoubles.color} pierde una ficha
-          </div>
-        )}
-        {/* The reward amount/reason itself is now the celebratory RewardToast (center-stage,
-            animated) instead of a small status line here - this just keeps the player moving
-            forward with what to actually click next. */}
-        {pendingReward && <div style={{ ...hintTextStyle, color: '#7fd88f' }}>Elegí una ficha para tu recompensa</div>}
-        {pendingMoves.length > 0 && !pendingReward && <div style={hintTextStyle}>Elegí una ficha para mover</div>}
-        <button className="chunky-btn" onClick={() => canRoll && rollDice()} disabled={!canRoll} style={rollButtonStyle(canRoll)}>
-          {rolling ? 'Rodando...' : 'Tirar dados'}
-        </button>
+      <div style={turnBannerStyle}>
+        <span style={{ ...turnDotStyle, width: 16, height: 16, background: getColor(currentPlayer.color) }} />
+        <span style={{ fontWeight: 800, fontSize: 'clamp(15px, 3.4vw, 19px)', letterSpacing: 0.4 }}>
+          TURNO DE {currentPlayer.color.toUpperCase()}
+        </span>
+        <span style={{ ...hintTextStyle, textAlign: 'center' }}>{statusLine}</span>
       </div>
+
+      <div style={{ ...playerColumnStyle, left: 16 }}>
+        {leftPlayers.map((p) => (
+          <PlayerPanel key={p.color} player={p} isCurrentTurn={p.color === currentPlayer.color} />
+        ))}
+      </div>
+      <div style={{ ...playerColumnStyle, right: 16 }}>
+        {rightPlayers.map((p) => (
+          <PlayerPanel key={p.color} player={p} isCurrentTurn={p.color === currentPlayer.color} />
+        ))}
+      </div>
+
+      <button
+        className="chunky-btn"
+        onClick={() => canRoll && rollDice()}
+        disabled={!canRoll}
+        style={{ ...rollButtonStyle(canRoll), ...bottomRollButtonStyle }}
+      >
+        {rolling ? 'Rodando...' : 'Tirar dados'}
+      </button>
 
       <button className="chunky-btn" onClick={() => setConfirmingExit(true)} title="Salir del juego" style={exitButtonStyle}>
         ✕
@@ -173,6 +193,40 @@ export function GameBoardScreen({
   )
 }
 
+// One panel per seated player, positioned at the table's own left/right edges (see leftPlayers/
+// rightPlayers above) instead of bunched into a single corner - echoes players actually sitting
+// around a physical board, per the reference mockup. Pieces-at-home count uses data already on
+// PlayerState (Piece.state === 'Finished'), no new game-state tracking needed.
+function PlayerPanel({ player, isCurrentTurn }: { player: PlayerState; isCurrentTurn: boolean }) {
+  const home = player.pieces.filter((p) => p.state === 'Finished').length
+  const color = getColor(player.color)
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'clamp(6px, 2vw, 10px)',
+        padding: 'clamp(5px, 1.5vw, 8px) clamp(8px, 3vw, 14px)',
+        borderRadius: 14,
+        background: isCurrentTurn
+          ? 'linear-gradient(180deg, rgba(255,255,255,0.1), transparent 30%), linear-gradient(165deg, rgba(74, 120, 216, 0.35), rgba(36, 28, 18, 0.85))'
+          : 'linear-gradient(180deg, rgba(255,255,255,0.05), transparent 30%), linear-gradient(165deg, rgba(64, 50, 32, 0.85), rgba(30, 23, 14, 0.85))',
+        border: `2px solid ${isCurrentTurn ? color : 'rgba(74,120,216,0.35)'}`,
+        boxShadow: isCurrentTurn ? `0 0 14px 1px ${color}66, 0 4px 12px rgba(0,0,0,0.35)` : '0 4px 12px rgba(0,0,0,0.3)',
+        minWidth: 'clamp(76px, 20vw, 108px)',
+      }}
+    >
+      <span style={{ ...turnDotStyle, width: 'clamp(9px, 2.4vw, 12px)', height: 'clamp(9px, 2.4vw, 12px)', background: color, flexShrink: 0 }} />
+      <div style={{ lineHeight: 1.3 }}>
+        <div style={{ fontWeight: 800, fontSize: 'clamp(10px, 2.6vw, 12px)', letterSpacing: 0.3 }}>{player.color.toUpperCase()}</div>
+        <div style={{ fontSize: 'clamp(9px, 2.3vw, 11px)', color: '#d8d2c2' }}>
+          {home}/{player.pieces.length} en casa
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // A square board inside a landscape (or portrait) window always leaves margin beside it - no
 // camera-fit math changes that geometry. That margin is now real 3D geometry (see
 // scene/TableSurface.tsx - a large grass-toned plane under the board, extending well past the
@@ -186,36 +240,42 @@ const screenWrapperStyle: React.CSSProperties = {
   background: 'radial-gradient(ellipse at center, rgba(40, 84, 32, 0.4) 0%, rgba(10, 22, 8, 1) 75%)',
 }
 
-// Reported directly (twice now): the whole game felt too serious/stiff, not the "relajado,
-// divertido" feel a casual board game should have. First pass (warmer panel tone, rounder
-// corners) wasn't enough on its own - the shapes underneath were still plain rectangles, which
-// reads as a form/dialog box rather than part of a game. This pass goes further: a double-ring
-// "medallion" border (an outer gold ring plus an inset darker ring, the same layered-border trick
-// real board-game components use) instead of one flat line, rounder corners, and a soft top-edge
-// highlight for a lacquered/varnished feel matching the pieces' own glossy clearcoat material -
-// so the panel reads as a carved game token sitting on the table, not a UI card floating over it.
-const hudPanelStyle: React.CSSProperties = {
+// Reported directly, with a full mockup this time (a reference photo of a real table + an
+// annotated UI layout): turn/status belongs in one large, unmissable banner top-center - not a
+// small corner panel easy to miss mid-game - with per-player info at the table's own edges and
+// the roll button as its own big, centered, unmissable action, echoing a real group sitting
+// around a physical board rather than a single UI card floating over it.
+const turnBannerStyle: React.CSSProperties = {
   position: 'absolute',
   top: 16,
-  left: 16,
+  left: '50%',
+  transform: 'translateX(-50%)',
   display: 'flex',
   flexDirection: 'column',
-  gap: 10,
+  alignItems: 'center',
+  gap: 4,
   background:
     'linear-gradient(180deg, rgba(255,255,255,0.06), transparent 30%), linear-gradient(165deg, rgba(64, 50, 32, 0.92), rgba(36, 28, 18, 0.92))',
   border: `2px solid ${BRAND_GOLD}`,
   boxShadow: `0 6px 20px rgba(0,0,0,0.4), inset 0 0 0 3px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.12)`,
-  padding: '16px 20px',
-  borderRadius: 22,
+  padding: '8px clamp(12px, 4vw, 28px)',
+  borderRadius: 18,
   fontFamily: 'system-ui, sans-serif',
   color: '#f2ede0',
-  minWidth: 160,
+  // Has to clear the exit button (right: 16, width 46) on both sides while staying centered - a
+  // flat vw-based cap alone overlapped it on narrow phones, reported directly with a screenshot.
+  maxWidth: 'min(78vw, calc(100vw - 140px))',
+  boxSizing: 'border-box',
 }
 
-const turnRowStyle: React.CSSProperties = {
+const playerColumnStyle: React.CSSProperties = {
+  position: 'absolute',
+  top: 'clamp(76px, 12vh, 90px)',
   display: 'flex',
-  alignItems: 'center',
-  gap: 8,
+  flexDirection: 'column',
+  gap: 'clamp(6px, 1.5vh, 10px)',
+  fontFamily: 'system-ui, sans-serif',
+  color: '#f2ede0',
 }
 
 const turnDotStyle: React.CSSProperties = {
@@ -229,6 +289,15 @@ const turnDotStyle: React.CSSProperties = {
 const hintTextStyle: React.CSSProperties = {
   fontSize: 13,
   color: '#d8d2c2',
+}
+
+const bottomRollButtonStyle: React.CSSProperties = {
+  position: 'absolute',
+  bottom: 20,
+  left: '50%',
+  transform: 'translateX(-50%)',
+  fontSize: 'clamp(16px, 4vw, 19px)',
+  padding: '14px 40px',
 }
 
 // Full pill shape (borderRadius 999), but now with the same solid (non-blurred) offset bottom
