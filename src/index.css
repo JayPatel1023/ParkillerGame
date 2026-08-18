@@ -103,58 +103,12 @@ button {
   }
 }
 
-/* StartScreen's background photo - reported directly, with a phone screenshot: the landscape
-   photo (start.png, ~1.5:1) cropped/framed badly on a tall phone screen, since `cover` has to
-   crop far more of a landscape image to fill a portrait frame than a photo actually composed for
-   that shape. A separate portrait-composed photo (start-mobile.png, supplied directly) swaps in
-   below the breakpoint instead of cropping the landscape one harder - can't be done with the
-   inline backgroundImage alone (no media queries on inline styles), hence this CSS class instead. */
+/* StartScreen's background photo - firstbag.png (supplied directly): a candlelit wood desk with
+   the physical board laid flat and centered, "PARKILLER"/"RULES" books framing it. Unlike the
+   earlier start.png/start-mobile.png pair, this one photo's own composition is already centered
+   and reads fine cropped by `cover` at both landscape and portrait aspect ratios, so there's no
+   separate mobile crop and no per-breakpoint position tuning needed like the previous photo required. */
 .start-bg-photo {
-  background-image: url(/backgrounds/start.png);
-  /* Empirically tuned for start.png's own composition (candle top-left, ROLL DICE tray at the
-     very bottom) - see StartScreen.tsx's own comment on why this exact value. Doesn't apply to
-     start-mobile.png below, which has different content at different proportions. */
-  background-position: center 65%;
-}
-
-@media (max-width: 700px), (orientation: portrait) {
-  .start-bg-photo {
-    background-image: url(/backgrounds/start-mobile.png);
-    /* start-mobile.png's own aspect ratio already closely matches a phone viewport, so cover
-       barely has to crop it - centered is enough, no tuning needed like the desktop photo. */
-    background-position: center;
-  }
-}
-
-/* The dark mask in StartScreen.tsx that hides each background photo's own baked-in fake card (see
-   that file's own comment). Every previous pass used a soft radial ellipse sized generously enough
-   to fully cover the fake card underneath - but reported directly, that same generosity is exactly
-   what made the mask itself show up as an unwanted dark smudge on the wood table, since an ellipse
-   doesn't match the real card's own rectangular shape: wherever the ellipse was wider or taller
-   than the card, it painted a visibly blob-shaped halo past the card's actual edges instead of
-   staying hidden behind it.
-   Rebuilt as a rounded rectangle instead - sized close to the real card's own footprint (clamp()
-   values echo StartScreen's own card padding/content-width, not independently guessed) with just
-   enough overhang to swallow the fake card's border, blurred only enough to soften that overhang's
-   edge. A shape that traces the card's own outline reads as a shadow *behind* the card; an ellipse
-   that doesn't reads as a stain next to it. */
-.start-bg-mask {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: clamp(220px, 33vw, 360px);
-  height: clamp(300px, 60vh, 660px);
-  border-radius: 26px;
-  background: rgba(2, 2, 1, 0.99);
-  filter: blur(22px);
-}
-
-@media (max-width: 700px), (orientation: portrait) {
-  .start-bg-mask {
-    width: clamp(160px, 62vw, 220px);
-    height: clamp(230px, 58vh, 340px);
-    border-radius: 20px;
-    filter: blur(16px);
-  }
+  background-image: url(/backgrounds/firstbag.png);
+  background-position: center;
 }
