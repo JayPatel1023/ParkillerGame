@@ -132,11 +132,22 @@ wherever the rulebook's prose alone was ambiguous.
   eliminating it) is sent straight back to its own yard instead, with no reward, and the move is
   never blocked outright, it always completes first. On a protected/safe square the two simply
   coexist as a barrier instead (PK4).
+- **PK5/PK10**: landing on an existing barrier (2 pawns already sharing that square) never just
+  coexists with both — the Parkiller always eliminates exactly one. A pawn sharing the
+  Parkiller's own color is protected ahead of one that doesn't ("a pawn protects its Parkiller");
+  once color alone doesn't decide it (both share a color, whether that's the Parkiller's own or a
+  third one), arrival order breaks the tie via `Piece.arrivedAt`, a turn-sequence counter
+  (`TurnManager`'s own `nextArrivalSequence`), stamped whenever a piece lands on a new track
+  square.
 - First player to get all 4 pieces home wins immediately (classic mobile-app simplification, not
   the traditional tabletop full-ranking rule).
-- Not implemented: the full PC2.1 barrier-arrival matrix (e.g. "the pawn that arrived last is
-  eliminated" when two different opposing colors already share your entry square) — needs
-  arrival-order tracking not currently in the `Piece` model; scope cut, flagged rather than
+- Not implemented: `Piece.arrivedAt` isn't yet wired into the *entry-square* barrier matrix (PC2.1)
+  the same way it now is for the Parkiller's own barrier landings — e.g. "the pawn that arrived
+  last is eliminated" when two different opposing colors already share your own entry square still
+  just blocks the exit outright. Also not implemented: PK10.1's ~14 hyper-specific scenarios about
+  a Parkiller sitting directly on/near a starting square in combination with various pawn/Parkiller
+  counts already there, and PK9.1's mandatory-barrier-break-on-doubles rule (a player's own barrier
+  must open if a double allows it, ahead of ordinary moves). All scope cuts, flagged rather than
   silently skipped. Also not implemented: the rulebook appendix's V1/V2 team and two-color-per-
   player variants.
 
