@@ -1,5 +1,7 @@
 import type { BoardDefinition } from '../core/board/boardDefinition'
+import type { PieceColor } from '../core/pieceColor'
 import type { Piece, PieceSnapshot } from '../core/pieces/piece'
+import type { Parkiller } from '../core/pieces/parkiller'
 
 export function getPieceWaypoint(piece: Piece, definition: BoardDefinition): [number, number] | null {
   const lane = definition.playerLanes.find((l) => l.color === piece.color)
@@ -123,10 +125,25 @@ export function getCaptureReturnWaypoints(
   return hops
 }
 
-/** Null once eliminated (PK6) - it's simply not rendered anywhere from that point on. */
-export function getParkillerWaypoint(trackPosition: number, state: 'InPlay' | 'Eliminated', definition: BoardDefinition): [number, number] | null {
-  if (state !== 'InPlay') return null
-  return definition.trackWaypoints[trackPosition] ?? null
+// PK1: the rulebook places the Parkiller "at the finish square in the center of the board" before
+// its first move, not out on the main loop - reused directly as its pre-move rest/hop-origin
+// coordinate, since it's already the exact per-color center-area point the corridor art converges
+// on (no new board data needed).
+export function parkillerCenterWaypoint(color: PieceColor, definition: BoardDefinition): [number, number] | null {
+  const lane = definition.playerLanes.find((l) => l.color === color)
+  return lane?.homeCorridorWaypoints[lane.homeCorridorWaypoints.length - 1] ?? null
+}
+
+/** Null once eliminated (PK6) - it's simply not rendered anywhere from that point on. Before its
+ * first move (Parkiller.hasMoved false), renders at the center rather than trackPosition's
+ * home-entrance square - see parkillerCenterWaypoint. */
+export function getParkillerWaypoint(parkiller: Parkiller, definition: BoardDefinition): [number, number] | null {
+  if (parkiller.state !== 'InPlay') return null
+  if (!parkiller.hasMoved) {
+    const center = parkillerCenterWaypoint(parkiller.color, definition)
+    if (center) return center
+  }
+  return definition.trackWaypoints[parkiller.trackPosition] ?? null
 }
 
 // Same square-by-square reconstruction as getHopWaypoints, but walking the shared track loop

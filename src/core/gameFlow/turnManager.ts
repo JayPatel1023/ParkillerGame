@@ -20,6 +20,10 @@ export interface ParkillerMoveResult {
   after: number
   capturedPawn: Piece | null
   capturedParkillerColor: PieceColor | null
+  /** True only for the roll that actually moves this Parkiller for the first time - lets BoardScene
+   * animate that one hop starting from the board's center (see Parkiller.hasMoved) instead of the
+   * home-entrance track square every later hop starts from. */
+  firstMove: boolean
 }
 
 /** Everything BoardScene needs to play a piece's move as a square-by-square hop instead of an
@@ -203,7 +207,7 @@ export class TurnManager {
   private noopParkillerResult(): ParkillerMoveResult {
     const player = this.currentPlayer
     const before = player.parkiller.trackPosition
-    return { color: player.color, before, after: before, capturedPawn: null, capturedParkillerColor: null }
+    return { color: player.color, before, after: before, capturedPawn: null, capturedParkillerColor: null, firstMove: false }
   }
 
   // PK2/PK3: moves the current player's Parkiller by the black die's value, opposite direction
@@ -219,9 +223,11 @@ export class TurnManager {
     const before = parkiller.trackPosition
 
     if (parkiller.state !== 'InPlay') {
-      return { color: player.color, before, after: before, capturedPawn: null, capturedParkillerColor: null }
+      return { color: player.color, before, after: before, capturedPawn: null, capturedParkillerColor: null, firstMove: false }
     }
 
+    const firstMove = !parkiller.hasMoved
+    parkiller.hasMoved = true
     const after = mod(before - blackDieValue, this.board.trackLength)
     parkiller.trackPosition = after
 
@@ -254,7 +260,7 @@ export class TurnManager {
       }
     }
 
-    return { color: player.color, before, after, capturedPawn, capturedParkillerColor }
+    return { color: player.color, before, after, capturedPawn, capturedParkillerColor, firstMove }
   }
 
   private offerMoves() {

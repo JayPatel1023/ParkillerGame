@@ -134,14 +134,19 @@ describe('getHopWaypoints', () => {
 })
 
 describe('getParkillerWaypoint', () => {
-  it('resolves the track waypoint at its current position while InPlay', () => {
+  it('resolves the track waypoint at its current position while InPlay, once it has moved', () => {
     const definition = buildTestDefinition()
-    expect(getParkillerWaypoint(5, 'InPlay', definition)).toEqual([5, 5])
+    expect(getParkillerWaypoint({ color: 'Red', state: 'InPlay', trackPosition: 5, hasMoved: true }, definition)).toEqual([5, 5])
+  })
+
+  it('resolves to its lane\'s center/finish waypoint before its first move (PK1), ignoring trackPosition', () => {
+    const definition = buildTestDefinition()
+    expect(getParkillerWaypoint({ color: 'Red', state: 'InPlay', trackPosition: 15, hasMoved: false }, definition)).toEqual([100, 3])
   })
 
   it('is null once Eliminated, regardless of its last position', () => {
     const definition = buildTestDefinition()
-    expect(getParkillerWaypoint(5, 'Eliminated', definition)).toBeNull()
+    expect(getParkillerWaypoint({ color: 'Red', state: 'Eliminated', trackPosition: 5, hasMoved: true }, definition)).toBeNull()
   })
 })
 
