@@ -37,6 +37,12 @@ declare module 'photon-realtime' {
       maxPlayers: number
       getCustomProperties(): Record<string, unknown>
       setCustomProperties(props: Record<string, unknown>): void
+      /** Defaults to true (confirmed in the SDK source, Room's own constructor) and stays that way
+       * forever unless a client explicitly flips it - a room is NOT automatically closed just
+       * because a game inside it has "started" by this app's own convention. Calling this false
+       * makes the SDK reject any further join attempt with ErrorCode.GameClosed, already mapped to
+       * a friendly reason in photonClient.ts. */
+      setIsOpen(open: boolean): void
     }
 
     const Constants: {
