@@ -18,6 +18,17 @@ import type { MoveOption } from '../core/rules/moveOption'
  */
 export type MoveAnimationRequest = MoveAnimationInfo
 
+// Reported directly: pieces sometimes hopped at a normal, readable pace and sometimes moved "at
+// light speed" - worst with an online bot, but really any roll this client didn't itself trigger
+// (a bot's own roll, or a remote opponent's roll replayed from a broadcast). Root cause: the
+// dice-spin animation only ever played for a roll that went through this hook's own rollDice()
+// below (setRolling(true) then a delayed requestRoll() call) - a bot's rollForBot() and a remote
+// client's replayed requestRoll() both call straight into TurnManager, skipping rollDice()
+// entirely, so `rolling` never turned true and the dice values just snapped in with no spin at
+// all. Moved the spin here instead, into the *event* every roll fires regardless of who
+// triggered it, so it's no longer tied to which code path made the call.
+const DICE_SPIN_MS = 450
+
 export function useTurnManager(turnManager: TurnManagerLike) {
   const [currentPlayer, setCurrentPlayer] = useState<PlayerState>(turnManager.currentPlayer)
   const [lastRoll, setLastRoll] = useState<DiceRoll | null>(null)
@@ -37,11 +48,17 @@ export function useTurnManager(turnManager: TurnManagerLike) {
         setPendingMoves([])
       }),
       turnManager.diceRolled.on((roll) => {
-        setLastRoll(roll)
-        setRolling(false)
-        setEliminatedByDoubles(null)
-        setPendingReward(null)
-        setForfeitedReward(null)
+        // The roll itself (and every consequence of it - Parkiller move, capture, etc.) has
+        // already happened synchronously by the time this event fires, same as every other event
+        // here - only the reveal is delayed, spinning first so the values don't just snap in.
+        setRolling(true)
+        setTimeout(() => {
+          setLastRoll(roll)
+          setRolling(false)
+          setEliminatedByDoubles(null)
+          setPendingReward(null)
+          setForfeitedReward(null)
+        }, DICE_SPIN_MS)
       }),
       turnManager.parkillerMoved.on((result) => setParkillerAnimation(result)),
       turnManager.moveChoicesReady.on((moves) => setPendingMoves(moves)),
@@ -71,9 +88,9 @@ export function useTurnManager(turnManager: TurnManagerLike) {
   }, [turnManager])
 
   function rollDice() {
-    setRolling(true)
-    // Brief spin before resolving, purely for feel - the roll value/result is already deterministic.
-    setTimeout(() => turnManager.requestRoll(), 450)
+    // The spin/reveal delay now lives in the diceRolled listener above, which fires for every
+    // roll regardless of who triggered it - nothing extra to do here beyond the request itself.
+    turnManager.requestRoll()
   }
 
   function chooseMove(piece: Piece) {
