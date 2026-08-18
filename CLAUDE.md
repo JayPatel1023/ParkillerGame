@@ -141,10 +141,11 @@ wherever the rulebook's prose alone was ambiguous.
   square.
 - First player to get all 4 pieces home wins immediately (classic mobile-app simplification, not
   the traditional tabletop full-ranking rule).
-- Not implemented: `Piece.arrivedAt` isn't yet wired into the *entry-square* barrier matrix (PC2.1)
-  the same way it now is for the Parkiller's own barrier landings — e.g. "the pawn that arrived
-  last is eliminated" when two different opposing colors already share your own entry square still
-  just blocks the exit outright. Also not implemented: PK10.1's ~14 hyper-specific scenarios about
+- **PC2.1**: two different-colored opposing pawns already sharing your own entry square are not a
+  real barrier (PC2.4 barriers are same-color, or different colors specifically on a protected
+  square) — exiting is still allowed, eliminating whichever of the two arrived later, same
+  `resolveBarrierElimination` the Parkiller's own barrier landings use.
+- Not implemented: PK10.1's ~14 hyper-specific scenarios about
   a Parkiller sitting directly on/near a starting square in combination with various pawn/Parkiller
   counts already there, and PK9.1's mandatory-barrier-break-on-doubles rule (a player's own barrier
   must open if a double allows it, ahead of ordinary moves). All scope cuts, flagged rather than

@@ -227,6 +227,16 @@ describe('TurnManager - mandatory departure (PC2.1)', () => {
     expect(red.pieces[1].trackPosition).toBe(0)
   })
 
+  // A TurnManager-level "both eliminated" integration test turned out very hard to construct
+  // cleanly: the capture reward is mandatory to claim immediately (PC6.2) before the second
+  // exit's own obligation can resume, and any piece able to receive that reward without moving
+  // the barrier-forming piece itself tends to have its own long reward path wrap back through the
+  // entry square (still holding 2 pieces at that point) and get blocked by the ordinary barrier-
+  // transit rule (PC2.4) - a real rule interaction, not a bug. The underlying single-exit rule
+  // itself (eliminate whichever of two different-colored opponents arrived later) is covered
+  // directly at the parchisRules level instead - see "two *different-colored* opponents on the
+  // entry square..." in parchisRules.test.ts.
+
   it('a double matching the exit roll forces both yard pieces out across the two dice, not just one', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)
