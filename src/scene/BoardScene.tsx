@@ -22,6 +22,7 @@ import {
   getParkillerHopWaypoints,
   getParkillerWaypoint,
   getPieceWaypoint,
+  parkillerCenterWaypoint,
 } from './piecePosition'
 import { toWorldPosition, estimateSquareSize, computeTileCorners, BASE_HEIGHT, FLAT_SURFACE_HEIGHT, BOARD_SIZE } from './boardGeometry'
 import { getColor } from '../core/colorPalette'
@@ -434,12 +435,19 @@ export function BoardScene({
   // so this only recomputes when the move itself changes, not on every unrelated re-render.
   const parkillerHopData = useMemo(() => {
     if (!parkillerAnimation) return null
+    // PK1: the Parkiller's very first move visually departs from the board's center rather than
+    // the home-entrance track square its logical `before` position already sits on (see
+    // Parkiller.hasMoved / parkillerCenterWaypoint) - every later move hops from the real track
+    // square as before.
+    const fromWaypoint = parkillerAnimation.firstMove
+      ? (parkillerCenterWaypoint(parkillerAnimation.color, definition) ?? definition.trackWaypoints[parkillerAnimation.before])
+      : definition.trackWaypoints[parkillerAnimation.before]
     return {
-      hopFrom: toWorldPosition(definition.trackWaypoints[parkillerAnimation.before]),
+      hopFrom: toWorldPosition(fromWaypoint),
       hops: getParkillerHopWaypoints(parkillerAnimation.before, parkillerAnimation.after, definition).map(toWorldPosition),
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [parkillerAnimation?.color, parkillerAnimation?.before, parkillerAnimation?.after, definition])
+  }, [parkillerAnimation?.color, parkillerAnimation?.before, parkillerAnimation?.after, parkillerAnimation?.firstMove, definition])
 
   // Rules apply a capture the instant a move is submitted, but the captured piece only stops
   // rendering frozen at the capture square (see isBeingCaptured below) once the capturing piece's
@@ -636,7 +644,7 @@ export function BoardScene({
           moveAnimation?.capturedParkillerColor === player.color || parkillerAnimation?.capturedParkillerColor === player.color
         const waypoint = isBeingCaptured
           ? (definition.trackWaypoints[player.parkiller.trackPosition] ?? null)
-          : getParkillerWaypoint(player.parkiller.trackPosition, player.parkiller.state, definition)
+          : getParkillerWaypoint(player.parkiller, definition)
         if (!waypoint) return null
         const restPosition: [number, number, number] = toWorldPosition(waypoint, BASE_HEIGHT)
         const parkillerStackGroupKey = parkillerStackKey(player.parkiller)

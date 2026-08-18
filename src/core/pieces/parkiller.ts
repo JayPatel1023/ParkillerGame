@@ -11,19 +11,23 @@ export interface Parkiller {
   color: PieceColor
   state: ParkillerState
   trackPosition: number
+  /**
+   * False until this Parkiller's first actual move. Logically it already sits at
+   * `homeEntranceTrackIndex` (so the very first roll's `mod(before - blackDie, trackLength)` lands
+   * on the right shared-track square, per PK2/PK3), but the rulebook is explicit that it visually
+   * starts "at the finish square in the center of the board", not out on the main loop - reported
+   * directly by the client after seeing it rendered at the home-entrance square instead. The scene
+   * layer (see getParkillerWaypoint in piecePosition.ts) uses this flag to render at the lane's own
+   * center/finish waypoint until the first move actually happens, then switches to trackPosition.
+   */
+  hasMoved: boolean
 }
 
-// Starts at its own lane's home-entrance square (the square regular pieces of this color turn off
-// the main loop into their corridor at) rather than literally inside the center hub - the rulebook
-// places it "at the finish square in the center", but the board data has no waypoint coordinates
-// for the space between the center and the main loop for the Parkiller's own reversed-direction
-// entry, so this reuses an existing, already-measured reference point instead of inventing new
-// board data. Visually it starts right next to the center corridor entrance, close enough to read
-// as "starting from the middle" without needing a separate render-only position.
 export function createParkiller(color: PieceColor, homeEntranceTrackIndex: number): Parkiller {
   return {
     color,
     state: 'InPlay',
     trackPosition: homeEntranceTrackIndex,
+    hasMoved: false,
   }
 }

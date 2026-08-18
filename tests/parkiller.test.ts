@@ -33,7 +33,7 @@ function buildTestBoard(): BoardData {
 
 describe('createParkiller', () => {
   it('starts InPlay at the given home-entrance track index', () => {
-    expect(createParkiller('Red', 19)).toEqual({ color: 'Red', state: 'InPlay', trackPosition: 19 })
+    expect(createParkiller('Red', 19)).toEqual({ color: 'Red', state: 'InPlay', trackPosition: 19, hasMoved: false })
   })
 })
 
@@ -51,7 +51,7 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
 
     manager.requestRoll()
 
-    expect(result).toEqual({ color: 'Red', before: 19, after: 16, capturedPawn: null, capturedParkillerColor: null })
+    expect(result).toEqual({ color: 'Red', before: 19, after: 16, capturedPawn: null, capturedParkillerColor: null, firstMove: true })
     expect(red.parkiller.trackPosition).toBe(16)
   })
 
@@ -72,7 +72,7 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
 
     manager.requestRoll()
 
-    expect(result).toEqual({ color: 'Red', before: 19, after: 16, capturedPawn: blue.pieces[0], capturedParkillerColor: null })
+    expect(result).toEqual({ color: 'Red', before: 19, after: 16, capturedPawn: blue.pieces[0], capturedParkillerColor: null, firstMove: true })
     expect(blue.pieces[0].state).toBe('InYard')
     expect(blue.pieces[0].trackPosition).toBe(-1)
     expect(rewardOffered).toBe(false)
@@ -95,7 +95,7 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
 
     manager.requestRoll()
 
-    expect(result).toEqual({ color: 'Red', before: 19, after: 16, capturedPawn: blue.pieces[0], capturedParkillerColor: null })
+    expect(result).toEqual({ color: 'Red', before: 19, after: 16, capturedPawn: blue.pieces[0], capturedParkillerColor: null, firstMove: true })
     expect(blue.pieces[0].state).toBe('InYard')
     // Red's own pawn is protected by sharing the Parkiller's color - stays right where it was.
     expect(red.pieces[0].state).toBe('OnTrack')
@@ -235,7 +235,7 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     manager.requestRoll()
 
     expect(results).toHaveLength(2)
-    expect(results[1]).toEqual({ color: 'Red', before: 16, after: 16, capturedPawn: null, capturedParkillerColor: null })
+    expect(results[1]).toEqual({ color: 'Red', before: 16, after: 16, capturedPawn: null, capturedParkillerColor: null, firstMove: false })
     expect(red.parkiller.trackPosition).toBe(16)
   })
 
@@ -254,7 +254,7 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
 
     manager.requestRoll()
 
-    expect(result).toEqual({ color: 'Red', before: 7, after: 7, capturedPawn: null, capturedParkillerColor: null })
+    expect(result).toEqual({ color: 'Red', before: 7, after: 7, capturedPawn: null, capturedParkillerColor: null, firstMove: false })
     expect(red.parkiller.trackPosition).toBe(7)
   })
 })
