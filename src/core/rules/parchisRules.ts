@@ -193,6 +193,10 @@ export function applyMove(
   allPlayers: readonly PlayerState[],
   settings: RuleSettings,
   allowParkillerCapture: boolean,
+  // TurnManager's own monotonic counter (not a wall-clock timestamp) - see Piece.arrivedAt's own
+  // comment. Optional/defaulted so every existing caller (tests included) that doesn't care about
+  // arrival order keeps working unchanged.
+  arrivalSequence = 0,
 ): MoveResult {
   const piece = move.piece
   const result: MoveResult = { movedPiece: piece, capturedPiece: null, capturedParkillerColor: null, pieceFinished: false }
@@ -203,6 +207,7 @@ export function applyMove(
       piece.state = 'OnTrack'
       piece.trackPosition = move.resultingTrackPosition
       piece.corridorPosition = -1
+      piece.arrivedAt = arrivalSequence
       // PC2.1: the entry-square safe-zone exception only fires once this exit is *joining* an
       // own pawn already there (piecesOfColorOnTrackSquare now counts the mover itself too, so
       // >1 means at least one other same-color pawn was already on the square) - a first, lone
@@ -310,4 +315,22 @@ function unprotectedOpposingParkillerColorAt(
     if (opponent.parkiller.state === 'InPlay' && opponent.parkiller.trackPosition === trackPosition) return opponent.color
   }
   return null
+}
+
+// PK5/PK10: a Parkiller landing on a square already held by a barrier (2 pawns, own or mixed)
+// never just coexists with both, and never gets blocked either - it always eliminates exactly
+// one of the two. Which one follows the rulebook's own PK10 worked examples: a pawn that shares
+// the Parkiller's own color is protected ahead of one that doesn't ("a pawn protects its
+// Parkiller"/"if one of the pawns is the same color, the other player's pawn is eliminated") -
+// only once color alone doesn't decide it (both pawns share a color, whether that's the
+// Parkiller's own or a third one) does arrival order break the tie ("eliminates the last one to
+// arrive"), using Piece.arrivedAt (a turn-sequence counter, not a timestamp - see its own
+// comment). Pure/read-only - callers apply the actual elimination themselves.
+export function resolveBarrierElimination(moverColor: PieceColor, piecesAtSquare: readonly Piece[]): Piece | null {
+  const [a, b] = piecesAtSquare
+  if (!a || !b) return null
+  const aMatches = a.color === moverColor
+  const bMatches = b.color === moverColor
+  if (aMatches !== bMatches) return aMatches ? b : a // exactly one shares the mover's color - the other one goes
+  return a.arrivedAt >= b.arrivedAt ? a : b // both (mis)match the same way - later arrival goes
 }

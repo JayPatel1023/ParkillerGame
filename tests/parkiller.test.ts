@@ -78,6 +78,30 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     expect(rewardOffered).toBe(false)
   })
 
+  it('landing on a barrier (2 pawns) eliminates only the one that does not share its own color (PK5/PK10)', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 16
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 16 // barrier: Red's own pawn + Blue's, on Red's Parkiller's path
+
+    const dice = new ScriptedDice([1, 1, 3]) // Red's parkiller: 19 -> 16
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let result: ParkillerMoveResult | null = null
+    manager.parkillerMoved.on((r) => (result = r))
+
+    manager.requestRoll()
+
+    expect(result).toEqual({ color: 'Red', before: 19, after: 16, capturedPawn: blue.pieces[0], capturedParkillerColor: null })
+    expect(blue.pieces[0].state).toBe('InYard')
+    // Red's own pawn is protected by sharing the Parkiller's color - stays right where it was.
+    expect(red.pieces[0].state).toBe('OnTrack')
+    expect(red.pieces[0].trackPosition).toBe(16)
+  })
+
   it('does not capture a pawn sitting on a protected square', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)

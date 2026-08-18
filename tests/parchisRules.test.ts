@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { BoardData } from '../src/core/board/boardData'
 import { createPlayerState, hasWon } from '../src/core/gameFlow/playerState'
-import { applyMove, getValidMoves, wouldCapture } from '../src/core/rules/parchisRules'
+import { createPiece } from '../src/core/pieces/piece'
+import { applyMove, getValidMoves, resolveBarrierElimination, wouldCapture } from '../src/core/rules/parchisRules'
 import { defaultRuleSettings } from '../src/core/rules/ruleSettings'
 
 function buildTestBoard(): BoardData {
@@ -309,6 +310,28 @@ describe('parchisRules', () => {
       expect(result.eliminatedByParkiller).toBeFalsy()
       expect(red.pieces[0].state).toBe('OnTrack')
       expect(red.pieces[0].trackPosition).toBe(5)
+    })
+  })
+
+  describe('resolveBarrierElimination (PK5/PK10 - a Parkiller landing on a barrier)', () => {
+    it('when one pawn shares the Parkiller\'s own color, eliminates the other pawn instead (protection)', () => {
+      const own = { ...createPiece('Red', 0), arrivedAt: 5 }
+      const other = { ...createPiece('Blue', 0), arrivedAt: 9 } // arrived later, but color still decides it
+      expect(resolveBarrierElimination('Red', [own, other])).toBe(other)
+      expect(resolveBarrierElimination('Red', [other, own])).toBe(other) // order-independent
+    })
+
+    it('when both pawns share the Parkiller\'s own color, eliminates whichever arrived last', () => {
+      const earlier = { ...createPiece('Red', 0), arrivedAt: 3 }
+      const later = { ...createPiece('Red', 1), arrivedAt: 7 }
+      expect(resolveBarrierElimination('Red', [earlier, later])).toBe(later)
+      expect(resolveBarrierElimination('Red', [later, earlier])).toBe(later)
+    })
+
+    it('when neither pawn shares the Parkiller\'s own color, eliminates whichever arrived last', () => {
+      const earlier = { ...createPiece('Blue', 0), arrivedAt: 2 }
+      const later = { ...createPiece('Gold', 0), arrivedAt: 6 }
+      expect(resolveBarrierElimination('Red', [earlier, later])).toBe(later)
     })
   })
 
