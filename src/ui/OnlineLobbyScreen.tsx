@@ -199,6 +199,11 @@ export default function OnlineLobbyScreen() {
     if (botColors.size > 0) botControllerRef.current = new BotController(bridge, botColors)
 
     bridge.start()
+    // Reported directly: a friend who joined the room code after this point still connected
+    // successfully and ended up a non-functional phantom "player" instead of a clear error - see
+    // closeRoom()'s own comment for the full mechanism. Nothing past this point should be reachable
+    // by a new joiner at all.
+    connection.closeRoom()
     // Mirrored into room properties (not just the broadcast below) so a client that joins or
     // re-renders after this point still sees the game already started - see the lobby-phase
     // effect above for why the broadcast alone isn't enough.

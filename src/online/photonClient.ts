@@ -173,6 +173,23 @@ export class PhotonConnection implements RoomTransport {
     this.client.myRoom().setCustomProperties(props)
   }
 
+  // Reported directly: real players who join a room *after* the Master already clicked "Empezar
+  // partida" (e.g. the Master starting alone/early, or two friends' joins racing the start click)
+  // still connect successfully and land in the game - a room stays open forever by default (see
+  // photon-realtime.d.ts's own setIsOpen comment), this app's own "started" flag on room properties
+  // was never wired up to actually close it. That late joiner's client independently recomputes its
+  // own color via colorsByActorNr from whichever actors happen to be in the room *at that moment* -
+  // completely disconnected from the actorColors map the Master already froze at start time (see
+  // HostTurnManagerBridge) - so it picks a color that's *already* bot-controlled there. The result:
+  // a real person whose every roll/move intent the Master silently rejects (isValidActor fails,
+  // their actorNr was never in that frozen map), while a bot visibly keeps playing "their" seat -
+  // exactly "only the creator can actually play, everyone else can only watch". Closing the room
+  // the instant the game starts makes the SDK reject any further join outright (GameClosed, already
+  // mapped to a clear error in joinRoom() above) instead of silently admitting a phantom player.
+  closeRoom(): void {
+    this.client.myRoom().setIsOpen(false)
+  }
+
   getRoomProperties(): Record<string, unknown> {
     return this.client.myRoom().getCustomProperties()
   }
