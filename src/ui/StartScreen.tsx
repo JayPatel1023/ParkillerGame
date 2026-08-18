@@ -11,10 +11,10 @@ const HELP_URL = 'https://moonlighteditors.com/instructions-parkiller/'
 // plain blue buttons read as a generic web form, not a premium tabletop game. logo-badge.png is a
 // clean circular crop taken directly from the board art's own corner badge (the hooded character +
 // "Parkiller" wordmark it's already drawn with) - reused here rather than commissioning new art.
-// Background: that same reference photo itself, supplied directly as a static asset
-// (public/backgrounds/start.png) - the earlier 3D rotating-board background (StartScreenBackground)
-// was only ever a stand-in built because no such photo existed yet; now that one does, it replaces
-// the 3D scene here rather than the 3D scene trying to recreate it.
+// Background: a real photo (public/backgrounds/firstbag.png, supplied directly) - the earlier 3D
+// rotating-board background (StartScreenBackground) was only ever a stand-in built because no such
+// photo existed yet; now that one does, it replaces the 3D scene here rather than the 3D scene
+// trying to recreate it.
 export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
   const canPlayOnline = Boolean(import.meta.env.VITE_PHOTON_APP_ID)
   // Reported directly: the app had no settings entry point at all. Kept to exactly what was
@@ -23,28 +23,10 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
   const [showSettings, setShowSettings] = useState(false)
   return (
     <div style={{ height: '100%', position: 'relative', backgroundColor: THEME.wood }}>
-      {/* Went through `contain` (whole photo, but leaves letterbox bars on a mismatched aspect
-          ratio) and a blurred-fill hybrid (contain + a blurred `cover` copy behind it to fill
-          those bars) - reported directly, more than once, that any visible bars/seam still read
-          as "not actually filling the screen" even brightened. `cover` alone is the only way to
-          guarantee zero visible margin at every viewport, full stop - the trade-off is that some
-          of the photo's own edges get cropped on an aspect ratio very different from the photo's
-          own ~1.5:1, which is the accepted cost on desktop. On phones specifically, reported
-          directly (with a screenshot) that this cropped/framed badly - a landscape photo has to
-          be cropped far more to fill a tall portrait screen than one actually composed for that
-          shape. start-mobile.png (supplied directly) is that portrait composition; the swap
-          itself lives in index.css's .start-bg-photo (media queries can't go in inline styles). */}
+      {/* `cover` (not `contain`) so the photo fills every viewport edge to edge with zero visible
+          margin - see index.css's own .start-bg-photo comment for why firstbag.png doesn't need
+          the per-breakpoint crop/position tuning an earlier photo here did. */}
       <div className="start-bg-photo" style={{ position: 'absolute', inset: 0, backgroundColor: THEME.wood, backgroundSize: 'cover', backgroundRepeat: 'no-repeat' }} />
-      {/* Reported directly, with a screenshot: the background photo has its own card baked into
-          it (a mockup composition, not a plain empty table), and that fake card doesn't line up
-          with the real one - "PARKILLER" ghosted through doubled, and the fake card's own edges
-          peeked out past the real one's. There's no way to edit the photo itself, so this darkens
-          a card-shaped region behind where the real card sits down to nearly black, erasing the
-          fake card underneath, while leaving the surrounding props (candle, lamp, books) at their
-          normal brightness - only the background is meant to be used here, not its own baked-in
-          card. Shape/sizing lives in index.css's .start-bg-mask (see its own comment) - a rounded
-          rectangle close to the real card's own footprint, not a full-viewport gradient. */}
-      <div className="start-bg-mask" />
       <div
         style={{
           position: 'absolute',
