@@ -207,14 +207,35 @@ const INTRO_STAGGER = 0.09 // seconds between each piece's drop-in entrance, for
 // neighbor instead of the two reading as a symmetric pair. Every slot now moves away from center
 // in a mirrored pair, so with 2 occupants both are offset - equally, in opposite directions -
 // instead of one sitting exactly where a lone occupant normally would.
+//
+// Reported directly, a third time, with a screenshot: still spilling past the tile's own drawn
+// border, "무질서하게" (in a disorderly way) - these were fixed *world-unit* offsets, tuned by eye
+// against roughly one board's own tile size, but real tile size varies noticeably by board
+// (estimateSquareSize: ~0.31 world units on the 3-player board's wide tiles vs. ~0.22 on the
+// 6-player board's narrow ones - see boardGeometry.ts). A fixed offset that looked fine on one
+// board necessarily overshoots a smaller tile on another. These are now *fractions of that
+// board's own measured tile size* (applied in localStackOffset below, multiplied by the live
+// `tileSize` computed once per board) instead of an absolute world-unit guess, so the same
+// relative spacing holds on every board - each board's own stacked pieces stay within roughly
+// the same proportion of their own tile, not a constant that only happened to fit one of them.
 const STACK_OFFSETS: [number, number][] = [
-  [-0.1, -0.1],
-  [0.1, 0.1],
-  [0.1, -0.1],
-  [-0.1, 0.1],
-  [0, 0.18],
-  [0, -0.18],
+  [-0.2, -0.2],
+  [0.2, 0.2],
+  [0.2, -0.2],
+  [-0.2, 0.2],
+  [0, 0.36],
+  [0, -0.36],
 ]
+
+// Reported directly alongside the above: even correctly positioned, two full-size pieces plus
+// the Parkiller's own larger footprint (see ParkillerMesh's own BODY_PROFILE_RAW - visibly wider
+// than a pawn) simply don't all fit inside the smallest boards' tiles (6-player: ~0.22 world
+// units wide) without *some* overlap of their own geometry - there is no offset large enough to
+// separate them that also keeps every piece's full radius inside a tile that size. Shrinking
+// every occupant slightly whenever a square is shared narrows that gap - not a full fix on its
+// own (still an offset problem first), but makes "inside the tile" actually reachable instead of
+// geometrically impossible for the tightest boards.
+const CROWDED_SCALE = 0.72
 
 // Unit tangent (along the path) and normal (across it) at a given waypoint index, from its
 // immediate neighbors - same direction-only math as computeTileCorners' own dirOf, reused here so
@@ -233,14 +254,23 @@ function localTangentNormal(waypoints: [number, number][], index: number): { tan
   return { tangent, normal: [-tangent[1], tangent[0]] }
 }
 
-// Rotates a STACK_OFFSETS entry (given in local [along, across] terms) into a world-space [x, z]
-// offset, using the track's own local direction at that waypoint instead of the world's fixed
-// axes - see STACK_OFFSETS' own comment for why. `waypoints` is null for a piece the caller
-// couldn't resolve a lane for (shouldn't normally happen); falls back to the raw offset as-is.
-function localStackOffset(waypoints: [number, number][] | null, index: number, along: number, across: number): [number, number] {
+// Rotates a STACK_OFFSETS entry (given as *fractions* of this board's own tile size, in local
+// [along, across] terms) into a world-space [x, z] offset, using the track's own local direction
+// at that waypoint instead of the world's fixed axes - see STACK_OFFSETS' own comment for why on
+// both counts. `waypoints` is null for a piece the caller couldn't resolve a lane for (shouldn't
+// normally happen); falls back to the raw (unscaled, unrotated) fraction as-is.
+function localStackOffset(
+  waypoints: [number, number][] | null,
+  index: number,
+  along: number,
+  across: number,
+  tileSize: number,
+): [number, number] {
   if (!waypoints || !waypoints[index]) return [along, across]
   const { tangent, normal } = localTangentNormal(waypoints, index)
-  return [along * tangent[0] + across * normal[0], along * tangent[1] + across * normal[1]]
+  const scaledAlong = along * tileSize
+  const scaledAcross = across * tileSize
+  return [scaledAlong * tangent[0] + scaledAcross * normal[0], scaledAlong * tangent[1] + scaledAcross * normal[1]]
 }
 
 // Which waypoint array/index a piece's own current square is measured against, for
@@ -532,10 +562,11 @@ export function BoardScene({
         const stackKey = stackKeyFor(piece)
         const group = stackKey ? stackGroups.get(stackKey) : undefined
         const restPosition: [number, number, number] = worldPos
+        const crowded = Boolean(group && group.length > 1)
         if (group && group.length > 1) {
           const [along, across] = STACK_OFFSETS[group.indexOf(pawnOccupantId(piece)) % STACK_OFFSETS.length]
           const stackWp = stackWaypointsFor(piece, definition)
-          const [ox, oz] = localStackOffset(stackWp?.waypoints ?? null, stackWp?.index ?? -1, along, across)
+          const [ox, oz] = localStackOffset(stackWp?.waypoints ?? null, stackWp?.index ?? -1, along, across, tileSize)
           restPosition[0] += ox
           restPosition[2] += oz
         }
@@ -569,6 +600,7 @@ export function BoardScene({
             selectable={selectablePieces.has(piece)}
             onSelect={onSelectPiece}
             isCurrentTurn={piece.color === currentPlayerColor}
+            crowdedScale={crowded ? CROWDED_SCALE : 1}
           />
         )
       })}
@@ -598,9 +630,10 @@ export function BoardScene({
         const restPosition: [number, number, number] = toWorldPosition(waypoint, BASE_HEIGHT)
         const parkillerStackGroupKey = parkillerStackKey(player.parkiller)
         const parkillerGroup = parkillerStackGroupKey ? stackGroups.get(parkillerStackGroupKey) : undefined
+        const parkillerCrowded = Boolean(parkillerGroup && parkillerGroup.length > 1)
         if (parkillerGroup && parkillerGroup.length > 1) {
           const [along, across] = STACK_OFFSETS[parkillerGroup.indexOf(parkillerOccupantId(player.color)) % STACK_OFFSETS.length]
-          const [ox, oz] = localStackOffset(definition.trackWaypoints, player.parkiller.trackPosition, along, across)
+          const [ox, oz] = localStackOffset(definition.trackWaypoints, player.parkiller.trackPosition, along, across, tileSize)
           restPosition[0] += ox
           restPosition[2] += oz
         }
@@ -627,6 +660,7 @@ export function BoardScene({
             hops={hops}
             onHopsComplete={isAnimating ? onParkillerAnimationComplete : undefined}
             introDelay={(allPieces.length + index) * INTRO_STAGGER}
+            crowdedScale={parkillerCrowded ? CROWDED_SCALE : 1}
           />
         )
       })}
