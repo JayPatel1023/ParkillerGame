@@ -41,7 +41,7 @@ describe('BotController', () => {
     const transport = network.createTransport(MASTER_ACTOR)
     // No actorColors entries at all - both seats are bots, nobody is a connected human actor.
     const host = new HostTurnManagerBridge(inner, dice, players, transport, new Map<number, PieceColor>())
-    const bots = new BotController(host, new Set<PieceColor>(['Red', 'Blue']), 10)
+    const bots = new BotController(host, new Set<PieceColor>(['Red', 'Blue']), 10, 2, 2)
 
     host.start()
 
