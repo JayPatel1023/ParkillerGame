@@ -19,6 +19,10 @@ interface ParkillerMeshProps {
   hops: [number, number, number][]
   onHopsComplete?: () => void
   introDelay: number
+  /** BoardScene's own CROWDED_SCALE (< 1) whenever this Parkiller shares its square with another
+   * occupant, 1 otherwise - see that constant's own comment (in BoardScene.tsx, next to
+   * PieceMesh's matching prop) for why. */
+  crowdedScale?: number
 }
 
 // null when `from`/`to` are (near-)identical - happens when a Parkiller is captured/eliminated
@@ -253,7 +257,7 @@ export function ParkillerModel({ color, config }: { color: PieceColor; config: P
   )
 }
 
-export function ParkillerMesh({ color, restPosition, facingTarget, hopFrom, hops, onHopsComplete, introDelay }: ParkillerMeshProps) {
+export function ParkillerMesh({ color, restPosition, facingTarget, hopFrom, hops, onHopsComplete, introDelay, crowdedScale = 1 }: ParkillerMeshProps) {
   const meshRef = useRef<Group>(null)
   const hopIndexRef = useRef(0)
   const elapsedRef = useRef(0)
@@ -329,7 +333,7 @@ export function ParkillerMesh({ color, restPosition, facingTarget, hopFrom, hops
   })
 
   return (
-    <group ref={meshRef} position={restPosition}>
+    <group ref={meshRef} position={restPosition} scale={crowdedScale}>
       <ParkillerModel color={color} config={DEFAULT_PARKILLER_CONFIG} />
     </group>
   )
