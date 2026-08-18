@@ -118,6 +118,11 @@ interface PieceMeshProps {
    * animated ring/marker/flash below. Without `isCurrentTurn` at all, before rolling there was no
    * visual indication of which pieces on the board are even yours this turn. */
   isCurrentTurn: boolean
+  /** BoardScene's own CROWDED_SCALE (< 1) whenever this piece shares its square with another
+   * occupant, 1 otherwise - see that constant's own comment for why. Multiplied into the same
+   * scale the selectable/idle animation already drives, not a separate transform, so a crowded
+   * piece still pops on selection the same way an uncrowded one does, just smaller throughout. */
+  crowdedScale?: number
 }
 
 // Movable cue, keyed off `selectable` (not `isCurrentTurn` - see the prop doc above): a
@@ -162,6 +167,7 @@ export function PieceMesh({
   selectable,
   onSelect,
   isCurrentTurn,
+  crowdedScale = 1,
 }: PieceMeshProps) {
   const meshRef = useRef<Group>(null)
   const hopIndexRef = useRef(0)
@@ -200,7 +206,7 @@ export function PieceMesh({
     const flashFade = selectable ? 1 - easeOutCubic(flashT) : 0
 
     mesh.scale.setScalar(
-      selectable ? THREE.MathUtils.lerp(IDLE_SCALE, SELECTABLE_SCALE, easeOutBack(flashT)) : IDLE_SCALE,
+      crowdedScale * (selectable ? THREE.MathUtils.lerp(IDLE_SCALE, SELECTABLE_SCALE, easeOutBack(flashT)) : IDLE_SCALE),
     )
     if (bodyMaterialRef.current) {
       const steadyEmissive = selectable ? SELECTABLE_EMISSIVE : isCurrentTurn ? TURN_EMISSIVE : IDLE_EMISSIVE
