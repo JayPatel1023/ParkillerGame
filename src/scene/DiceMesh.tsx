@@ -32,10 +32,11 @@ const DIE_SPACING = 0.55
 // gap than the plain column spacing, since the black die is now physically bigger and would
 // otherwise overlap the white dice's row.
 const ROW_SPACING = 0.66
-// Reported directly: the dice read as too large on the board - not by a lot, just enough to feel
-// oversized next to the pieces. Trimmed about a sixth off (0.5 -> 0.42), keeping DIE_SPACING/
-// ROW_SPACING as-is (smaller dice only means more clearance between them, never less).
-const DIE_SIZE = 0.42
+// Reported directly, twice now: the dice read as too large on the board - not by a lot, just
+// enough to feel oversized next to the pieces. Trimmed about a sixth off (0.5 -> 0.42) the first
+// time, then further (0.42 -> 0.34) the second - keeping DIE_SPACING/ROW_SPACING as-is (smaller
+// dice only means more clearance between them, never less).
+const DIE_SIZE = 0.34
 // Reference photos (reported directly, twice) show the black die - the one that moves the
 // Parkiller - is noticeably bigger than the two white dice, not the same size with just a
 // different color. 30% bigger reads as clearly larger without dwarfing the white pair.

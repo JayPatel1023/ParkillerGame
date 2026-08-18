@@ -241,8 +241,12 @@ const STACK_OFFSETS: [number, number][] = [
 // separate them that also keeps every piece's full radius inside a tile that size. Shrinking
 // every occupant slightly whenever a square is shared narrows that gap - not a full fix on its
 // own (still an offset problem first), but makes "inside the tile" actually reachable instead of
-// geometrically impossible for the tightest boards.
-const CROWDED_SCALE = 0.72
+// geometrically impossible for the tightest boards. Reported directly a second time, still
+// spilling past a home-corridor square specifically (narrower than a main track tile) - shrunk
+// further (0.72 -> 0.6), verified against the real per-board tile measurements to bring the worst
+// case (the Parkiller, on the tightest board) down to only ~0.01 world units of residual overspill
+// - not zero, but close, while still reading as "a pawn", not a miniature.
+const CROWDED_SCALE = 0.6
 
 // Unit tangent (along the path) and normal (across it) at a given waypoint index, from its
 // immediate neighbors - same direction-only math as computeTileCorners' own dirOf, reused here so
