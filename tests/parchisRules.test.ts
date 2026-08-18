@@ -255,6 +255,29 @@ describe('parchisRules', () => {
       const moves = getValidMoves(board, red, [red, blue], 5, settings)
       expect(moves.find((m) => m.kind === 'ExitYard')).toBeUndefined()
     })
+
+    it('two *different-colored* opponents on the entry square are not a barrier - exit is allowed, eliminating whichever arrived later', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+      const gold = createPlayerState('Gold', board)
+      blue.pieces[0].state = 'OnTrack'
+      blue.pieces[0].trackPosition = 0
+      blue.pieces[0].arrivedAt = 3 // arrived first
+      gold.pieces[0].state = 'OnTrack'
+      gold.pieces[0].trackPosition = 0
+      gold.pieces[0].arrivedAt = 7 // arrived later - this one goes
+
+      const settings = defaultRuleSettings()
+      const exitMove = getValidMoves(board, red, [red, blue, gold], 5, settings).find((m) => m.kind === 'ExitYard')
+      expect(exitMove).toBeTruthy()
+
+      const result = applyMove(board, exitMove!, [red, blue, gold], settings, true)
+      expect(result.capturedPiece).toBe(gold.pieces[0])
+      expect(gold.pieces[0].state).toBe('InYard')
+      expect(blue.pieces[0].state).toBe('OnTrack') // the earlier arrival is untouched
+      expect(blue.pieces[0].trackPosition).toBe(0)
+    })
   })
 
   describe('landing on an opposing Parkiller (PK5)', () => {
