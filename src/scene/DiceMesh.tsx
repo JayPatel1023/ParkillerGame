@@ -37,10 +37,11 @@ const ROW_SPACING = 0.66
 // time, then further (0.42 -> 0.34) the second - keeping DIE_SPACING/ROW_SPACING as-is (smaller
 // dice only means more clearance between them, never less).
 const DIE_SIZE = 0.34
-// Reference photos (reported directly, twice) show the black die - the one that moves the
-// Parkiller - is noticeably bigger than the two white dice, not the same size with just a
-// different color. 30% bigger reads as clearly larger without dwarfing the white pair.
-const BLACK_DIE_SCALE = 1.3
+// Reference photos had previously shown the black die - the one that moves the Parkiller -
+// noticeably bigger than the two white dice, so it was scaled up 30% to match. Reported directly
+// since, in the shipped game itself rather than those reference photos: make it the same size as
+// the white pair instead - reverted to 1.
+const BLACK_DIE_SCALE = 1
 const BLACK_DIE_SIZE = DIE_SIZE * BLACK_DIE_SCALE
 
 function pipPositions(value: number): [number, number][] {
