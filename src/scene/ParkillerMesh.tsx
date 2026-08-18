@@ -77,22 +77,25 @@ const BODY_PROFILE_RAW: [number, number][] = [
   [0.5, 1.22],
   [0.4, 1.45],
   [0.3, 1.68],
-  [0.23, 1.85],
-  [0.2, 2.0],
+  [0.22, 1.85],
+  [0.17, 2.0],
 ]
 
-// Tapers continuously from the shoulder to a sharp point, matching every view on the sheet - the
-// old profile's radius actually *increased* from 0.26 to 0.29 between y=2.0 and y=2.32 before
-// tapering, which is exactly the mid-hood bulge reported as wrong.
+// Tapers continuously from the hood's own belly to a sharp point, matching every view on the sheet
+// - but the belly itself now flares noticeably wider than the neck it sits on (0.27 vs the body's
+// own 0.17), not just a hair wider (was 0.22 vs 0.2) - reported directly ("Los Parkis deben tener
+// forma de Parkis"): at the game's normal in-play camera distance and steep top-down angle (very
+// different from the reference photos' eye-level shots), a 10%-ish radius bump was too subtle to
+// read as a separate hood at all, leaving the whole figure looking like one featureless cone.
 const HOOD_PROFILE_RAW: [number, number][] = [
-  [0.2, 2.0],
-  [0.22, 2.05],
-  [0.21, 2.15],
-  [0.19, 2.3],
-  [0.16, 2.45],
-  [0.12, 2.6],
-  [0.08, 2.72],
-  [0.04, 2.82],
+  [0.17, 2.0],
+  [0.27, 2.08],
+  [0.25, 2.2],
+  [0.21, 2.35],
+  [0.16, 2.5],
+  [0.11, 2.63],
+  [0.06, 2.75],
+  [0.02, 2.85],
   [0.0, 2.9],
 ]
 
@@ -151,14 +154,19 @@ export const DEFAULT_PARKILLER_CONFIG: ParkillerGeometryConfig = {
   // Euler.setFromQuaternion, not hand-derived trig - a 2-angle-only derivation silently drops the
   // rotation.y component whenever the target direction doesn't lie exactly in the X-Z-free plane,
   // which is exactly what produced the wrong-by-150° result above).
+  // Positioned further out from center than the body's own radius at shoulder height (~0.54 at
+  // y=1.12) so the capsule clearly protrudes past the body's silhouette instead of sitting mostly
+  // inside it - reported directly that the arms read as barely-visible bumps rather than the
+  // reference's two distinct hanging limbs, especially from the game's own steep top-down camera
+  // rather than the reference photos' eye-level shots.
   arms: [
     {
-      arm: { position: [0.515, 1.12, 0.18], rotation: [0.255, -0.781, -2.537], scale: [0.12, 0.42, 0.14] },
-      hand: { position: [0.65, 0.82, 0.24], scale: [0.17, 0.21, 0.17] },
+      arm: { position: [0.58, 1.12, 0.18], rotation: [0.255, -0.781, -2.537], scale: [0.12, 0.42, 0.14] },
+      hand: { position: [0.72, 0.82, 0.24], scale: [0.19, 0.23, 0.19] },
     },
     {
-      arm: { position: [-0.515, 1.12, 0.18], rotation: [0.255, 0.781, 2.537], scale: [0.12, 0.42, 0.14] },
-      hand: { position: [-0.65, 0.82, 0.24], scale: [0.17, 0.21, 0.17] },
+      arm: { position: [-0.58, 1.12, 0.18], rotation: [0.255, 0.781, 2.537], scale: [0.12, 0.42, 0.14] },
+      hand: { position: [-0.72, 0.82, 0.24], scale: [0.19, 0.23, 0.19] },
     },
   ],
   fold: { position: [0, 0.75, 0.52], scale: [0.1, 0.5, 0.06] },
