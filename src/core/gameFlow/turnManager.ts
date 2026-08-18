@@ -2,7 +2,7 @@ import type { BoardData } from '../board/boardData'
 import { Dice, type DiceLike } from '../dice'
 import type { PieceColor } from '../pieceColor'
 import { snapshotPiece, type Piece, type PieceSnapshot } from '../pieces/piece'
-import { applyMove, getValidMoves, wouldCapture } from '../rules/parchisRules'
+import { applyMove, getValidMoves, resolveBarrierElimination, wouldCapture } from '../rules/parchisRules'
 import type { MoveOption, MoveResult } from '../rules/moveOption'
 import type { RuleSettings } from '../rules/ruleSettings'
 import { hasWon, type PlayerState } from './playerState'
@@ -108,6 +108,10 @@ export class TurnManager {
   private currentPlayerIndex = 0
   private consecutiveDoubles = 0
   private lastMovedPiece: Piece | null = null
+  // PK5/PK10's several "eliminates whichever pawn arrived last" rules need a shared, game-wide
+  // ordering across every piece's own landing, not per-piece state - see Piece.arrivedAt's own
+  // comment for why this is a plain counter, not a timestamp.
+  private nextArrivalSequence = 1
   private diceState: DiceState | null = null
   private pendingMoves: MoveOption[] | null = null
   // PK2/PK6a: the black die only rolls once per actual turn - skipped on the bonus turn granted by
@@ -206,7 +210,9 @@ export class TurnManager {
   // (decreasing track index) from every regular piece. PK5/PK6: eliminates whichever opposing
   // pawn or Parkiller it lands on exactly, if any - a captured pawn goes back to its yard with no
   // reward to its owner (PK5); a captured opposing Parkiller earns this player PK7's reward,
-  // offered by requestRoll() right after this returns.
+  // offered by requestRoll() right after this returns. PK5/PK10: landing on an existing barrier
+  // (2 pawns already sharing that square) doesn't just coexist or get blocked - it always
+  // eliminates exactly one of the two, per resolveBarrierElimination's own rules.
   private resolveParkillerMove(blackDieValue: number): ParkillerMoveResult {
     const player = this.currentPlayer
     const parkiller = player.parkiller
@@ -221,16 +227,20 @@ export class TurnManager {
 
     let capturedPawn: Piece | null = null
     if (!this.board.safeTrackIndices.has(after)) {
-      outer: for (const opponent of this.players) {
-        if (opponent.color === player.color) continue
-        for (const piece of opponent.pieces) {
-          if (piece.state === 'OnTrack' && piece.trackPosition === after) {
-            piece.state = 'InYard'
-            piece.trackPosition = -1
-            capturedPawn = piece
-            break outer
-          }
+      const piecesThere: Piece[] = []
+      for (const p of this.players) {
+        for (const piece of p.pieces) {
+          if (piece.state === 'OnTrack' && piece.trackPosition === after) piecesThere.push(piece)
         }
+      }
+      const target =
+        piecesThere.length >= 2
+          ? resolveBarrierElimination(player.color, piecesThere)
+          : (piecesThere.find((p) => p.color !== player.color) ?? null)
+      if (target) {
+        target.state = 'InYard'
+        target.trackPosition = -1
+        capturedPawn = target
       }
     }
 
@@ -316,7 +326,7 @@ export class TurnManager {
     const isRewardMove = move.diceSource === 'reward'
     const before = snapshotPiece(chosenPiece)
 
-    const result = applyMove(this.board, move, this.players, this.settings, this.parkillerCapturableThisRoll)
+    const result = applyMove(this.board, move, this.players, this.settings, this.parkillerCapturableThisRoll, this.nextArrivalSequence++)
     // PK6/PK8: the window to kill the Parkiller with a common piece closes after this roll's first
     // move, whether or not it was actually used for that.
     this.parkillerCapturableThisRoll = false

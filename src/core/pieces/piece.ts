@@ -8,6 +8,11 @@ export interface Piece {
   state: PieceState
   trackPosition: number
   corridorPosition: number
+  /** A monotonically increasing sequence number (TurnManager's own counter, not a wall-clock
+   * timestamp), stamped whenever this piece lands on a new track square - PK5/PK10's several
+   * "eliminates whichever pawn arrived last" rules need to compare two pieces' own arrival order,
+   * which nothing else here tracks. 0 for a piece that has never landed on the track yet. */
+  arrivedAt: number
 }
 
 export function createPiece(color: PieceColor, pieceIndex: number): Piece {
@@ -17,6 +22,7 @@ export function createPiece(color: PieceColor, pieceIndex: number): Piece {
     state: 'InYard',
     trackPosition: -1,
     corridorPosition: -1,
+    arrivedAt: 0,
   }
 }
 
