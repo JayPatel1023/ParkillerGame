@@ -36,7 +36,10 @@ import { getColor } from '../core/colorPalette'
 // negligible at this FOV/distance/tilt combination for pieces near the board's center but grows
 // toward the corners - acceptable for the requested look, but worth knowing if a piece ever looks
 // like it's sitting slightly off its square.
-const SHOW_HOME_CORRIDOR_DEBUG = false
+// Requested directly, right after the track path itself: also show each lane's own path from the
+// main loop into the center (home corridor) - the board art draws no squares for that stretch at
+// all, so without this line there'd be no visible line there even with the track path shown.
+const SHOW_HOME_CORRIDOR_DEBUG = true
 // Requested directly: show the track's own waypoint path as a visible line on every board, to
 // check piece positioning against it directly instead of eyeballing screenshots. TrackDebugPath
 // below already existed as a dev aid (a magenta line through every trackWaypoint, larger yellow
