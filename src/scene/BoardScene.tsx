@@ -37,15 +37,11 @@ import { getColor } from '../core/colorPalette'
 // negligible at this FOV/distance/tilt combination for pieces near the board's center but grows
 // toward the corners - acceptable for the requested look, but worth knowing if a piece ever looks
 // like it's sitting slightly off its square.
-// Requested directly, right after the track path itself: also show each lane's own path from the
-// main loop into the center (home corridor) - the board art draws no squares for that stretch at
-// all, so without this line there'd be no visible line there even with the track path shown.
-const SHOW_HOME_CORRIDOR_DEBUG = true
-// Requested directly: show the track's own waypoint path as a visible line on every board, to
-// check piece positioning against it directly instead of eyeballing screenshots. TrackDebugPath
-// below already existed as a dev aid (a magenta line through every trackWaypoint, larger yellow
-// dots on real safe squares) - turned on for all 5 player counts rather than none.
-const TRACK_DEBUG_PLAYER_COUNTS = new Set<number>([2, 3, 4, 5, 6])
+// Both debug overlays below (magenta track path, home-corridor path) were turned on temporarily to
+// check piece positioning directly instead of eyeballing screenshots - reported directly to turn
+// them back off now that positioning has been verified.
+const SHOW_HOME_CORRIDOR_DEBUG = false
+const TRACK_DEBUG_PLAYER_COUNTS = new Set<number>()
 
 const FOV_DEGREES = 45
 const DEFAULT_POLAR_ANGLE = 0.85 // ~49° off vertical - shallower than before so more of the board's far side stays in frame
