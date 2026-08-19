@@ -58,7 +58,7 @@ function colorsByActorNr(actorNrs: readonly number[], colors: readonly PieceColo
   return map
 }
 
-type Phase = 'connecting' | 'error' | 'menu' | 'creating' | 'joining' | 'lobby' | 'game'
+type Phase = 'connecting' | 'error' | 'menu' | 'creating' | 'joining' | 'lobby' | 'game' | 'stopped'
 
 export default function OnlineLobbyScreen() {
   const [phase, setPhase] = useState<Phase>('connecting')
@@ -68,11 +68,18 @@ export default function OnlineLobbyScreen() {
   const [roomCode, setRoomCode] = useState('')
   const [seats, setSeats] = useState<ActorInfo[]>([])
   const [session, setSession] = useState<GameSession | null>(null)
+  // Set only once the game actually starts - who left, so the "stopped" screen can say so.
+  const [stopReason, setStopReason] = useState('')
   const connectionRef = useRef<PhotonConnection | null>(null)
   // Stored so the cleanup below can dispose it - startGame() constructs this imperatively (only
   // when bot seats exist), not from its own effect, so nothing else was holding a reference to
   // stop its turnStarted/moveChoicesReady subscriptions and pending setTimeouts on unmount.
   const botControllerRef = useRef<BotController | null>(null)
+  // Which actorNr controls which color, frozen at the moment the game actually started - the same
+  // mapping every client independently freezes (see startGame()/startAsRemote() below), used only
+  // to tell a real departing player's seat apart from a bot's the instant they leave (see the
+  // actor-left effect below). A bot has no connected actor at all, so it can never appear here.
+  const realSeatsRef = useRef<Record<number, PieceColor>>({})
 
   useEffect(() => {
     const appId = import.meta.env.VITE_PHOTON_APP_ID
@@ -119,18 +126,41 @@ export default function OnlineLobbyScreen() {
     if (!connection || phase !== 'lobby' || connection.isMasterClient()) return
     const props = connection.getRoomProperties()
     if (props.started) {
-      startAsRemote(connection, props.startedColors as PieceColor[])
+      startAsRemote(connection, props.startedColors as PieceColor[], props.startedSeats as Record<number, PieceColor>)
       return
     }
     return connection.onMessage((data) => {
       const msg = data as GameMessage
       if (msg.type !== 'gameStarted') return
-      startAsRemote(connection, msg.colors)
+      startAsRemote(connection, msg.colors, msg.seats)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
 
-  function startAsRemote(connection: PhotonConnection, colors: PieceColor[]) {
+  // Reported directly: if a real player left an in-progress game, everyone else just kept playing
+  // shorthanded instead of stopping - wanted to know who left and have the game end there for
+  // everyone still connected. Photon's own actor-leave event already reaches every client in the
+  // room independently (not just the Master), so each client detects this and stops itself locally
+  // - no extra broadcast needed. realSeatsRef (frozen the instant the game actually started, by
+  // both startGame() and startAsRemote() below) is what tells a real player's seat apart from a
+  // bot's - a bot was never a connected actor, so it can never fire this at all.
+  useEffect(() => {
+    const connection = connectionRef.current
+    if (!connection || phase !== 'game') return
+    return connection.onActorLeft((actorNr) => {
+      const color = realSeatsRef.current[actorNr]
+      if (!color) return
+      botControllerRef.current?.dispose()
+      botControllerRef.current = null
+      session?.turnManager.dispose?.()
+      setSession(null)
+      setStopReason(`${color} salió de la sala - la partida se detuvo.`)
+      setPhase('stopped')
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase])
+
+  function startAsRemote(connection: PhotonConnection, colors: PieceColor[], seats: Record<number, PieceColor>) {
     const board = toBoardData(BOARD_DEFINITIONS[colors.length])
     const players = colors.map((color) => createPlayerState(color, board))
     const diceQueue = new QueueDice()
@@ -138,6 +168,7 @@ export default function OnlineLobbyScreen() {
     const myColor = colorsByActorNr(connection.getActors().map((a) => a.actorNr), colors).get(connection.localActorNr)
     const bridge = new RemoteTurnManager(inner, diceQueue, players, connection, myColor ?? null)
     bridge.start()
+    realSeatsRef.current = seats ?? {}
     setSession({ turnManager: bridge, players })
     setPhase('game')
   }
@@ -204,11 +235,12 @@ export default function OnlineLobbyScreen() {
     // closeRoom()'s own comment for the full mechanism. Nothing past this point should be reachable
     // by a new joiner at all.
     connection.closeRoom()
+    realSeatsRef.current = Object.fromEntries(actorColors)
     // Mirrored into room properties (not just the broadcast below) so a client that joins or
     // re-renders after this point still sees the game already started - see the lobby-phase
     // effect above for why the broadcast alone isn't enough.
-    connection.setRoomProperties({ started: true, startedColors: colors })
-    connection.broadcast({ type: 'gameStarted', colors, seats: Object.fromEntries(actorColors) })
+    connection.setRoomProperties({ started: true, startedColors: colors, startedSeats: realSeatsRef.current })
+    connection.broadcast({ type: 'gameStarted', colors, seats: realSeatsRef.current })
     setSession({ turnManager: bridge, players })
     setPhase('game')
   }
@@ -244,6 +276,15 @@ export default function OnlineLobbyScreen() {
         {phase === 'connecting' && <p style={hintStyle}>Conectando a Photon...</p>}
 
         {phase === 'error' && <p style={{ ...hintStyle, color: '#e8a15c' }}>{errorMessage}</p>}
+
+        {phase === 'stopped' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 18, width: '100%' }}>
+            <p style={{ ...hintStyle, color: '#e8a15c', fontSize: 15 }}>{stopReason}</p>
+            <button className="chunky-btn" onClick={() => setPhase('menu')} style={chunkyButtonStyle(true)}>
+              Volver al menú
+            </button>
+          </div>
+        )}
 
         {phase === 'menu' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 22, width: '100%' }}>

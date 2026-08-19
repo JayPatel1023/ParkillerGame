@@ -259,6 +259,24 @@ export class PhotonConnection implements RoomTransport {
     }
   }
 
+  // Reported directly: if a real player leaves an in-progress online game, the rest of the room
+  // just silently kept playing shorthanded instead of stopping - wanted to know *who* left and have
+  // the game end there. Unlike onActorsChanged above (a plain "something changed, re-fetch
+  // getActors()" signal only wired up during the lobby phase), this identifies exactly which actor
+  // left, for as long as its caller cares to listen (including during an active game) - wraps
+  // whatever onActorLeave handler is already set (checkMasterChanged, in the constructor) the same
+  // way onActorsChanged does, rather than replacing it outright.
+  onActorLeft(listener: (actorNr: number) => void): () => void {
+    const prev = this.client.onActorLeave
+    this.client.onActorLeave = (actor, cleanup) => {
+      prev?.(actor, cleanup)
+      listener(actor.actorNr)
+    }
+    return () => {
+      this.client.onActorLeave = prev
+    }
+  }
+
   disconnect(): void {
     this.client.disconnect()
   }
