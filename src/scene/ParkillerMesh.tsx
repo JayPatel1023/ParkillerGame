@@ -7,6 +7,12 @@ import type { PieceColor } from '../core/pieceColor'
 import { BASE_HEIGHT } from './boardGeometry'
 import { BOUNCE_HEIGHT, HOP_DURATION, INTRO_DURATION, INTRO_X_OFFSET, INTRO_Y_START, MAX_FRAME_DELTA, easeOutBounce, easeOutCubic } from './PieceMesh'
 
+// Used only for the Parkiller's own first-ever move, for the hops that walk the connecting path
+// from the center hub out to the main loop (see fastHopCount below) - brisk enough to read as a
+// quick "emerging from the center" flourish distinct from the real, countable per-die hops that
+// follow, but still a visible walk rather than the instant teleport this whole mechanic replaced.
+const FAST_HOP_DURATION = HOP_DURATION / 3
+
 interface ParkillerMeshProps {
   color: PieceColor
   restPosition: [number, number, number]
@@ -17,6 +23,9 @@ interface ParkillerMeshProps {
   /** Set only while this Parkiller is animating its own move; null means "just sit at restPosition". */
   hopFrom: [number, number, number] | null
   hops: [number, number, number][]
+  /** The first this-many entries in `hops` animate at FAST_HOP_DURATION instead of the normal
+   * HOP_DURATION - see that constant's own comment for why (the Parkiller's first-ever move only). */
+  fastHopCount?: number
   onHopsComplete?: () => void
   introDelay: number
   /** BoardScene's own CROWDED_SCALE (< 1) whenever this Parkiller shares its square with another
@@ -268,7 +277,17 @@ export function ParkillerModel({ color, config }: { color: PieceColor; config: P
   )
 }
 
-export function ParkillerMesh({ color, restPosition, facingTarget, hopFrom, hops, onHopsComplete, introDelay, crowdedScale = 1 }: ParkillerMeshProps) {
+export function ParkillerMesh({
+  color,
+  restPosition,
+  facingTarget,
+  hopFrom,
+  hops,
+  fastHopCount = 0,
+  onHopsComplete,
+  introDelay,
+  crowdedScale = 1,
+}: ParkillerMeshProps) {
   const meshRef = useRef<Group>(null)
   const hopIndexRef = useRef(0)
   const elapsedRef = useRef(0)
@@ -334,7 +353,15 @@ export function ParkillerMesh({ color, restPosition, facingTarget, hopFrom, hops
     }
 
     elapsedRef.current += delta
-    const t = Math.min(1, elapsedRef.current / HOP_DURATION)
+    // Reported directly ("3이 나왔는데도 11발자국씩이나 갔다" - "a 3 came up but it still went 11
+    // squares"): walking the center-to-loop connecting path one square at a time at the same pace
+    // as a real die-matched hop made the whole first move read as "that many squares," when only
+    // the hops from the entrance onward actually correspond to the black die at all. Animating the
+    // connecting stretch briskly - still visibly walked, not an instant teleport (the original
+    // complaint this fixed) - while the real per-die hops keep their normal, countable pace reads
+    // as "emerging from the center" followed by the actual move, not one long unexplained walk.
+    const hopDuration = hopIndexRef.current < fastHopCount ? FAST_HOP_DURATION : HOP_DURATION
+    const t = Math.min(1, elapsedRef.current / hopDuration)
     const from = hopIndexRef.current === 0 ? hopFrom : hops[hopIndexRef.current - 1]
     const to = hops[hopIndexRef.current]
 
