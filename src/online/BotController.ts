@@ -25,11 +25,17 @@ const BOT_THINK_DELAY_MS = 700
 // HOP_DURATION_MS matches PieceMesh.tsx's HOP_DURATION (in seconds, *1000 here).
 const DICE_SPIN_MS = 450
 const HOP_DURATION_MS = 320
-// The Parkiller's own black die is 1-6, so its hop after a roll takes at most 6 squares' worth of
-// hop time - conservatively assumed on every roll (this class doesn't get told the actual black
-// die value, only MoveOption for the white dice) rather than risking an undercount. Derived from
-// whichever hopDurationMs the constructor actually received (see maxParkillerHopMs below), not
-// this module-level default, so a test injecting a smaller value scales this too.
+// The Parkiller's own black die is 1-6, so an ordinary hop after a roll takes at most 6 squares'
+// worth of hop time - but its very first move ever also walks the connecting path from the board's
+// center hub out to the main loop first (see getParkillerFirstMoveHopWaypoints in piecePosition.ts
+// - PK1, reported directly that it used to visually teleport that whole stretch in one jump), and
+// this class has no visibility into Parkiller.hasMoved or board data to size that stretch exactly
+// (this class doesn't get told the actual black die value either, only MoveOption for the white
+// dice), so this generously covers the worst case (every real board's own 8-square corridor + the
+// loop-entrance square + up to 6 loop squares, with headroom for a longer hand-traced corridor)
+// rather than risking an undercount on every roll, first or not. Derived from whichever
+// hopDurationMs the constructor actually received (see maxParkillerHopMs below), not this
+// module-level default, so a test injecting a smaller value scales this too.
 
 /**
  * Drives every bot-assigned seat on the Master Client - bots never touch the network at all,
@@ -66,7 +72,7 @@ export class BotController {
     this.thinkDelayMs = thinkDelayMs
     this.hopDurationMs = hopDurationMs
     this.diceSpinMs = diceSpinMs
-    this.maxParkillerHopMs = 6 * hopDurationMs
+    this.maxParkillerHopMs = 18 * hopDurationMs
     this.unsubscribers = [
       host.turnStarted.on((player) => this.onTurnStarted(player.color)),
       host.moveChoicesReady.on((moves) => this.onMoveChoicesReady(moves)),

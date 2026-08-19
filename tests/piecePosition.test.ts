@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { BoardDefinition } from '../src/core/board/boardDefinition'
-import { getCaptureReturnWaypoints, getHopWaypoints, getParkillerHopWaypoints, getParkillerWaypoint } from '../src/scene/piecePosition'
+import {
+  getCaptureReturnWaypoints,
+  getHopWaypoints,
+  getParkillerFirstMoveHopWaypoints,
+  getParkillerHopWaypoints,
+  getParkillerWaypoint,
+} from '../src/scene/piecePosition'
 
 // Mirrors CAPTURE_REWARD (20) in turnManager.ts plus a few corridor squares, to reproduce a
 // legitimate reward move that must NOT collapse to a single instant hop.
@@ -189,6 +195,25 @@ describe('getParkillerHopWaypoints', () => {
       [0, 0],
       [19, 19],
       [18, 18],
+    ])
+  })
+})
+
+describe('getParkillerFirstMoveHopWaypoints', () => {
+  it('walks the home corridor backward (center to loop), then the entrance square, then the loop itself', () => {
+    // buildTestDefinition's Red lane: homeEntranceTrackIndex 15, homeCorridorWaypoints
+    // [[100,0],[100,1],[100,2],[100,3]] (center is the last one, already used as hopFrom - excluded
+    // here) - a Parkiller walking out to the loop sees this lane in the opposite order to a pawn.
+    const definition = buildTestDefinition()
+    expect(getParkillerFirstMoveHopWaypoints('Red', 12, definition)).toEqual([
+      [100, 2],
+      [100, 1],
+      [100, 0],
+      [15, 15], // the home-entrance square itself - never a "hop" in the normal case, but hopFrom
+      // sits at the center here instead, so this stretch needs it explicitly.
+      [14, 14],
+      [13, 13],
+      [12, 12],
     ])
   })
 })
