@@ -75,7 +75,16 @@ export function GameBoardScreen({
   const localColor = session.turnManager.localPlayerColor
   const isMyTurn = localColor == null || localColor === currentPlayer.color
 
-  const canRoll = isMyTurn && pendingMoves.length === 0 && !winner && !rolling && !moveAnimation
+  // Reported directly ("차례차례대로... 앞장지르는 일이없도록"): the next move's piece choices and any
+  // reward it earned were exposed the instant the underlying events fired - the same synchronous
+  // tick the capturing/finishing move's own hop animation started, not once it actually finished
+  // arriving. TurnManager itself never waits on animation (game state always advances the instant a
+  // move is submitted - only the visual playback takes time, same as the capture-visual gating
+  // above), so this hook's raw pendingMoves/pendingReward/forfeitedReward already reflect the next
+  // real choice well before the board has caught up - gating what's actually shown/interactive on
+  // both animations having cleared keeps everything landing in the order it visually happened.
+  const animationsSettled = !moveAnimation && !parkillerAnimation
+  const canRoll = isMyTurn && pendingMoves.length === 0 && !winner && !rolling && animationsSettled
 
   // Idle nudge: reported directly - a player who steps away or just spaces out mid-turn leaves
   // everyone else staring at a board that never visibly asks for input. Restarts whenever canRoll
@@ -103,7 +112,9 @@ export function GameBoardScreen({
   // is. Without this gate, a piece would glow as selectable (and be clickable) on a client whose
   // turn it isn't - the Master would reject the resulting move intent, but the clicking player's
   // own board never should have offered it in the first place.
-  const visiblePendingMoves = isMyTurn ? pendingMoves : []
+  const visiblePendingMoves = isMyTurn && animationsSettled ? pendingMoves : []
+  const visiblePendingReward = animationsSettled ? pendingReward : null
+  const visibleForfeitedReward = animationsSettled ? forfeitedReward : null
 
   // What the turn banner's subtitle says - one place for this instead of scattering the same
   // priority order (doubles warning > not-my-turn > reward > move prompt > roll prompt) across
@@ -112,9 +123,9 @@ export function GameBoardScreen({
     ? `Tercer dobles seguido: ${eliminatedByDoubles.color} pierde una ficha`
     : !isMyTurn
       ? `Esperando el turno de ${currentPlayer.color}...`
-      : pendingReward
+      : visiblePendingReward
         ? 'Elegí una ficha para tu recompensa'
-        : pendingMoves.length > 0
+        : visiblePendingMoves.length > 0
           ? 'Elegí una ficha para mover'
           : lastRoll && !rolling
             ? `Dados: ${lastRoll.dieA} y ${lastRoll.dieB}${isDouble ? ' (dobles)' : ''} · Parkiller: ${lastRoll.blackDie}`
@@ -140,7 +151,7 @@ export function GameBoardScreen({
 
       <div style={frameOverlayStyle} />
 
-      <RewardToast pendingReward={pendingReward} forfeitedReward={forfeitedReward} />
+      <RewardToast pendingReward={visiblePendingReward} forfeitedReward={visibleForfeitedReward} />
 
       <div style={turnCardStyle}>
         <div style={turnCardHeaderStyle}>
@@ -162,7 +173,7 @@ export function GameBoardScreen({
 
       <div style={playerRowStyle}>
         {session.players.map((p) => (
-          <PlayerPill key={p.color} player={p} isCurrentTurn={p.color === currentPlayer.color} />
+          <PlayerPill key={p.color} player={p} isCurrentTurn={p.color === currentPlayer.color} isLocal={p.color === localColor} />
         ))}
       </div>
 
@@ -227,7 +238,13 @@ export function GameBoardScreen({
 // phones) - matches the reference's row of player badges rather than the earlier per-side
 // columns. Pieces-at-home count uses data already on PlayerState (Piece.state === 'Finished'),
 // no new game-state tracking needed.
-function PlayerPill({ player, isCurrentTurn }: { player: PlayerState; isCurrentTurn: boolean }) {
+// isLocal (online play only - session.turnManager.localPlayerColor, undefined for local
+// pass-and-play) marks which pill is *this client's own* seat, distinct from isCurrentTurn (whose
+// turn it is right now) - reported directly: once a game actually starts, nothing on screen said
+// which color a given online player even was anymore (the lobby's own "(vos)" tag only exists
+// before that point) - important with more than 2 real people in a room, where "wait for your own
+// name to light up" isn't enough to know which color that even is in the first place.
+function PlayerPill({ player, isCurrentTurn, isLocal }: { player: PlayerState; isCurrentTurn: boolean; isLocal: boolean }) {
   const home = player.pieces.filter((p) => p.state === 'Finished').length
   const color = getColor(player.color)
   return (
@@ -241,8 +258,12 @@ function PlayerPill({ player, isCurrentTurn }: { player: PlayerState; isCurrentT
         background: isCurrentTurn
           ? `linear-gradient(180deg, rgba(255,255,255,0.12), transparent 30%), linear-gradient(165deg, ${color}55, rgba(24,14,9,0.92))`
           : 'linear-gradient(180deg, rgba(255,255,255,0.05), transparent 30%), linear-gradient(165deg, rgba(48,30,20,0.9), rgba(20,12,8,0.92))',
-        border: `2px solid ${isCurrentTurn ? color : 'rgba(201,162,75,0.4)'}`,
-        boxShadow: isCurrentTurn ? `0 0 12px 1px ${color}66, 0 4px 10px rgba(0,0,0,0.4)` : '0 4px 10px rgba(0,0,0,0.35)',
+        border: `2px solid ${isLocal ? '#f2d98c' : isCurrentTurn ? color : 'rgba(201,162,75,0.4)'}`,
+        boxShadow: isLocal
+          ? `0 0 0 2px #f2d98c99, 0 0 12px 1px ${color}66, 0 4px 10px rgba(0,0,0,0.4)`
+          : isCurrentTurn
+            ? `0 0 12px 1px ${color}66, 0 4px 10px rgba(0,0,0,0.4)`
+            : '0 4px 10px rgba(0,0,0,0.35)',
         fontFamily: 'system-ui, sans-serif',
         color: '#f2ede0',
         whiteSpace: 'nowrap',
@@ -255,6 +276,7 @@ function PlayerPill({ player, isCurrentTurn }: { player: PlayerState; isCurrentT
       <span style={{ fontSize: 'clamp(10px, 2.4vw, 12px)', color: '#d8d2c2' }}>
         ♟ {home}/{player.pieces.length}
       </span>
+      {isLocal && <span style={{ fontWeight: 800, fontSize: 'clamp(9px, 2.2vw, 11px)', color: '#f2d98c' }}>(vos)</span>}
     </div>
   )
 }

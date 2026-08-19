@@ -275,11 +275,20 @@ export function ParkillerMesh({ color, restPosition, facingTarget, hopFrom, hops
   const notifiedRef = useRef(true)
   const introRef = useRef({ done: false, elapsed: 0 })
 
+  // notifiedRef starts (and resets to) true only for the passive "not animating at all" resting
+  // case (hopFrom null, BoardScene's own signal that nothing was requested) - never for hops.length
+  // alone. PK2/PK6a's bonus-turn skip (and an already-eliminated Parkiller) both legitimately
+  // request a real animation whose before/after are identical, i.e. hopFrom set but zero actual
+  // hops - onHopsComplete still needs to fire exactly once for that, or the caller's own animation-
+  // request state (parkillerAnimation) never clears and every gate built on "no animation is
+  // currently in flight" (see GameBoardScreen's canRoll/visiblePendingMoves) hangs forever after the
+  // very first such roll. Reported directly ("차례차례대로... 앞장지르는 일이없도록") while fixing exactly
+  // that gate - caught here first since the gate is only as reliable as this notification.
   useEffect(() => {
     hopIndexRef.current = 0
     elapsedRef.current = 0
-    notifiedRef.current = hops.length === 0
-  }, [hops])
+    notifiedRef.current = hopFrom === null
+  }, [hops, hopFrom])
 
   useFrame((_, rawDelta) => {
     const mesh = meshRef.current
