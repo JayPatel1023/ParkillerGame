@@ -200,17 +200,14 @@ describe('getParkillerHopWaypoints', () => {
 })
 
 describe('getParkillerFirstMoveHopWaypoints', () => {
-  it('walks the home corridor backward (center to loop), then the entrance square, then the loop itself', () => {
-    // buildTestDefinition's Red lane: homeEntranceTrackIndex 15, homeCorridorWaypoints
-    // [[100,0],[100,1],[100,2],[100,3]] (center is the last one, already used as hopFrom - excluded
-    // here) - a Parkiller walking out to the loop sees this lane in the opposite order to a pawn.
+  it('goes straight to the entrance square (a smooth glide, not a per-square walk - see ParkillerMesh glideFirstHop), then hops the loop itself', () => {
+    // buildTestDefinition's Red lane: homeEntranceTrackIndex 15. The individual homeCorridorWaypoints
+    // are deliberately NOT listed one by one here - that read as extra countable hops the die never
+    // showed (reported directly) - only the entrance square itself appears, as the glide's target.
     const definition = buildTestDefinition()
     expect(getParkillerFirstMoveHopWaypoints('Red', 12, definition)).toEqual([
-      [100, 2],
-      [100, 1],
-      [100, 0],
-      [15, 15], // the home-entrance square itself - never a "hop" in the normal case, but hopFrom
-      // sits at the center here instead, so this stretch needs it explicitly.
+      [15, 15], // the home-entrance square - never a "hop" in the normal case (hopFrom sits right
+      // there), but hopFrom sits at the center here instead, so this stretch needs it explicitly.
       [14, 14],
       [13, 13],
       [12, 12],
