@@ -163,23 +163,25 @@ export function getParkillerHopWaypoints(before: number, after: number, definiti
   return hops
 }
 
-// PK1: the Parkiller's very first move needs to reach the main loop's home-entrance square before
-// continuing along it like every later move. Two earlier approaches to the stretch connecting the
-// center hub (hopFrom - see parkillerCenterWaypoint) to that entrance both got reported back as
-// wrong in opposite directions: a single lerp straight from hopFrom to getParkillerHopWaypoints' own
-// first entry covered it in one hop's worth of time (an instant teleport, screenshotted with arrows
-// across the board); walking each home-corridor square individually as its own discrete hop (even
-// sped up 3x - see ParkillerMesh's FAST_HOP_DURATION) still read as "N extra squares the die never
-// showed" ("3이 나왔는데도... 정신나가게 10칸 정도 더 이동한다" - a 3 came up but it still moved
-// something like 10 extra squares, "crazily"). Landing squarely between those two failure modes:
-// the entrance square is still the only entry here (ParkillerMesh's own glideFirstHop treats
-// reaching *this one* waypoint as a smooth continuous glide, not a countable hop-by-hop walk, and
-// not an instant snap either) - the individual homeCorridorWaypoints themselves are deliberately
-// NOT included one by one, exactly because listing them out is what read as "extra hops" before.
+// PK1: the Parkiller's very first move needs to walk the connecting path from the center hub (its
+// hopFrom - see parkillerCenterWaypoint) out to the main loop before continuing along it like every
+// later move. This has gone back and forth: an instant single lerp across the whole stretch read as
+// a teleport (screenshotted with arrows across the board); a single smooth glide across it (no
+// discrete steps) got reported back as "그냥 뛰여넘어서 가게" - "just skipping/jumping over it" -
+// still not a real walk. The client's explicit instruction, most recently: "중앙홀에서부터 한칸한칸
+// 시작하게 만들어달" - make it start one square at a time from the center hall. So this walks the
+// same homeCorridorWaypoints a regular piece uses in the opposite direction on its way home (already
+// the exact path connecting those two points - no new board data needed), one discrete hop per
+// square, traversed in reverse (center-adjacent to loop-adjacent) since this class walks it in
+// reverse, then the home-entrance square itself (never a "hop" in the normal case, since hopFrom
+// already sits right there - here it has to be one), then the usual loop walk. Every hop here -
+// corridor included - uses ParkillerMesh's normal HOP_DURATION pace, no special glide/fast
+// treatment, so it reads as the same kind of step-by-step walk every other move already is.
 export function getParkillerFirstMoveHopWaypoints(color: PieceColor, after: number, definition: BoardDefinition): [number, number][] {
   const lane = definition.playerLanes.find((l) => l.color === color)
   if (!lane) return []
+  const connectingHops = lane.homeCorridorWaypoints.slice(0, -1).reverse()
   const entranceWaypoint = definition.trackWaypoints[lane.homeEntranceTrackIndex]
   const loopHops = getParkillerHopWaypoints(lane.homeEntranceTrackIndex, after, definition)
-  return [...(entranceWaypoint ? [entranceWaypoint] : []), ...loopHops]
+  return [...connectingHops, ...(entranceWaypoint ? [entranceWaypoint] : []), ...loopHops]
 }

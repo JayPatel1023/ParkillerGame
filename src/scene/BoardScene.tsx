@@ -439,16 +439,14 @@ export function BoardScene({
     const fromWaypoint = parkillerAnimation.firstMove
       ? (parkillerCenterWaypoint(parkillerAnimation.color, definition) ?? definition.trackWaypoints[parkillerAnimation.before])
       : definition.trackWaypoints[parkillerAnimation.before]
-    // The first move's opening segment (hopFrom -> the loop's entrance square) glides instead of
-    // hopping - see getParkillerFirstMoveHopWaypoints' and ParkillerMesh's glideFirstHop's own
-    // comments for why. Every later move just hops along the loop as before.
+    // The first move also needs the connecting path from the center out to the loop (see
+    // getParkillerFirstMoveHopWaypoints' own comment) - every later move just hops along the loop.
     const hops = parkillerAnimation.firstMove
       ? getParkillerFirstMoveHopWaypoints(parkillerAnimation.color, parkillerAnimation.after, definition)
       : getParkillerHopWaypoints(parkillerAnimation.before, parkillerAnimation.after, definition)
     return {
       hopFrom: toWorldPosition(fromWaypoint),
       hops: hops.map(toWorldPosition),
-      glideFirstHop: parkillerAnimation.firstMove,
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parkillerAnimation?.color, parkillerAnimation?.before, parkillerAnimation?.after, parkillerAnimation?.firstMove, definition])
@@ -663,7 +661,6 @@ export function BoardScene({
         const isAnimating = parkillerAnimation?.color === player.color
         const hopFrom = isAnimating ? (parkillerHopData?.hopFrom ?? null) : null
         const hops = isAnimating ? (parkillerHopData?.hops ?? []) : []
-        const glideFirstHop = isAnimating ? (parkillerHopData?.glideFirstHop ?? false) : false
 
         // The Parkiller's forward hand marks its direction of travel (reported directly) - PK3:
         // it always walks the shared track loop in decreasing-index order (see
@@ -682,7 +679,6 @@ export function BoardScene({
             facingTarget={facingTarget}
             hopFrom={hopFrom}
             hops={hops}
-            glideFirstHop={glideFirstHop}
             onHopsComplete={isAnimating ? onParkillerAnimationComplete : undefined}
             introDelay={(allPieces.length + index) * INTRO_STAGGER}
             crowdedScale={parkillerCrowded ? CROWDED_SCALE : 1}
