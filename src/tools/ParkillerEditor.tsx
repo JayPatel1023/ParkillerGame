@@ -133,6 +133,15 @@ export default function ParkillerEditor() {
   const [mode, setMode] = useState<PointMode>(null)
   const [color, setColor] = useState<PieceColor>('Red')
 
+  // Reported directly ("정말하기힘들다 그리고 오류가 잇는것같다" - "really hard to do, and it seems
+  // like there's an error"): starts pre-loaded with the currently-shipped shape's 11 body + 9 hood
+  // points - a fresh trace's own new clicks get sorted in and mixed together with those old points
+  // rather than replacing them, which reads as broken (a click lands somewhere unexpected relative
+  // to dots already there). Tried starting both profiles empty instead - that's actually a WORSE
+  // first impression: LatheGeometry can't build a body/hood mesh from zero points at all, so the 3D
+  // preview shows nothing but disembodied floating arms, which looks like a real crash rather than
+  // an empty canvas waiting for input. Kept the pre-populated default (a working preview from the
+  // first frame) - see the "Clear all points first" callout below instead, now impossible to miss.
   const [bodyProfile, setBodyProfile] = useState<[number, number][]>(DEFAULT_PARKILLER_CONFIG.bodyProfile)
   const [hoodProfile, setHoodProfile] = useState<[number, number][]>(DEFAULT_PARKILLER_CONFIG.hoodProfile)
   const [cavity, setCavity] = useState(DEFAULT_PARKILLER_CONFIG.cavity)
@@ -211,6 +220,8 @@ export default function ParkillerEditor() {
             borderRadius: 8,
             fontSize: 14,
             fontWeight: 700,
+            width: 380,
+            boxSizing: 'border-box',
             background: mode ? '#5a3a10' : '#2a2a2a',
             border: `2px solid ${mode ? '#e0a030' : '#444'}`,
           }}
@@ -218,7 +229,41 @@ export default function ParkillerEditor() {
           {!canTrace && '⚠️ Point-tracing only works on the "back" tab - switch to it.'}
           {canTrace && mode === 'body' && '👉 Now: click along the body silhouette (top to bottom, either edge)'}
           {canTrace && mode === 'hood' && '👉 Now: click along the hood silhouette'}
-          {canTrace && !mode && 'Click "Add body point" or "Add hood point" below to start.'}
+          {canTrace && !mode && bodyProfile.length + hoodProfile.length > 0 && (
+            <>
+              Starting a brand new trace? Click "🗑️ Clear all points" below FIRST - otherwise your new
+              clicks get mixed in with the {bodyProfile.length + hoodProfile.length} points already here
+              (the current shipped shape), which reads as a broken/random result. Refining that existing
+              shape instead? Just click "Add body point" or "Add hood point" and go.
+            </>
+          )}
+          {canTrace && !mode && bodyProfile.length + hoodProfile.length === 0 && 'Click "Add body point" or "Add hood point" below to start.'}
+        </div>
+
+        {/* Moved ahead of the trace buttons - reported directly that starting a trace produced a
+            confusing mixed result because this (the actual fix - clear first) was easy to miss
+            below the buttons someone would reach for first. */}
+        <div style={{ marginBottom: 10, display: 'flex', gap: 8 }}>
+          <button
+            onClick={() => {
+              setBodyProfile([])
+              setHoodProfile([])
+              setMode(null)
+            }}
+            style={{ padding: '10px 14px', fontSize: 13, background: '#5a1e1e', color: '#fff', border: '1px solid #a33', borderRadius: 6 }}
+          >
+            🗑️ Clear all points
+          </button>
+          <button
+            onClick={() => {
+              setBodyProfile(DEFAULT_PARKILLER_CONFIG.bodyProfile)
+              setHoodProfile(DEFAULT_PARKILLER_CONFIG.hoodProfile)
+              setMode(null)
+            }}
+            style={{ padding: '10px 14px', fontSize: 13, background: '#1e3a5a', color: '#fff', border: '1px solid #369', borderRadius: 6 }}
+          >
+            ↩️ Restore shipped shape
+          </button>
         </div>
 
         <div style={{ marginBottom: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -241,29 +286,6 @@ export default function ParkillerEditor() {
           </button>
           <button onClick={() => setHoodProfile((p) => p.slice(0, -1))} style={{ padding: '10px 14px', fontSize: 13 }}>
             Undo last
-          </button>
-        </div>
-
-        <div style={{ marginBottom: 10, display: 'flex', gap: 8 }}>
-          <button
-            onClick={() => {
-              setBodyProfile([])
-              setHoodProfile([])
-              setMode(null)
-            }}
-            style={{ padding: '10px 14px', fontSize: 13, background: '#5a1e1e', color: '#fff', border: '1px solid #a33', borderRadius: 6 }}
-          >
-            🗑️ Clear all points
-          </button>
-          <button
-            onClick={() => {
-              setBodyProfile(DEFAULT_PARKILLER_CONFIG.bodyProfile)
-              setHoodProfile(DEFAULT_PARKILLER_CONFIG.hoodProfile)
-              setMode(null)
-            }}
-            style={{ padding: '10px 14px', fontSize: 13, background: '#1e3a5a', color: '#fff', border: '1px solid #369', borderRadius: 6 }}
-          >
-            ↩️ Restore shipped shape
           </button>
         </div>
 
