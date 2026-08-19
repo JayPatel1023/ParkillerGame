@@ -444,9 +444,18 @@ export function BoardScene({
     const hops = parkillerAnimation.firstMove
       ? getParkillerFirstMoveHopWaypoints(parkillerAnimation.color, parkillerAnimation.after, definition)
       : getParkillerHopWaypoints(parkillerAnimation.before, parkillerAnimation.after, definition)
+    // Reported directly ("3이 나왔는데도 11발자국씩이나 갔다" - a black die of 3 visibly moved 11
+    // squares): the connecting path's own hop count has nothing to do with the die at all, so it
+    // needs to read as distinct from the real per-die hops that follow, not just "more hops at the
+    // same pace" - see ParkillerMesh's own fastHopCount/FAST_HOP_DURATION. Exactly the lane's own
+    // corridor length (every connecting hop, plus the entrance square itself).
+    const fastHopCount = parkillerAnimation.firstMove
+      ? (definition.playerLanes.find((l) => l.color === parkillerAnimation.color)?.homeCorridorWaypoints.length ?? 0)
+      : 0
     return {
       hopFrom: toWorldPosition(fromWaypoint),
       hops: hops.map(toWorldPosition),
+      fastHopCount,
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parkillerAnimation?.color, parkillerAnimation?.before, parkillerAnimation?.after, parkillerAnimation?.firstMove, definition])
@@ -661,6 +670,7 @@ export function BoardScene({
         const isAnimating = parkillerAnimation?.color === player.color
         const hopFrom = isAnimating ? (parkillerHopData?.hopFrom ?? null) : null
         const hops = isAnimating ? (parkillerHopData?.hops ?? []) : []
+        const fastHopCount = isAnimating ? (parkillerHopData?.fastHopCount ?? 0) : 0
 
         // The Parkiller's forward hand marks its direction of travel (reported directly) - PK3:
         // it always walks the shared track loop in decreasing-index order (see
@@ -679,6 +689,7 @@ export function BoardScene({
             facingTarget={facingTarget}
             hopFrom={hopFrom}
             hops={hops}
+            fastHopCount={fastHopCount}
             onHopsComplete={isAnimating ? onParkillerAnimationComplete : undefined}
             introDelay={(allPieces.length + index) * INTRO_STAGGER}
             crowdedScale={parkillerCrowded ? CROWDED_SCALE : 1}
