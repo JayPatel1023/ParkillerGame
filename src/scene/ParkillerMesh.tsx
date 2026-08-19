@@ -7,6 +7,22 @@ import type { PieceColor } from '../core/pieceColor'
 import { BASE_HEIGHT } from './boardGeometry'
 import { BOUNCE_HEIGHT, HOP_DURATION, INTRO_DURATION, INTRO_X_OFFSET, INTRO_Y_START, MAX_FRAME_DELTA, easeOutBounce, easeOutCubic } from './PieceMesh'
 
+// Reported directly, twice, in opposite directions: the Parkiller's own hop used to start the
+// instant parkillerMoved fired, well before the dice-spin animation (useTurnManager's own
+// DICE_SPIN_MS) had finished revealing the roll it came from - the piece was visibly moving before
+// its own result even appeared. Delaying *when* useTurnManager sets parkillerAnimation instead (an
+// earlier attempt) fixed that but caused a worse bug: player.parkiller is a live, mutable object
+// TurnManager already updated to its POST-move values the instant the roll resolved, completely
+// independent of when parkillerAnimation state updates - so restPosition (computed from that same
+// live object whenever this Parkiller isn't yet "animating") flashed to the final position
+// immediately, then visibly snapped back to the start once the hop animation finally arrived. This
+// is the correct layer for the delay instead: parkillerAnimation is set immediately (so
+// restPosition never gets read at all - hopFrom takes over from the very first render), but actual
+// hop-time progression here holds off for this long first, sitting exactly at hopFrom meanwhile.
+// Duplicated from useTurnManager.ts's own DICE_SPIN_MS (peer layers per CLAUDE.md - online/ already
+// duplicates the same constant for the same reason) and converted to seconds to match HOP_DURATION.
+const HOP_START_DELAY = 450 / 1000
+
 interface ParkillerMeshProps {
   color: PieceColor
   restPosition: [number, number, number]
@@ -281,6 +297,7 @@ export function ParkillerMesh({
   const meshRef = useRef<Group>(null)
   const hopIndexRef = useRef(0)
   const elapsedRef = useRef(0)
+  const startWaitRef = useRef(0)
   const notifiedRef = useRef(true)
   const introRef = useRef({ done: false, elapsed: 0 })
 
@@ -296,6 +313,7 @@ export function ParkillerMesh({
   useEffect(() => {
     hopIndexRef.current = 0
     elapsedRef.current = 0
+    startWaitRef.current = 0
     notifiedRef.current = hopFrom === null
   }, [hops, hopFrom])
 
@@ -339,6 +357,17 @@ export function ParkillerMesh({
         notifiedRef.current = true
         onHopsComplete?.()
       }
+      return
+    }
+
+    // Holds at hopFrom - not yet consuming any hop-elapsed time - for HOP_START_DELAY after a new
+    // hop sequence arrives, so the actual walk starts in sync with the dice reveal instead of
+    // before it (see that constant's own comment for the two-sided bug this replaced).
+    if (startWaitRef.current < HOP_START_DELAY) {
+      startWaitRef.current += delta
+      const waitYaw = yawTowards(hopFrom, hops[0])
+      if (waitYaw !== null) mesh.rotation.y = waitYaw
+      mesh.position.set(hopFrom[0], BASE_HEIGHT, hopFrom[2])
       return
     }
 
