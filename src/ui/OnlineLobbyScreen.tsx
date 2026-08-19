@@ -214,9 +214,11 @@ export default function OnlineLobbyScreen() {
   function startGame() {
     const connection = connectionRef.current
     if (!connection) return
-    // Belt-and-suspenders alongside the disabled button below - every real seat must be filled
-    // before a game can start at all (see the lobby's own banner for why).
-    if (connection.getActors().length < playerCount) return
+    // Belt-and-suspenders alongside the disabled button below - once 2+ real people are present,
+    // every real seat must be filled before a game can start (see the lobby's own banner for why);
+    // alone, starting against bots is unrestricted.
+    const actorCount = connection.getActors().length
+    if (actorCount > 1 && actorCount < playerCount) return
     const colors = TURN_ORDER_BY_COUNT[playerCount]
     const board = toBoardData(BOARD_DEFINITIONS[playerCount])
     const players = colors.map((color) => createPlayerState(color, board))
@@ -354,14 +356,20 @@ export default function OnlineLobbyScreen() {
                 })
               })()}
             </div>
-            {/* Reported directly, every board size (2p-6p) the same way: starting before every real
-                seat was filled is exactly what let a bot silently take over a seat a friend was
-                still in the middle of joining - the room-closing fix (see closeRoom()) stops a LATE
-                join from becoming a phantom player, but starting early never needed a late join to
-                go wrong in the first place. Requiring every seat filled before "Empezar partida" is
-                even clickable removes the whole failure mode at the source instead of reacting to
-                it - once full, a clear banner announces it's ready, matching "다들어왔다는 alert". */}
-            {seats.length >= playerCount ? (
+            {/* Reported directly, every board size (2p-6p) the same way: starting once a SECOND
+                real person had joined but before every seat was filled is exactly what let a bot
+                silently take over a seat a friend was still in the middle of joining - the room-
+                closing fix (see closeRoom()) stops a LATE join from becoming a phantom player, but
+                starting early never needed a late join to go wrong in the first place. The creator
+                playing solo against bots is a different, legitimate case though (reported directly
+                right after shipping the first version of this gate, which blocked that too) - only
+                2+ real people present requires every seat filled before "Empezar partida" is even
+                clickable; alone, starting is unrestricted the same as it always was. Once full, a
+                clear banner announces it's ready, matching "다들어왔다는 alert". */}
+            {seats.length > 1 && seats.length < playerCount && (
+              <p style={hintStyle}>Esperando a que se unan todos los jugadores ({seats.length}/{playerCount})...</p>
+            )}
+            {seats.length >= playerCount && (
               <div
                 style={{
                   padding: '10px 14px',
@@ -376,15 +384,13 @@ export default function OnlineLobbyScreen() {
               >
                 ¡Están todos conectados! Ya se puede empezar.
               </div>
-            ) : (
-              <p style={hintStyle}>Esperando a que se unan todos los jugadores ({seats.length}/{playerCount})...</p>
             )}
             {connectionRef.current.isMasterClient() ? (
               <button
                 className="chunky-btn"
                 onClick={startGame}
-                disabled={seats.length < playerCount}
-                style={chunkyButtonStyle(seats.length >= playerCount)}
+                disabled={seats.length > 1 && seats.length < playerCount}
+                style={chunkyButtonStyle(seats.length <= 1 || seats.length >= playerCount)}
               >
                 Empezar partida
               </button>
