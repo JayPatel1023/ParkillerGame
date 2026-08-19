@@ -3,8 +3,8 @@ import type { BoardDefinition } from '../src/core/board/boardDefinition'
 import {
   getCaptureReturnWaypoints,
   getHopWaypoints,
-  getParkillerFirstMoveHopWaypoints,
   getParkillerHopWaypoints,
+  getParkillerMoveHopWaypoints,
   getParkillerWaypoint,
 } from '../src/scene/piecePosition'
 
@@ -140,19 +140,25 @@ describe('getHopWaypoints', () => {
 })
 
 describe('getParkillerWaypoint', () => {
-  it('resolves the track waypoint at its current position while InPlay, once it has moved', () => {
+  it('resolves the track waypoint at its current position while InPlay, once fully past the corridor', () => {
     const definition = buildTestDefinition()
-    expect(getParkillerWaypoint({ color: 'Red', state: 'InPlay', trackPosition: 5, hasMoved: true }, definition)).toEqual([5, 5])
+    expect(
+      getParkillerWaypoint({ color: 'Red', state: 'InPlay', trackPosition: 5, corridorPosition: 4, corridorLength: 4 }, definition),
+    ).toEqual([5, 5])
   })
 
-  it('resolves to its lane\'s center/finish waypoint before its first move (PK1), ignoring trackPosition', () => {
+  it("resolves to its lane's corridor waypoint while still crossing the corridor (PK1), ignoring trackPosition", () => {
     const definition = buildTestDefinition()
-    expect(getParkillerWaypoint({ color: 'Red', state: 'InPlay', trackPosition: 15, hasMoved: false }, definition)).toEqual([100, 3])
+    expect(
+      getParkillerWaypoint({ color: 'Red', state: 'InPlay', trackPosition: 15, corridorPosition: 0, corridorLength: 4 }, definition),
+    ).toEqual([100, 3])
   })
 
   it('is null once Eliminated, regardless of its last position', () => {
     const definition = buildTestDefinition()
-    expect(getParkillerWaypoint({ color: 'Red', state: 'Eliminated', trackPosition: 5, hasMoved: true }, definition)).toBeNull()
+    expect(
+      getParkillerWaypoint({ color: 'Red', state: 'Eliminated', trackPosition: 5, corridorPosition: 4, corridorLength: 4 }, definition),
+    ).toBeNull()
   })
 })
 
@@ -199,16 +205,17 @@ describe('getParkillerHopWaypoints', () => {
   })
 })
 
-describe('getParkillerFirstMoveHopWaypoints', () => {
-  it('walks the home corridor backward (center to loop) one square at a time, then the entrance square, then the loop itself', () => {
+describe('getParkillerMoveHopWaypoints', () => {
+  it('starting fully at the center, crosses the home corridor one square at a time, then the entrance square, then the loop itself', () => {
     // buildTestDefinition's Red lane: homeEntranceTrackIndex 15, homeCorridorWaypoints
-    // [[100,0],[100,1],[100,2],[100,3]] (center is the last one, already used as hopFrom - excluded
-    // here) - a Parkiller walking out to the loop sees this lane in the opposite order to a pawn.
-    // Per the client's own explicit instruction, this stretch is walked one square at a time (a
-    // single glide across it was tried and reported back as "그냥 뛰여넘어서 가게" - just
-    // skipping/jumping over it).
+    // [[100,0],[100,1],[100,2],[100,3]] (corridorPosition 0 = center = the last one; corridorLength
+    // 4). Per the client's own explicit instruction, this stretch is walked one real square at a
+    // time, spending the die itself (a single glide across it was tried and reported back as "그냥
+    // 뛰여넘어서 가게" - just skipping/jumping over it).
     const definition = buildTestDefinition()
-    expect(getParkillerFirstMoveHopWaypoints('Red', 12, definition)).toEqual([
+    const before = { trackPosition: 15, corridorPosition: 0 }
+    const after = { trackPosition: 12, corridorPosition: 4 }
+    expect(getParkillerMoveHopWaypoints('Red', before, after, definition)).toEqual([
       [100, 2],
       [100, 1],
       [100, 0],
@@ -217,6 +224,27 @@ describe('getParkillerFirstMoveHopWaypoints', () => {
       [14, 14],
       [13, 13],
       [12, 12],
+    ])
+  })
+
+  it("doesn't reach the loop at all when the corridor crossing isn't finished this move", () => {
+    const definition = buildTestDefinition()
+    const before = { trackPosition: 15, corridorPosition: 0 }
+    const after = { trackPosition: 15, corridorPosition: 2 }
+    expect(getParkillerMoveHopWaypoints('Red', before, after, definition)).toEqual([
+      [100, 2],
+      [100, 1],
+    ])
+  })
+
+  it('walks a plain loop move once already fully past the corridor', () => {
+    const definition = buildTestDefinition()
+    const before = { trackPosition: 8, corridorPosition: 4 }
+    const after = { trackPosition: 5, corridorPosition: 4 }
+    expect(getParkillerMoveHopWaypoints('Red', before, after, definition)).toEqual([
+      [7, 7],
+      [6, 6],
+      [5, 5],
     ])
   })
 })

@@ -32,16 +32,23 @@ function buildTestBoard(): BoardData {
 }
 
 describe('createParkiller', () => {
-  it('starts InPlay at the given home-entrance track index', () => {
-    expect(createParkiller('Red', 19)).toEqual({ color: 'Red', state: 'InPlay', trackPosition: 19, hasMoved: false })
+  it('starts InPlay at the given home-entrance track index, not yet having crossed its own corridor', () => {
+    expect(createParkiller('Red', 19, 6)).toEqual({ color: 'Red', state: 'InPlay', trackPosition: 19, corridorPosition: 0, corridorLength: 6 })
   })
 })
 
+// Most of these tests are about capture/collision mechanics once the Parkiller is already on the
+// shared track, not about the corridor-crossing mechanic itself (see the dedicated describe block
+// below for that) - corridorPosition is pushed to corridorLength up front so a small scripted black
+// die still reaches the track, matching what these tests were already asserting before
+// corridorPosition existed at all. Any opposing Parkiller referenced by trackPosition also needs
+// this, or isParkillerOnTrack (parchisRules.ts) treats it as still-in-corridor and un-interactable.
 describe('TurnManager - Parkiller (PK 1-8)', () => {
   it('moves backward (decreasing track index) by the black die each roll', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)
     const blue = createPlayerState('Blue', board)
+    red.parkiller.corridorPosition = red.parkiller.corridorLength
 
     const dice = new ScriptedDice([1, 1, 3]) // dieA=1, dieB=1 (no legal move exists), blackDie=3
     const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
@@ -51,7 +58,15 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
 
     manager.requestRoll()
 
-    expect(result).toEqual({ color: 'Red', before: 19, after: 16, capturedPawn: null, capturedParkillerColor: null, firstMove: true })
+    expect(result).toEqual({
+      color: 'Red',
+      before: 19,
+      after: 16,
+      beforeCorridorPosition: 6,
+      afterCorridorPosition: 6,
+      capturedPawn: null,
+      capturedParkillerColor: null,
+    })
     expect(red.parkiller.trackPosition).toBe(16)
   })
 
@@ -59,6 +74,7 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)
     const blue = createPlayerState('Blue', board)
+    red.parkiller.corridorPosition = red.parkiller.corridorLength
     blue.pieces[0].state = 'OnTrack'
     blue.pieces[0].trackPosition = 16 // Red's parkiller (starts at 19) lands here with blackDie=3
 
@@ -72,7 +88,15 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
 
     manager.requestRoll()
 
-    expect(result).toEqual({ color: 'Red', before: 19, after: 16, capturedPawn: blue.pieces[0], capturedParkillerColor: null, firstMove: true })
+    expect(result).toEqual({
+      color: 'Red',
+      before: 19,
+      after: 16,
+      beforeCorridorPosition: 6,
+      afterCorridorPosition: 6,
+      capturedPawn: blue.pieces[0],
+      capturedParkillerColor: null,
+    })
     expect(blue.pieces[0].state).toBe('InYard')
     expect(blue.pieces[0].trackPosition).toBe(-1)
     expect(rewardOffered).toBe(false)
@@ -82,6 +106,7 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)
     const blue = createPlayerState('Blue', board)
+    red.parkiller.corridorPosition = red.parkiller.corridorLength
     red.pieces[0].state = 'OnTrack'
     red.pieces[0].trackPosition = 16
     blue.pieces[0].state = 'OnTrack'
@@ -95,7 +120,15 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
 
     manager.requestRoll()
 
-    expect(result).toEqual({ color: 'Red', before: 19, after: 16, capturedPawn: blue.pieces[0], capturedParkillerColor: null, firstMove: true })
+    expect(result).toEqual({
+      color: 'Red',
+      before: 19,
+      after: 16,
+      beforeCorridorPosition: 6,
+      afterCorridorPosition: 6,
+      capturedPawn: blue.pieces[0],
+      capturedParkillerColor: null,
+    })
     expect(blue.pieces[0].state).toBe('InYard')
     // Red's own pawn is protected by sharing the Parkiller's color - stays right where it was.
     expect(red.pieces[0].state).toBe('OnTrack')
@@ -106,6 +139,7 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)
     const blue = createPlayerState('Blue', board)
+    red.parkiller.corridorPosition = red.parkiller.corridorLength
     blue.pieces[0].state = 'OnTrack'
     blue.pieces[0].trackPosition = 15 // a safe square, reachable with blackDie=4 from Red's start (19)
 
@@ -122,8 +156,10 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)
     const blue = createPlayerState('Blue', board)
+    red.parkiller.corridorPosition = red.parkiller.corridorLength
     red.pieces[0].state = 'OnTrack'
     red.pieces[0].trackPosition = 0 // needs a piece already in play to spend the reward on (PC 5)
+    blue.parkiller.corridorPosition = blue.parkiller.corridorLength
     blue.parkiller.trackPosition = 15 // reachable from Red's parkiller start (19) with blackDie=4
 
     const dice = new ScriptedDice([1, 1, 4])
@@ -148,6 +184,7 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     const blue = createPlayerState('Blue', board)
     red.pieces[0].state = 'OnTrack'
     red.pieces[0].trackPosition = 0
+    blue.parkiller.corridorPosition = blue.parkiller.corridorLength
     blue.parkiller.trackPosition = 5
 
     // PK6/PK8: verified directly against the reference implementation's doblete_mata_parkiller
@@ -183,6 +220,7 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     }
     const red = createPlayerState('Red', board)
     const blue = createPlayerState('Blue', board)
+    blue.parkiller.corridorPosition = blue.parkiller.corridorLength
     blue.parkiller.trackPosition = 0 // sitting right on Red's own exit
 
     const dice = new ScriptedDice([5, 2, 1]) // dieA=5 exits a yard piece onto position 0
@@ -202,6 +240,7 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     const blue = createPlayerState('Blue', board)
     red.pieces[0].state = 'OnTrack'
     red.pieces[0].trackPosition = 0
+    blue.parkiller.corridorPosition = blue.parkiller.corridorLength
     blue.parkiller.trackPosition = 5
 
     const dice = new ScriptedDice([5, 2, 1]) // dieA=5, dieB=2 - not a double, the window never opens
@@ -219,6 +258,7 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)
     const blue = createPlayerState('Blue', board)
+    red.parkiller.corridorPosition = red.parkiller.corridorLength
 
     // Roll 1: dieA=dieB=2 (double, no legal move for either -> immediate bonus turn), blackDie=3
     // moves the Parkiller 19 -> 16. Roll 2 (the bonus turn): dieA=1, dieB=1, blackDie=9 - still
@@ -235,7 +275,15 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     manager.requestRoll()
 
     expect(results).toHaveLength(2)
-    expect(results[1]).toEqual({ color: 'Red', before: 16, after: 16, capturedPawn: null, capturedParkillerColor: null, firstMove: false })
+    expect(results[1]).toEqual({
+      color: 'Red',
+      before: 16,
+      after: 16,
+      beforeCorridorPosition: 6,
+      afterCorridorPosition: 6,
+      capturedPawn: null,
+      capturedParkillerColor: null,
+    })
     expect(red.parkiller.trackPosition).toBe(16)
   })
 
@@ -254,7 +302,129 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
 
     manager.requestRoll()
 
-    expect(result).toEqual({ color: 'Red', before: 7, after: 7, capturedPawn: null, capturedParkillerColor: null, firstMove: false })
+    expect(result).toEqual({
+      color: 'Red',
+      before: 7,
+      after: 7,
+      beforeCorridorPosition: 0,
+      afterCorridorPosition: 0,
+      capturedPawn: null,
+      capturedParkillerColor: null,
+    })
     expect(red.parkiller.trackPosition).toBe(7)
+  })
+})
+
+// The corridor-crossing mechanic itself (see Parkiller.corridorPosition's own doc comment) - the
+// client's own explicit, repeated instruction settled this: the black die is spent actually
+// crossing the center-to-loop distance, one real square at a time, so the total distance shown
+// always equals the die exactly, first roll included.
+describe('TurnManager - Parkiller corridor crossing (PK1)', () => {
+  it("a roll smaller than the remaining corridor doesn't reach the loop at all - trackPosition is untouched", () => {
+    const board = buildTestBoard() // Red's corridorLength is 6
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+
+    const dice = new ScriptedDice([1, 1, 4]) // dieA=1, dieB=1 (no legal move), blackDie=4 < corridorLength(6)
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let result: ParkillerMoveResult | null = null
+    manager.parkillerMoved.on((r) => (result = r))
+
+    manager.requestRoll()
+
+    expect(result).toEqual({
+      color: 'Red',
+      before: 19,
+      after: 19, // untouched - never reached the loop this roll
+      beforeCorridorPosition: 0,
+      afterCorridorPosition: 4,
+      capturedPawn: null,
+      capturedParkillerColor: null,
+    })
+    expect(red.parkiller.corridorPosition).toBe(4)
+    expect(red.parkiller.trackPosition).toBe(19) // still the created default, never touched
+  })
+
+  it('crosses the remaining corridor exactly, landing precisely on the home-entrance square with nothing left over', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+
+    const dice = new ScriptedDice([1, 1, 6]) // blackDie=6 === corridorLength(6) exactly
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    manager.requestRoll()
+
+    expect(red.parkiller.corridorPosition).toBe(6)
+    expect(red.parkiller.trackPosition).toBe(19) // home-entrance square itself, no leftover pips
+  })
+
+  it('crosses the corridor over two separate rolls, then spends any leftover on the loop the roll it finishes crossing', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+
+    // Red roll 1: dieA=1,dieB=2 (not a double, sum=3 != exitRoll 5, no legal move -> turn passes to
+    // Blue), blackDie=4 (< corridorLength 6) - only advances corridorPosition, stays off the loop.
+    // Blue roll: same shape dice, just to pass its own turn cleanly back to Red.
+    // Red roll 2 (its own next real turn, not a bonus turn - PK2/PK6a explicitly skips the black
+    // die's effect on a bonus turn, so that couldn't demonstrate this at all): blackDie=3 - crosses
+    // the remaining 2 corridor squares, with 1 pip left over to spend moving along the loop: 19 -> 18.
+    const dice = new ScriptedDice([1, 2, 4, 1, 2, 1, 1, 2, 3])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    manager.requestRoll() // Red
+    expect(red.parkiller.corridorPosition).toBe(4)
+    expect(red.parkiller.trackPosition).toBe(19)
+
+    manager.requestRoll() // Blue's own turn
+    manager.requestRoll() // back to Red
+    expect(red.parkiller.corridorPosition).toBe(6)
+    expect(red.parkiller.trackPosition).toBe(18) // 2 squares crossed the remaining corridor, 1 leftover pip moved the loop
+  })
+
+  it('captures a pawn only on the roll that actually crosses onto the loop, never while still in the corridor', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 19 // sitting right on Red's own home-entrance square
+
+    const dice = new ScriptedDice([1, 1, 6]) // blackDie=6 === corridorLength(6) - crosses exactly onto 19
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let result: ParkillerMoveResult | null = null
+    manager.parkillerMoved.on((r) => (result = r))
+
+    manager.requestRoll()
+
+    expect(result).toEqual({
+      color: 'Red',
+      before: 19,
+      after: 19,
+      beforeCorridorPosition: 0,
+      afterCorridorPosition: 6,
+      capturedPawn: blue.pieces[0],
+      capturedParkillerColor: null,
+    })
+    expect(blue.pieces[0].state).toBe('InYard')
+  })
+
+  it("an opposing Parkiller still crossing its own corridor can't be captured - its trackPosition is stale, not a real square", () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.parkiller.corridorPosition = red.parkiller.corridorLength
+    // blue.parkiller.trackPosition still defaults to Blue's own homeEntranceTrackIndex (9) - stale,
+    // since blue.parkiller.corridorPosition is still 0 (fresh, hasn't crossed its own corridor yet).
+
+    const dice = new ScriptedDice([1, 1, 10]) // Red's parkiller: 19 -> 9 (Blue's stale trackPosition)
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    manager.requestRoll()
+
+    expect(red.parkiller.trackPosition).toBe(9)
+    expect(blue.parkiller.state).toBe('InPlay') // not actually there - never captured
   })
 })

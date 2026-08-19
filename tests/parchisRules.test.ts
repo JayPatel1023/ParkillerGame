@@ -287,6 +287,7 @@ describe('parchisRules', () => {
       const blue = createPlayerState('Blue', board)
       red.pieces[0].state = 'OnTrack'
       red.pieces[0].trackPosition = 2
+      blue.parkiller.corridorPosition = blue.parkiller.corridorLength
       blue.parkiller.trackPosition = 5 // not a safe square on this test board
 
       const settings = defaultRuleSettings()
@@ -306,6 +307,7 @@ describe('parchisRules', () => {
       const blue = createPlayerState('Blue', board)
       red.pieces[0].state = 'OnTrack'
       red.pieces[0].trackPosition = 7
+      blue.parkiller.corridorPosition = blue.parkiller.corridorLength
       blue.parkiller.trackPosition = 10 // a safe square on this test board
 
       const settings = defaultRuleSettings()
@@ -323,6 +325,7 @@ describe('parchisRules', () => {
       const blue = createPlayerState('Blue', board)
       red.pieces[0].state = 'OnTrack'
       red.pieces[0].trackPosition = 2
+      blue.parkiller.corridorPosition = blue.parkiller.corridorLength
       blue.parkiller.trackPosition = 5
 
       const settings = defaultRuleSettings()
@@ -380,6 +383,7 @@ describe('parchisRules', () => {
       defender.pieces[0].trackPosition = 10 // safe square
       attacker.pieces[0].state = 'OnTrack'
       attacker.pieces[0].trackPosition = 7
+      defender.parkiller.corridorPosition = defender.parkiller.corridorLength
       defender.parkiller.trackPosition = 12
       attacker.pieces[1].state = 'OnTrack'
       attacker.pieces[1].trackPosition = 9
@@ -405,6 +409,7 @@ describe('parchisRules', () => {
       const defender = createPlayerState('Blue', board)
       attacker.pieces[0].state = 'OnTrack'
       attacker.pieces[0].trackPosition = 7
+      defender.parkiller.corridorPosition = defender.parkiller.corridorLength
       defender.parkiller.trackPosition = 10
 
       const settings = defaultRuleSettings()

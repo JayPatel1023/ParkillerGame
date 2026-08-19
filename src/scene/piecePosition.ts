@@ -128,20 +128,34 @@ export function getCaptureReturnWaypoints(
 // PK1: the rulebook places the Parkiller "at the finish square in the center of the board" before
 // its first move, not out on the main loop - reused directly as its pre-move rest/hop-origin
 // coordinate, since it's already the exact per-color center-area point the corridor art converges
-// on (no new board data needed).
+// on (no new board data needed). Equivalent to parkillerCorridorWaypoint(color, 0, definition).
 export function parkillerCenterWaypoint(color: PieceColor, definition: BoardDefinition): [number, number] | null {
   const lane = definition.playerLanes.find((l) => l.color === color)
   return lane?.homeCorridorWaypoints[lane.homeCorridorWaypoints.length - 1] ?? null
 }
 
-/** Null once eliminated (PK6) - it's simply not rendered anywhere from that point on. Before its
- * first move (Parkiller.hasMoved false), renders at the center rather than trackPosition's
- * home-entrance square - see parkillerCenterWaypoint. */
+// The waypoint for a Parkiller that has crossed exactly `corridorPosition` of its own lane's home
+// corridor squares, walking from the center (0, the lane's own last corridor waypoint) toward the
+// loop (corridorPosition === the lane's own corridorLength lands on the home-entrance track square
+// itself, one past the corridor - callers should use trackWaypoints directly at that point instead,
+// since corridorPosition can legitimately keep counting past corridorLength once further loop
+// movement has happened, only the crossing moment itself is >= corridorLength).
+export function parkillerCorridorWaypoint(color: PieceColor, corridorPosition: number, definition: BoardDefinition): [number, number] | null {
+  const lane = definition.playerLanes.find((l) => l.color === color)
+  if (!lane) return null
+  const index = lane.homeCorridorWaypoints.length - 1 - corridorPosition
+  return lane.homeCorridorWaypoints[index] ?? null
+}
+
+/** Null once eliminated (PK6) - it's simply not rendered anywhere from that point on. Still
+ * crossing its own lane's home corridor (corridorPosition < corridorLength - see that field's own
+ * doc comment)? Renders at the matching corridor waypoint instead of trackPosition, which is stale/
+ * meaningless until fully crossed. */
 export function getParkillerWaypoint(parkiller: Parkiller, definition: BoardDefinition): [number, number] | null {
   if (parkiller.state !== 'InPlay') return null
-  if (!parkiller.hasMoved) {
-    const center = parkillerCenterWaypoint(parkiller.color, definition)
-    if (center) return center
+  if (parkiller.corridorPosition < parkiller.corridorLength) {
+    const wp = parkillerCorridorWaypoint(parkiller.color, parkiller.corridorPosition, definition)
+    if (wp) return wp
   }
   return definition.trackWaypoints[parkiller.trackPosition] ?? null
 }
@@ -163,25 +177,50 @@ export function getParkillerHopWaypoints(before: number, after: number, definiti
   return hops
 }
 
-// PK1: the Parkiller's very first move needs to walk the connecting path from the center hub (its
-// hopFrom - see parkillerCenterWaypoint) out to the main loop before continuing along it like every
-// later move. This has gone back and forth: an instant single lerp across the whole stretch read as
-// a teleport (screenshotted with arrows across the board); a single smooth glide across it (no
-// discrete steps) got reported back as "그냥 뛰여넘어서 가게" - "just skipping/jumping over it" -
-// still not a real walk. The client's explicit instruction, most recently: "중앙홀에서부터 한칸한칸
-// 시작하게 만들어달" - make it start one square at a time from the center hall. So this walks the
-// same homeCorridorWaypoints a regular piece uses in the opposite direction on its way home (already
-// the exact path connecting those two points - no new board data needed), one discrete hop per
-// square, traversed in reverse (center-adjacent to loop-adjacent) since this class walks it in
-// reverse, then the home-entrance square itself (never a "hop" in the normal case, since hopFrom
-// already sits right there - here it has to be one), then the usual loop walk. Every hop here -
-// corridor included - uses ParkillerMesh's normal HOP_DURATION pace, no special glide/fast
-// treatment, so it reads as the same kind of step-by-step walk every other move already is.
-export function getParkillerFirstMoveHopWaypoints(color: PieceColor, after: number, definition: BoardDefinition): [number, number][] {
+/** One combined position - both fields always meaningful together, see Parkiller's own fields. */
+export interface ParkillerPosition {
+  trackPosition: number
+  corridorPosition: number
+}
+
+// Reconstructs a Parkiller's actual hop-by-hop path for one roll, covering any mix of: still
+// crossing its own lane's home corridor, crossing fully onto the loop this roll, or already being
+// on the loop (a plain getParkillerHopWaypoints walk). The client's own explicit, repeated
+// instruction settled this: the corridor is walked one real square at a time, spending the black
+// die itself (see Parkiller.corridorPosition and resolveParkillerMove in turnManager.ts) - not an
+// extra distance layered on top of it (three earlier attempts - instant jump, sped-up walk, smooth
+// glide - all still covered corridorLength + dieValue and got rejected every time as not matching
+// the die: "한발자국을 움직여야하는데 8+1=9발자국갔다").
+export function getParkillerMoveHopWaypoints(
+  color: PieceColor,
+  before: ParkillerPosition,
+  after: ParkillerPosition,
+  definition: BoardDefinition,
+): [number, number][] {
   const lane = definition.playerLanes.find((l) => l.color === color)
   if (!lane) return []
-  const connectingHops = lane.homeCorridorWaypoints.slice(0, -1).reverse()
-  const entranceWaypoint = definition.trackWaypoints[lane.homeEntranceTrackIndex]
-  const loopHops = getParkillerHopWaypoints(lane.homeEntranceTrackIndex, after, definition)
-  return [...connectingHops, ...(entranceWaypoint ? [entranceWaypoint] : []), ...loopHops]
+  const corridorLength = lane.homeCorridorWaypoints.length
+  const hops: [number, number][] = []
+
+  // Every corridor square actually crossed this roll (none at all once already past the corridor).
+  const corridorHopsEnd = Math.min(after.corridorPosition, corridorLength)
+  for (let crossed = before.corridorPosition + 1; crossed <= corridorHopsEnd; crossed++) {
+    const wp = parkillerCorridorWaypoint(color, crossed, definition)
+    if (wp) hops.push(wp)
+  }
+
+  if (after.corridorPosition < corridorLength) return hops // didn't reach the loop this roll at all
+
+  if (before.corridorPosition < corridorLength) {
+    // This is the roll that crosses - the entrance square itself is a real hop here (never one in
+    // the normal case, since hopFrom already sits right there once past the corridor).
+    const entranceWaypoint = definition.trackWaypoints[lane.homeEntranceTrackIndex]
+    if (entranceWaypoint) hops.push(entranceWaypoint)
+    hops.push(...getParkillerHopWaypoints(lane.homeEntranceTrackIndex, after.trackPosition, definition))
+  } else {
+    // Already fully on the loop before this roll even started - a plain loop walk.
+    hops.push(...getParkillerHopWaypoints(before.trackPosition, after.trackPosition, definition))
+  }
+
+  return hops
 }

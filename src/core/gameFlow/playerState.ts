@@ -10,11 +10,11 @@ export interface PlayerState {
 }
 
 export function createPlayerState(color: PieceColor, board: BoardData): PlayerState {
-  const homeEntranceTrackIndex = board.lanes[color]?.homeEntranceTrackIndex ?? 0
+  const lane = board.lanes[color]
   return {
     color,
     pieces: [0, 1, 2, 3].map((i) => createPiece(color, i)),
-    parkiller: createParkiller(color, homeEntranceTrackIndex),
+    parkiller: createParkiller(color, lane?.homeEntranceTrackIndex ?? 0, lane?.corridorLength ?? 0),
   }
 }
 

@@ -2,7 +2,7 @@ import type { BoardData } from '../board/boardData'
 import { Dice, type DiceLike } from '../dice'
 import type { PieceColor } from '../pieceColor'
 import { snapshotPiece, type Piece, type PieceSnapshot } from '../pieces/piece'
-import { applyMove, getValidMoves, resolveBarrierElimination, wouldCapture } from '../rules/parchisRules'
+import { applyMove, getValidMoves, isParkillerOnTrack, resolveBarrierElimination, wouldCapture } from '../rules/parchisRules'
 import type { MoveOption, MoveResult } from '../rules/moveOption'
 import type { RuleSettings } from '../rules/ruleSettings'
 import { hasWon, type PlayerState } from './playerState'
@@ -16,14 +16,19 @@ export interface DiceRoll {
 
 export interface ParkillerMoveResult {
   color: PieceColor
+  /** trackPosition before/after this roll - only meaningful once beforeCorridorPosition/
+   * afterCorridorPosition (below) have reached the lane's own corridorLength; while still crossing
+   * the corridor, these just hold whatever trackPosition was last set to (harmless, unused by the
+   * scene layer for that stretch - see getParkillerMoveHopWaypoints in piecePosition.ts). */
   before: number
   after: number
+  /** Parkiller.corridorPosition before/after this roll (see that field's own doc comment) - the
+   * scene layer uses these, not a separate "first move" flag, to know exactly which stretch of this
+   * move (still-in-corridor, corridor-to-loop crossing, pure loop, or some mix) to animate. */
+  beforeCorridorPosition: number
+  afterCorridorPosition: number
   capturedPawn: Piece | null
   capturedParkillerColor: PieceColor | null
-  /** True only for the roll that actually moves this Parkiller for the first time - lets BoardScene
-   * animate that one hop starting from the board's center (see Parkiller.hasMoved) instead of the
-   * home-entrance track square every later hop starts from. */
-  firstMove: boolean
 }
 
 /** Everything BoardScene needs to play a piece's move as a square-by-square hop instead of an
@@ -203,34 +208,104 @@ export class TurnManager {
   }
 
   // Reported when the black die is skipped on a bonus turn (see requestRoll) - the Parkiller
-  // simply didn't move, so before === after gives the animation system zero hops for free.
+  // simply didn't move, so before === after (both trackPosition and corridorPosition) gives the
+  // animation system zero hops for free.
   private noopParkillerResult(): ParkillerMoveResult {
     const player = this.currentPlayer
-    const before = player.parkiller.trackPosition
-    return { color: player.color, before, after: before, capturedPawn: null, capturedParkillerColor: null, firstMove: false }
+    const { trackPosition, corridorPosition } = player.parkiller
+    return {
+      color: player.color,
+      before: trackPosition,
+      after: trackPosition,
+      beforeCorridorPosition: corridorPosition,
+      afterCorridorPosition: corridorPosition,
+      capturedPawn: null,
+      capturedParkillerColor: null,
+    }
   }
 
   // PK2/PK3: moves the current player's Parkiller by the black die's value, opposite direction
-  // (decreasing track index) from every regular piece. PK5/PK6: eliminates whichever opposing
-  // pawn or Parkiller it lands on exactly, if any - a captured pawn goes back to its yard with no
-  // reward to its owner (PK5); a captured opposing Parkiller earns this player PK7's reward,
-  // offered by requestRoll() right after this returns. PK5/PK10: landing on an existing barrier
-  // (2 pawns already sharing that square) doesn't just coexist or get blocked - it always
-  // eliminates exactly one of the two, per resolveBarrierElimination's own rules.
+  // (decreasing track index) from every regular piece - once it's fully crossed its own lane's home
+  // corridor (see Parkiller.corridorPosition's own doc comment). Every roll before that just spends
+  // the die crossing that corridor instead, one square at a time exactly like every other move in
+  // the game - the client's own explicit instruction, after three earlier attempts (instant jump,
+  // sped-up walk, smooth glide) all still moved corridorLength + dieValue total and got rejected
+  // every time for not matching the die ("한발자국을 움직여야하는데 8+1=9발자국갔다" - a die of 1
+  // should mean exactly one square, not 9). PK5/PK6: eliminates whichever opposing pawn or Parkiller
+  // it lands on exactly, if any - a captured pawn goes back to its yard with no reward to its owner
+  // (PK5); a captured opposing Parkiller earns this player PK7's reward, offered by requestRoll()
+  // right after this returns. PK5/PK10: landing on an existing barrier (2 pawns already sharing that
+  // square) doesn't just coexist or get blocked - it always eliminates exactly one of the two, per
+  // resolveBarrierElimination's own rules. None of this applies while still crossing the corridor -
+  // there's nothing on the shared track to land on or capture until it actually gets there.
   private resolveParkillerMove(blackDieValue: number): ParkillerMoveResult {
     const player = this.currentPlayer
     const parkiller = player.parkiller
     const before = parkiller.trackPosition
+    const beforeCorridorPosition = parkiller.corridorPosition
 
     if (parkiller.state !== 'InPlay') {
-      return { color: player.color, before, after: before, capturedPawn: null, capturedParkillerColor: null, firstMove: false }
+      return {
+        color: player.color,
+        before,
+        after: before,
+        beforeCorridorPosition,
+        afterCorridorPosition: beforeCorridorPosition,
+        capturedPawn: null,
+        capturedParkillerColor: null,
+      }
     }
 
-    const firstMove = !parkiller.hasMoved
-    parkiller.hasMoved = true
+    if (beforeCorridorPosition < parkiller.corridorLength) {
+      const remaining = parkiller.corridorLength - beforeCorridorPosition
+      if (blackDieValue < remaining) {
+        // Doesn't reach the loop yet this roll - the whole roll is spent crossing more corridor.
+        parkiller.corridorPosition = beforeCorridorPosition + blackDieValue
+        return {
+          color: player.color,
+          before,
+          after: before,
+          beforeCorridorPosition,
+          afterCorridorPosition: parkiller.corridorPosition,
+          capturedPawn: null,
+          capturedParkillerColor: null,
+        }
+      }
+      // Crosses fully onto the loop this roll, with any leftover pips spent moving along it.
+      parkiller.corridorPosition = parkiller.corridorLength
+      const leftover = blackDieValue - remaining
+      const after = mod(before - leftover, this.board.trackLength)
+      parkiller.trackPosition = after
+      const { capturedPawn, capturedParkillerColor } = this.resolveParkillerCollisions(player, after)
+      return {
+        color: player.color,
+        before,
+        after,
+        beforeCorridorPosition,
+        afterCorridorPosition: parkiller.corridorPosition,
+        capturedPawn,
+        capturedParkillerColor,
+      }
+    }
+
     const after = mod(before - blackDieValue, this.board.trackLength)
     parkiller.trackPosition = after
+    const { capturedPawn, capturedParkillerColor } = this.resolveParkillerCollisions(player, after)
+    return {
+      color: player.color,
+      before,
+      after,
+      beforeCorridorPosition,
+      afterCorridorPosition: beforeCorridorPosition,
+      capturedPawn,
+      capturedParkillerColor,
+    }
+  }
 
+  private resolveParkillerCollisions(
+    player: PlayerState,
+    after: number,
+  ): { capturedPawn: Piece | null; capturedParkillerColor: PieceColor | null } {
     let capturedPawn: Piece | null = null
     if (!this.board.safeTrackIndices.has(after)) {
       const piecesThere: Piece[] = []
@@ -253,14 +328,14 @@ export class TurnManager {
     let capturedParkillerColor: PieceColor | null = null
     for (const opponent of this.players) {
       if (opponent.color === player.color) continue
-      if (opponent.parkiller.state === 'InPlay' && opponent.parkiller.trackPosition === after) {
+      if (isParkillerOnTrack(opponent.parkiller) && opponent.parkiller.trackPosition === after) {
         opponent.parkiller.state = 'Eliminated'
         capturedParkillerColor = opponent.color
         break
       }
     }
 
-    return { color: player.color, before, after, capturedPawn, capturedParkillerColor, firstMove }
+    return { capturedPawn, capturedParkillerColor }
   }
 
   private offerMoves() {

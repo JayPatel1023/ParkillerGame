@@ -1,12 +1,23 @@
 import type { BoardData } from '../board/boardData'
 import type { PlayerState } from '../gameFlow/playerState'
 import type { PieceColor } from '../pieceColor'
+import type { Parkiller } from '../pieces/parkiller'
 import type { Piece } from '../pieces/piece'
 import type { DiceSource, MoveOption, MoveResult } from './moveOption'
 import type { RuleSettings } from './ruleSettings'
 
 function mod(value: number, modulus: number): number {
   return ((value % modulus) + modulus) % modulus
+}
+
+// A Parkiller still crossing its own lane's home corridor (see Parkiller.corridorPosition's own
+// doc comment) has a trackPosition that's stale/meaningless - it's still sitting at
+// homeEntranceTrackIndex, unmoved, until corridorPosition actually reaches corridorLength. Every
+// track-position collision check (capturing it, being captured by it, being endangered by it) needs
+// to gate on this first, or a pawn landing on that lane's own entrance square would falsely "catch"
+// a Parkiller that's still visually back in the corridor, nowhere near the shared track at all.
+export function isParkillerOnTrack(parkiller: Parkiller): boolean {
+  return parkiller.state === 'InPlay' && parkiller.corridorPosition >= parkiller.corridorLength
 }
 
 // PC2 ("There can never be more than two pawns per square") / PC2.4 (barriers): verified directly
@@ -191,7 +202,7 @@ export function wouldCapture(
   const usesSingleDie = move.diceSource === 'dieA' || move.diceSource === 'dieB'
   for (const opponent of allPlayers) {
     if (opponent.color === move.piece.color) continue
-    if (allowParkillerCapture && usesSingleDie && opponent.parkiller.state === 'InPlay' && opponent.parkiller.trackPosition === pos)
+    if (allowParkillerCapture && usesSingleDie && isParkillerOnTrack(opponent.parkiller) && opponent.parkiller.trackPosition === pos)
       return true
   }
 
@@ -326,7 +337,7 @@ function captureAt(
 function captureParkillerAt(mover: Piece, trackPosition: number, allPlayers: readonly PlayerState[]): PieceColor | null {
   for (const opponent of allPlayers) {
     if (opponent.color === mover.color) continue
-    if (opponent.parkiller.state === 'InPlay' && opponent.parkiller.trackPosition === trackPosition) {
+    if (isParkillerOnTrack(opponent.parkiller) && opponent.parkiller.trackPosition === trackPosition) {
       opponent.parkiller.state = 'Eliminated'
       return opponent.color
     }
@@ -347,7 +358,7 @@ function unprotectedOpposingParkillerColorAt(
   if (board.safeTrackIndices.has(trackPosition)) return null
   for (const opponent of allPlayers) {
     if (opponent.color === color) continue
-    if (opponent.parkiller.state === 'InPlay' && opponent.parkiller.trackPosition === trackPosition) return opponent.color
+    if (isParkillerOnTrack(opponent.parkiller) && opponent.parkiller.trackPosition === trackPosition) return opponent.color
   }
   return null
 }
