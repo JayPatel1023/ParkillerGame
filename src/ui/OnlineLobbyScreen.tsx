@@ -214,6 +214,9 @@ export default function OnlineLobbyScreen() {
   function startGame() {
     const connection = connectionRef.current
     if (!connection) return
+    // Belt-and-suspenders alongside the disabled button below - every real seat must be filled
+    // before a game can start at all (see the lobby's own banner for why).
+    if (connection.getActors().length < playerCount) return
     const colors = TURN_ORDER_BY_COUNT[playerCount]
     const board = toBoardData(BOARD_DEFINITIONS[playerCount])
     const players = colors.map((color) => createPlayerState(color, board))
@@ -344,19 +347,49 @@ export default function OnlineLobbyScreen() {
                       <span style={{ ...seatDotStyle, background: getColor(color) }} />
                       <span style={{ fontWeight: 700, flex: 1 }}>{color}</span>
                       <span style={{ color: occupant ? '#bfe8bf' : '#a89a80', fontSize: 13 }}>
-                        {occupant ? (occupant.isLocal ? '(vos)' : 'jugador conectado') : 'vacío -> bot'}
+                        {occupant ? (occupant.isLocal ? '(vos)' : 'jugador conectado') : 'esperando jugador...'}
                       </span>
                     </div>
                   )
                 })
               })()}
             </div>
+            {/* Reported directly, every board size (2p-6p) the same way: starting before every real
+                seat was filled is exactly what let a bot silently take over a seat a friend was
+                still in the middle of joining - the room-closing fix (see closeRoom()) stops a LATE
+                join from becoming a phantom player, but starting early never needed a late join to
+                go wrong in the first place. Requiring every seat filled before "Empezar partida" is
+                even clickable removes the whole failure mode at the source instead of reacting to
+                it - once full, a clear banner announces it's ready, matching "다들어왔다는 alert". */}
+            {seats.length >= playerCount ? (
+              <div
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 10,
+                  background: 'rgba(76, 175, 80, 0.18)',
+                  border: '1px solid rgba(120, 220, 130, 0.5)',
+                  color: '#bfe8bf',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  textAlign: 'center',
+                }}
+              >
+                ¡Están todos conectados! Ya se puede empezar.
+              </div>
+            ) : (
+              <p style={hintStyle}>Esperando a que se unan todos los jugadores ({seats.length}/{playerCount})...</p>
+            )}
             {connectionRef.current.isMasterClient() ? (
-              <button className="chunky-btn" onClick={startGame} style={chunkyButtonStyle(true)}>
+              <button
+                className="chunky-btn"
+                onClick={startGame}
+                disabled={seats.length < playerCount}
+                style={chunkyButtonStyle(seats.length >= playerCount)}
+              >
                 Empezar partida
               </button>
             ) : (
-              <p style={hintStyle}>Esperando a que el anfitrión empiece la partida...</p>
+              seats.length >= playerCount && <p style={hintStyle}>Esperando a que el anfitrión empiece la partida...</p>
             )}
           </div>
         )}
