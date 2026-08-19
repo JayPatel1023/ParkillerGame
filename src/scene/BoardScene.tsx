@@ -19,6 +19,7 @@ import { useBoardColorSampler } from './useBoardColorSampler'
 import {
   getCaptureReturnWaypoints,
   getHopWaypoints,
+  getParkillerFirstMoveHopWaypoints,
   getParkillerHopWaypoints,
   getParkillerWaypoint,
   getPieceWaypoint,
@@ -438,9 +439,14 @@ export function BoardScene({
     const fromWaypoint = parkillerAnimation.firstMove
       ? (parkillerCenterWaypoint(parkillerAnimation.color, definition) ?? definition.trackWaypoints[parkillerAnimation.before])
       : definition.trackWaypoints[parkillerAnimation.before]
+    // The first move also needs the connecting path from the center out to the loop (see
+    // getParkillerFirstMoveHopWaypoints' own comment) - every later move just hops along the loop.
+    const hops = parkillerAnimation.firstMove
+      ? getParkillerFirstMoveHopWaypoints(parkillerAnimation.color, parkillerAnimation.after, definition)
+      : getParkillerHopWaypoints(parkillerAnimation.before, parkillerAnimation.after, definition)
     return {
       hopFrom: toWorldPosition(fromWaypoint),
-      hops: getParkillerHopWaypoints(parkillerAnimation.before, parkillerAnimation.after, definition).map(toWorldPosition),
+      hops: hops.map(toWorldPosition),
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parkillerAnimation?.color, parkillerAnimation?.before, parkillerAnimation?.after, parkillerAnimation?.firstMove, definition])
