@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { PlayerState } from '../core/gameFlow/playerState'
 import type { DiceRoll, MoveAnimationInfo, ParkillerMoveResult, RewardGrant } from '../core/gameFlow/turnManager'
 import type { TurnManagerLike } from '../core/gameFlow/turnManagerLike'
@@ -40,6 +40,14 @@ export function useTurnManager(turnManager: TurnManagerLike) {
   const [eliminatedByDoubles, setEliminatedByDoubles] = useState<Piece | null>(null)
   const [pendingReward, setPendingReward] = useState<RewardGrant | null>(null)
   const [forfeitedReward, setForfeitedReward] = useState<RewardGrant | null>(null)
+  // Reported directly: the Parkiller visibly started hopping before the dice even finished
+  // spinning/revealing - parkillerMoved fires synchronously right after diceRolled, well before
+  // diceRolled's own DICE_SPIN_MS reveal delay below, so setParkillerAnimation was firing
+  // immediately while setLastRoll (and the dice faces on screen) were still deliberately held back.
+  // Buffered here instead and only applied inside the same setTimeout that reveals the dice, so the
+  // Parkiller's own move visually starts at the same instant the roll it came from is revealed, not
+  // before.
+  const pendingParkillerResultRef = useRef<ParkillerMoveResult | null>(null)
 
   useEffect(() => {
     const unsubscribers = [
@@ -58,9 +66,15 @@ export function useTurnManager(turnManager: TurnManagerLike) {
           setEliminatedByDoubles(null)
           setPendingReward(null)
           setForfeitedReward(null)
+          if (pendingParkillerResultRef.current) {
+            setParkillerAnimation(pendingParkillerResultRef.current)
+            pendingParkillerResultRef.current = null
+          }
         }, DICE_SPIN_MS)
       }),
-      turnManager.parkillerMoved.on((result) => setParkillerAnimation(result)),
+      turnManager.parkillerMoved.on((result) => {
+        pendingParkillerResultRef.current = result
+      }),
       turnManager.moveChoicesReady.on((moves) => setPendingMoves(moves)),
       turnManager.moveNotPossible.on(() => setPendingMoves([])),
       turnManager.moveApplied.on(() => {
