@@ -43,4 +43,8 @@ export interface TurnManagerLike {
   start(): void
   requestRoll(): void
   submitMove(chosenPiece: Piece): MoveResult | null
+  /** Online-only (HostTurnManagerBridge/RemoteTurnManager): stops listening for further network
+   * messages. Optional so a local TurnManager (nothing to dispose - no subscriptions of its own)
+   * still satisfies this interface structurally with zero changes, same as every other member. */
+  dispose?(): void
 }
