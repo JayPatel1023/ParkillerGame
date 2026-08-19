@@ -57,11 +57,15 @@ export interface RewardGrant {
   reason: RewardReason
 }
 
-// PC 3 (capture) and PC 4 (finish) reward sizes, in squares. PK7 rewards a Parkiller kill at the
-// same 20-square size ("10 x 2") as a regular capture, so it reuses CAPTURE_REWARD rather than
-// needing its own constant.
-const CAPTURE_REWARD = 20
-const FINISH_REWARD = 10
+// PC 3/PC 4/PK7/PK8's reward size, in squares - both a capture (own or via the Parkiller) and a
+// finish grant reward(s) sized in these 10-square units, never one lump sum. A capture is worth
+// two of them ("10 x 2"), each offered, resolved and forfeited *independently* (see
+// pendingRewardQueue/offerNextReward) - reported directly: the previous single-20 model silently
+// forfeited the whole thing whenever no piece could make the full 20-square jump, even if a piece
+// could've made one of the two 10s ("La recompensa es de 10x2 ...si puede mover 10 debe hacerlo,
+// se pierde el otro 10 si no se puede mover"), confirmed against the rulebook's own PC4/PK8 text
+// ("cada salto de 10 casillas... el premio se sumaría al ya existente"). A finish is worth one.
+const REWARD_UNIT = 10
 
 function mod(value: number, modulus: number): number {
   return ((value % modulus) + modulus) % modulus
@@ -123,6 +127,11 @@ export class TurnManager {
   private nextArrivalSequence = 1
   private diceState: DiceState | null = null
   private pendingMoves: MoveOption[] | null = null
+  // PC4/PK8's "10 x 2" reward units still owed - each drained one at a time via offerNextReward,
+  // so a piece unable to make one 10-square segment only forfeits *that* segment, not the pair. A
+  // capture made while collecting an earlier reward pushes more onto this queue rather than
+  // replacing it (PK8: "el premio se sumaría al ya existente").
+  private pendingRewardQueue: RewardReason[] = []
   // PK2/PK6a: the black die only rolls once per actual turn - skipped on the bonus turn granted by
   // a double, verified directly against the reference implementation's turn controller
   // ("if (!obj_dado.tiene_otro_turno && parkiSigueVivo(...))"). Set by endTurn() for the *next*
@@ -200,7 +209,8 @@ export class TurnManager {
     // offerReward()'s own fallback (continueAfterMove()) already knows how to fall through to
     // offerMoves() once the reward is spent or forfeited.
     if (parkillerResult.capturedParkillerColor) {
-      this.offerReward({ amount: CAPTURE_REWARD, reason: 'capture' })
+      this.pendingRewardQueue.push('capture', 'capture')
+      this.offerNextReward()
       return
     }
 
@@ -443,24 +453,37 @@ export class TurnManager {
     // any dice still unspent. A move landing on this same reward can itself capture again, in
     // which case PC 5 adds the new reward on top rather than replacing it. PK7 rewards eliminating
     // an opposing Parkiller the same way a regular capture does.
-    if (result.capturedPiece || result.capturedParkillerColor) this.offerReward({ amount: CAPTURE_REWARD, reason: 'capture' })
-    if (result.pieceFinished) this.offerReward({ amount: FINISH_REWARD, reason: 'finish' })
-    if (result.capturedPiece || result.capturedParkillerColor || result.pieceFinished) return result
+    if (result.capturedPiece || result.capturedParkillerColor) this.pendingRewardQueue.push('capture', 'capture')
+    if (result.pieceFinished) this.pendingRewardQueue.push('finish')
 
-    this.continueAfterMove()
+    this.offerNextReward()
     return result
   }
 
-  // Offers a bonus move for an earned reward - restricted (via getValidMoves' own exitRoll check)
-  // to pieces already in play, per PC 5 ("you cannot remove a pawn from the shelter... and then
-  // claim it"). If nothing can use it, PC 5 forfeits it outright rather than holding it for later.
-  // Deliberately not subject to mandatory capture (verified against the reference: reward moves
-  // let the player pick freely which piece to advance, capture available or not).
+  // Drains pendingRewardQueue one 10-square unit at a time - each unit gets its own independent
+  // offerReward call (own mandatory-if-possible check, own forfeit if not), rather than resolving
+  // the whole queue as one lump sum. Falls through to continueAfterMove once nothing's left owed,
+  // whether that's because the queue started empty (an ordinary move) or just ran dry.
+  private offerNextReward() {
+    const reason = this.pendingRewardQueue.shift()
+    if (!reason) {
+      this.continueAfterMove()
+      return
+    }
+    this.offerReward({ amount: REWARD_UNIT, reason })
+  }
+
+  // Offers a bonus move for one earned reward unit - restricted (via getValidMoves' own exitRoll
+  // check) to pieces already in play, per PC 5 ("you cannot remove a pawn from the shelter... and
+  // then claim it"). If nothing can use it, PC 5 forfeits just this unit rather than holding it for
+  // later, then moves on to whatever else is still queued. Deliberately not subject to mandatory
+  // capture (verified against the reference: reward moves let the player pick freely which piece to
+  // advance, capture available or not).
   private offerReward(grant: RewardGrant) {
     const moves = getValidMoves(this.board, this.currentPlayer, this.players, grant.amount, this.settings, 'reward')
     if (moves.length === 0) {
       this.rewardForfeited.emit(grant)
-      this.continueAfterMove()
+      this.offerNextReward()
       return
     }
     this.pendingMoves = moves
