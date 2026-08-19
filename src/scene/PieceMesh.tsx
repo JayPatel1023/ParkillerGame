@@ -183,11 +183,16 @@ export function PieceMesh({
   const prevSelectableRef = useRef(false)
   const flashElapsedRef = useRef(0)
 
+  // See ParkillerMesh's own matching comment - keyed off hopFrom (BoardScene's own "an animation
+  // was actually requested" signal), not hops.length alone, so a real but zero-hop update (none
+  // occur for a regular piece today, but this mirrors ParkillerMesh defensively rather than leaving
+  // an identical latent trap for whenever one does) still fires onHopsComplete exactly once instead
+  // of never.
   useEffect(() => {
     hopIndexRef.current = 0
     elapsedRef.current = 0
-    notifiedRef.current = hops.length === 0
-  }, [hops])
+    notifiedRef.current = hopFrom === null
+  }, [hops, hopFrom])
 
   useFrame((_, rawDelta) => {
     const mesh = meshRef.current
