@@ -26,16 +26,17 @@ const BOT_THINK_DELAY_MS = 700
 const DICE_SPIN_MS = 450
 const HOP_DURATION_MS = 320
 // The Parkiller's own black die is 1-6, so an ordinary hop after a roll takes at most 6 squares'
-// worth of hop time - but its very first move ever also walks the connecting path from the board's
-// center hub out to the main loop first, one square at a time at the same normal pace as every
-// other hop (see getParkillerFirstMoveHopWaypoints in piecePosition.ts - PK1, per the client's own
-// explicit instruction that this stretch read as "just skipping/jumping over it" when it was a
-// single glide instead). This class has no visibility into Parkiller.hasMoved or board data to size
-// that stretch exactly (this class doesn't get told the actual black die value either, only
-// MoveOption for the white dice), so this generously covers the worst case (every real board's own
-// 8-square corridor + the loop-entrance square + up to 6 loop squares, with headroom for a longer
-// hand-traced corridor) rather than risking an undercount on every roll, first or not. Derived from
-// whichever hopDurationMs the constructor actually received (see maxParkillerHopMs below), not this
+// worth of hop time - but any roll before it's fully crossed its own lane's home corridor (see
+// Parkiller.corridorPosition's own doc comment - PK1) spends the die walking that corridor one real
+// square at a time instead, at the same normal pace as every other hop (per the client's own
+// explicit instruction that a glide across it read as "just skipping/jumping over it"), and the
+// single roll that finishes crossing can also spend any leftover pips immediately moving along the
+// loop too. This class has no visibility into Parkiller.corridorPosition/corridorLength or board
+// data to size that stretch exactly (this class doesn't get told the actual black die value either,
+// only MoveOption for the white dice), so this generously covers the worst case (every real board's
+// own 8-square corridor + the loop-entrance square + up to 6 loop squares, with headroom for a
+// longer hand-traced corridor) rather than risking an undercount on any roll. Derived from whichever
+// hopDurationMs the constructor actually received (see maxParkillerHopMs below), not this
 // module-level default, so a test injecting a smaller value scales this too.
 
 /**

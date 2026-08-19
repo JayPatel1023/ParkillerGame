@@ -19,11 +19,10 @@ import { useBoardColorSampler } from './useBoardColorSampler'
 import {
   getCaptureReturnWaypoints,
   getHopWaypoints,
-  getParkillerFirstMoveHopWaypoints,
-  getParkillerHopWaypoints,
+  getParkillerMoveHopWaypoints,
   getParkillerWaypoint,
   getPieceWaypoint,
-  parkillerCenterWaypoint,
+  parkillerCorridorWaypoint,
 } from './piecePosition'
 import { toWorldPosition, estimateSquareSize, computeTileCorners, BASE_HEIGHT, FLAT_SURFACE_HEIGHT, BOARD_SIZE } from './boardGeometry'
 import { getColor } from '../core/colorPalette'
@@ -323,8 +322,15 @@ function parkillerOccupantId(color: PieceColor): string {
   return `parkiller-${color}`
 }
 
+// Still crossing its own lane's home corridor (see Parkiller.corridorPosition's own doc comment)?
+// trackPosition is stale (still sitting at homeEntranceTrackIndex, unmoved) - reported directly as
+// a real visual bug: a pawn that had just exited onto that exact entrance square got an unwanted
+// stack offset applied, as if a Parkiller still visually back in the corridor were actually sharing
+// its square, when it wasn't there at all.
 function parkillerStackKey(parkiller: PlayerState['parkiller']): string | null {
-  return parkiller.state === 'InPlay' ? `track-${parkiller.trackPosition}` : null
+  if (parkiller.state !== 'InPlay') return null
+  if (parkiller.corridorPosition < parkiller.corridorLength) return null
+  return `track-${parkiller.trackPosition}`
 }
 
 interface CaptureFlight {
@@ -432,24 +438,36 @@ export function BoardScene({
   // so this only recomputes when the move itself changes, not on every unrelated re-render.
   const parkillerHopData = useMemo(() => {
     if (!parkillerAnimation) return null
-    // PK1: the Parkiller's very first move visually departs from the board's center rather than
-    // the home-entrance track square its logical `before` position already sits on (see
-    // Parkiller.hasMoved / parkillerCenterWaypoint) - every later move hops from the real track
-    // square as before.
-    const fromWaypoint = parkillerAnimation.firstMove
-      ? (parkillerCenterWaypoint(parkillerAnimation.color, definition) ?? definition.trackWaypoints[parkillerAnimation.before])
-      : definition.trackWaypoints[parkillerAnimation.before]
-    // The first move also needs the connecting path from the center out to the loop (see
-    // getParkillerFirstMoveHopWaypoints' own comment) - every later move just hops along the loop.
-    const hops = parkillerAnimation.firstMove
-      ? getParkillerFirstMoveHopWaypoints(parkillerAnimation.color, parkillerAnimation.after, definition)
-      : getParkillerHopWaypoints(parkillerAnimation.before, parkillerAnimation.after, definition)
+    // PK1: while still crossing its own lane's home corridor (see Parkiller.corridorPosition's own
+    // doc comment), the Parkiller's hop-origin is the matching corridor waypoint, not the home-
+    // entrance track square its logical `before` might otherwise suggest - once fully crossed, it's
+    // a real trackWaypoints position like any later move.
+    const lane = definition.playerLanes.find((l) => l.color === parkillerAnimation.color)
+    const corridorLength = lane?.homeCorridorWaypoints.length ?? 0
+    const fromWaypoint =
+      parkillerAnimation.beforeCorridorPosition < corridorLength
+        ? (parkillerCorridorWaypoint(parkillerAnimation.color, parkillerAnimation.beforeCorridorPosition, definition) ??
+          definition.trackWaypoints[parkillerAnimation.before])
+        : definition.trackWaypoints[parkillerAnimation.before]
+    const hops = getParkillerMoveHopWaypoints(
+      parkillerAnimation.color,
+      { trackPosition: parkillerAnimation.before, corridorPosition: parkillerAnimation.beforeCorridorPosition },
+      { trackPosition: parkillerAnimation.after, corridorPosition: parkillerAnimation.afterCorridorPosition },
+      definition,
+    )
     return {
       hopFrom: toWorldPosition(fromWaypoint),
       hops: hops.map(toWorldPosition),
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [parkillerAnimation?.color, parkillerAnimation?.before, parkillerAnimation?.after, parkillerAnimation?.firstMove, definition])
+  }, [
+    parkillerAnimation?.color,
+    parkillerAnimation?.before,
+    parkillerAnimation?.after,
+    parkillerAnimation?.beforeCorridorPosition,
+    parkillerAnimation?.afterCorridorPosition,
+    definition,
+  ])
 
   // Rules apply a capture the instant a move is submitted, but the captured piece only stops
   // rendering frozen at the capture square (see isBeingCaptured below) once the capturing piece's
@@ -667,8 +685,13 @@ export function BoardScene({
         // getParkillerHopWaypoints), so "the square it's heading to next" is always index-1, even
         // at rest between moves. ParkillerMesh turns to face this every frame.
         const trackLength = definition.trackWaypoints.length
-        const nextIndex = (player.parkiller.trackPosition - 1 + trackLength) % trackLength
-        const nextWaypoint = definition.trackWaypoints[nextIndex]
+        // Still crossing its own lane's home corridor? Face the next corridor square (toward the
+        // loop), not a loop-based index derived from the stale trackPosition it hasn't reached yet.
+        const stillInCorridor = player.parkiller.corridorPosition < player.parkiller.corridorLength
+        const nextWaypoint = stillInCorridor
+          ? (parkillerCorridorWaypoint(player.color, player.parkiller.corridorPosition + 1, definition) ??
+            definition.trackWaypoints[definition.playerLanes.find((l) => l.color === player.color)?.homeEntranceTrackIndex ?? player.parkiller.trackPosition])
+          : definition.trackWaypoints[(player.parkiller.trackPosition - 1 + trackLength) % trackLength]
         const facingTarget = nextWaypoint ? toWorldPosition(nextWaypoint, BASE_HEIGHT) : restPosition
 
         return (
