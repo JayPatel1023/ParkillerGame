@@ -267,7 +267,7 @@ describe('TurnManager - mandatory departure (PC2.1)', () => {
 })
 
 describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
-  it('capturing an opponent grants a 20-square reward, offered ahead of the remaining die', () => {
+  it('capturing an opponent grants two independent 10-square reward units ("10 x 2"), offered ahead of the remaining die', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)
     const blue = createPlayerState('Blue', board)
@@ -281,8 +281,8 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     const dice = new ScriptedDice([3, 1, 1])
     const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
 
-    let rewardGrant: RewardGrant | null = null
-    manager.rewardOffered.on((g) => (rewardGrant = g))
+    const grants: RewardGrant[] = []
+    manager.rewardOffered.on((g) => grants.push(g))
     let latestMoves: import('../src/core/rules/moveOption').MoveOption[] = []
     manager.moveChoicesReady.on((m) => (latestMoves = m))
 
@@ -293,15 +293,28 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     expect(submitResult?.capturedPiece).toBe(blue.pieces[0])
 
     expect(blue.pieces[0].state).toBe('InYard')
-    expect(rewardGrant).toEqual({ amount: 20, reason: 'capture' })
+    // first of the two independently-resolved 10-square units, not one lump 20
+    expect(grants).toEqual([{ amount: 10, reason: 'capture' }])
     // offered moves are now the reward (die B is still unspent but must wait per PC 6.2)
     expect(latestMoves.length).toBeGreaterThan(0)
-    expect(latestMoves.every((m) => m.diceSource === 'reward' && m.amount === 20)).toBe(true)
+    expect(latestMoves.every((m) => m.diceSource === 'reward' && m.amount === 10)).toBe(true)
     expect(latestMoves.some((m) => m.piece === red.pieces[1])).toBe(true)
 
-    manager.submitMove(red.pieces[1]) // spends the reward: track 0 + 20 -> corridor index 0
-    expect(red.pieces[1].state).toBe('InHomeCorridor')
-    expect(red.pieces[1].corridorPosition).toBe(0)
+    manager.submitMove(red.pieces[1]) // spends the first 10-unit: track 0 -> 10
+    expect(red.pieces[1].state).toBe('OnTrack')
+    expect(red.pieces[1].trackPosition).toBe(10)
+
+    // the second 10-unit is offered independently right after, per Carlos's own report: a piece
+    // able to make one of the two 10s must not lose the other one to a since-vacated combined check
+    expect(grants).toEqual([
+      { amount: 10, reason: 'capture' },
+      { amount: 10, reason: 'capture' },
+    ])
+    expect(latestMoves.length).toBeGreaterThan(0)
+
+    manager.submitMove(red.pieces[0]) // spends the second 10-unit: track 8 -> 18
+    expect(red.pieces[0].state).toBe('OnTrack')
+    expect(red.pieces[0].trackPosition).toBe(18)
   })
 
   it('finishing a piece grants a 10-square reward', () => {
@@ -346,15 +359,22 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     manager.rewardOffered.on((g) => grants.push(g))
 
     manager.requestRoll()
-    manager.submitMove(red.pieces[0]) // 5 -> 8, captures blue.pieces[0]
+    manager.submitMove(red.pieces[0]) // 5 -> 8, captures blue.pieces[0] - queues two 10-square units
     expect(blue.pieces[0].state).toBe('InYard')
 
-    manager.submitMove(red.pieces[1]) // spends the 20-reward: 1 -> 21, captures blue.pieces[1]
+    manager.submitMove(red.pieces[1]) // spends the first 10-unit: 1 -> 11, no capture there
+    expect(red.pieces[1].trackPosition).toBe(11)
+
+    manager.submitMove(red.pieces[1]) // spends the second 10-unit: 11 -> 21, captures blue.pieces[1]
     expect(blue.pieces[1].state).toBe('InYard')
 
+    // the original pair's two units, plus the first of a fresh pair queued by this second capture -
+    // proves a capture made *during* an existing reward chain adds onto it rather than replacing it
+    // or leaving the turn stuck once the original pair runs out.
     expect(grants).toEqual([
-      { amount: 20, reason: 'capture' },
-      { amount: 20, reason: 'capture' },
+      { amount: 10, reason: 'capture' },
+      { amount: 10, reason: 'capture' },
+      { amount: 10, reason: 'capture' },
     ])
   })
 
@@ -363,26 +383,30 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     const red = createPlayerState('Red', board)
     const blue = createPlayerState('Blue', board)
     red.pieces[0].state = 'OnTrack'
-    red.pieces[0].trackPosition = 5
+    red.pieces[0].trackPosition = 14
     blue.pieces[0].state = 'OnTrack'
-    blue.pieces[0].trackPosition = 8
-    // red.pieces[1..3] stay InYard - a reward can never move a piece out of the shelter (PC 5),
-    // and red.pieces[0] itself would overshoot its own finish with 20, so nothing qualifies.
-
+    blue.pieces[0].trackPosition = 17
+    // red.pieces[1..3] stay InYard - a reward can never move a piece out of the shelter (PC 5), and
+    // red.pieces[0] itself would overshoot its own finish (2 to its home entrance + 6-square
+    // corridor = 8, less than either 10-square unit), so nothing qualifies for either half of the
+    // pair - both must be forfeited independently, not just the first.
     const dice = new ScriptedDice([3, 1, 1])
     const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
 
-    let forfeited: RewardGrant | null = null
-    manager.rewardForfeited.on((g) => (forfeited = g))
+    const forfeited: RewardGrant[] = []
+    manager.rewardForfeited.on((g) => forfeited.push(g))
     let offered: RewardGrant | null = null
     manager.rewardOffered.on((g) => (offered = g))
 
     manager.requestRoll()
-    manager.submitMove(red.pieces[0])
+    manager.submitMove(red.pieces[0]) // 14 -> 17, captures blue.pieces[0]
 
     expect(blue.pieces[0].state).toBe('InYard')
     expect(offered).toBeNull()
-    expect(forfeited).toEqual({ amount: 20, reason: 'capture' })
+    expect(forfeited).toEqual([
+      { amount: 10, reason: 'capture' },
+      { amount: 10, reason: 'capture' },
+    ])
   })
 
   it('forces a capturing move when one is available, even though a different piece also has a legal move (PC3/PK8)', () => {

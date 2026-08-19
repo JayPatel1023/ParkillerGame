@@ -173,9 +173,10 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     manager.requestRoll()
 
     expect(blue.parkiller.state).toBe('Eliminated')
-    expect(grants).toEqual([{ amount: 20, reason: 'capture' }])
+    // first of the two independently-resolved 10-square units ("10 x 2"), not one lump 20
+    expect(grants).toEqual([{ amount: 10, reason: 'capture' }])
     expect(latestMoves.length).toBeGreaterThan(0)
-    expect(latestMoves.every((m) => m.diceSource === 'reward' && m.amount === 20)).toBe(true)
+    expect(latestMoves.every((m) => m.diceSource === 'reward' && m.amount === 10)).toBe(true)
   })
 
   it('a pawn move landing on an opposing Parkiller during a doubles roll eliminates it and grants a reward', () => {
@@ -200,7 +201,7 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
 
     expect(result?.capturedParkillerColor).toBe('Blue')
     expect(blue.parkiller.state).toBe('Eliminated')
-    expect(grants).toEqual([{ amount: 20, reason: 'capture' }])
+    expect(grants).toEqual([{ amount: 10, reason: 'capture' }])
   })
 
   it('an opposing Parkiller guarding the exit sends a mandatorily-exiting pawn straight back to the yard (PK5)', () => {
