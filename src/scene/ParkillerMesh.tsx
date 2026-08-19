@@ -7,17 +7,6 @@ import type { PieceColor } from '../core/pieceColor'
 import { BASE_HEIGHT } from './boardGeometry'
 import { BOUNCE_HEIGHT, HOP_DURATION, INTRO_DURATION, INTRO_X_OFFSET, INTRO_Y_START, MAX_FRAME_DELTA, easeOutBounce, easeOutCubic } from './PieceMesh'
 
-// Used only for the Parkiller's own first-ever move, for the single opening segment from the
-// center hub to the main loop's entrance square (see glideFirstHop below). Two earlier attempts at
-// this stretch both got reported back as wrong in opposite directions: covering it in one regular
-// hop's worth of time read as an instant teleport (screenshotted with arrows across the board);
-// walking each individual home-corridor square as its own discrete hop, even sped up, still read as
-// "N extra squares the die never showed" ("3이 나왔는데도... 10칸 정도 더 이동한다"). A longer,
-// single continuous glide - not a countable hop, not an instant snap - is the middle ground: still
-// visibly takes real time to cross, but reads as one "emerging from the center" motion rather than
-// steps that could be tallied against the die.
-const GLIDE_DURATION = HOP_DURATION * 1.5
-
 interface ParkillerMeshProps {
   color: PieceColor
   restPosition: [number, number, number]
@@ -28,11 +17,6 @@ interface ParkillerMeshProps {
   /** Set only while this Parkiller is animating its own move; null means "just sit at restPosition". */
   hopFrom: [number, number, number] | null
   hops: [number, number, number][]
-  /** True only for the Parkiller's first-ever move: hops[0] (hopFrom -> the loop's entrance square)
-   * animates as one smooth GLIDE_DURATION-long glide instead of a normal, bounced, countable hop -
-   * see that constant's own comment for why. Every hop from index 1 onward (the real per-die loop
-   * hops) is unaffected. */
-  glideFirstHop?: boolean
   onHopsComplete?: () => void
   introDelay: number
   /** BoardScene's own CROWDED_SCALE (< 1) whenever this Parkiller shares its square with another
@@ -290,7 +274,6 @@ export function ParkillerMesh({
   facingTarget,
   hopFrom,
   hops,
-  glideFirstHop = false,
   onHopsComplete,
   introDelay,
   crowdedScale = 1,
@@ -360,18 +343,14 @@ export function ParkillerMesh({
     }
 
     elapsedRef.current += delta
-    // Reported directly ("3이 나왔는데도... 10칸 정도 더 이동한다" - "a 3 came up but it still moved
-    // something like 10 extra squares"): walking the center-to-loop connecting path as its own
-    // discrete hops - even sped up - still read as extra countable squares the die never showed.
-    // hops[0] is only ever the loop's entrance square (see getParkillerFirstMoveHopWaypoints) - on
-    // the Parkiller's first-ever move, that one segment glides smoothly (eased, no bounce) over the
-    // longer GLIDE_DURATION instead of hopping, reading as one continuous "emerging from the
-    // center" motion rather than a step that could be tallied against the die. Every hop from index
-    // 1 onward (the real per-die loop hops) is completely unaffected.
-    const isGlide = hopIndexRef.current === 0 && glideFirstHop
-    const hopDuration = isGlide ? GLIDE_DURATION : HOP_DURATION
-    const rawT = Math.min(1, elapsedRef.current / hopDuration)
-    const t = isGlide ? easeOutCubic(rawT) : rawT
+    // The client's own explicit instruction, most recently ("중앙홀에서부터 한칸한칸 시작하게
+    // 만들어달" - make it move one square at a time from the center hall): every hop here, including
+    // the ones walking the center-to-loop connecting corridor on the Parkiller's first-ever move
+    // (see getParkillerFirstMoveHopWaypoints), uses the same normal HOP_DURATION/bounce treatment as
+    // every other hop in the game - no special glide or sped-up segment. A single continuous glide
+    // was tried here directly and reported back as "그냥 뛰여넘어서 가게" (just skipping/jumping over
+    // it) - not the discrete, countable walk asked for.
+    const t = Math.min(1, elapsedRef.current / HOP_DURATION)
     const from = hopIndexRef.current === 0 ? hopFrom : hops[hopIndexRef.current - 1]
     const to = hops[hopIndexRef.current]
 
@@ -380,7 +359,7 @@ export function ParkillerMesh({
 
     const x = THREE.MathUtils.lerp(from[0], to[0], t)
     const z = THREE.MathUtils.lerp(from[2], to[2], t)
-    const bounce = isGlide ? 0 : Math.sin(rawT * Math.PI) * BOUNCE_HEIGHT
+    const bounce = Math.sin(t * Math.PI) * BOUNCE_HEIGHT
     mesh.position.set(x, BASE_HEIGHT + bounce, z)
 
     if (t >= 1) {

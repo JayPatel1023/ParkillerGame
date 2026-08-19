@@ -26,17 +26,17 @@ const BOT_THINK_DELAY_MS = 700
 const DICE_SPIN_MS = 450
 const HOP_DURATION_MS = 320
 // The Parkiller's own black die is 1-6, so an ordinary hop after a roll takes at most 6 squares'
-// worth of hop time - but its very first move ever also glides from the board's center hub out to
-// the main loop's entrance square first (see getParkillerFirstMoveHopWaypoints in piecePosition.ts
-// and ParkillerMesh's own glideFirstHop - PK1), a single longer GLIDE_DURATION segment (1.5x a
-// normal hop) rather than several individual hops (an earlier version walked the connecting
-// corridor square by square, reported back as reading like extra squares the die never showed - see
-// that constant's own comment). This class has no visibility into Parkiller.hasMoved to know
-// whether THIS roll is that first move (this class doesn't get told the actual black die value
-// either, only MoveOption for the white dice), so this generously covers the worst case (the glide
-// plus up to 6 loop squares) rather than risking an undercount on every roll, first or not. Derived
-// from whichever hopDurationMs the constructor actually received (see maxParkillerHopMs below), not
-// this module-level default, so a test injecting a smaller value scales this too.
+// worth of hop time - but its very first move ever also walks the connecting path from the board's
+// center hub out to the main loop first, one square at a time at the same normal pace as every
+// other hop (see getParkillerFirstMoveHopWaypoints in piecePosition.ts - PK1, per the client's own
+// explicit instruction that this stretch read as "just skipping/jumping over it" when it was a
+// single glide instead). This class has no visibility into Parkiller.hasMoved or board data to size
+// that stretch exactly (this class doesn't get told the actual black die value either, only
+// MoveOption for the white dice), so this generously covers the worst case (every real board's own
+// 8-square corridor + the loop-entrance square + up to 6 loop squares, with headroom for a longer
+// hand-traced corridor) rather than risking an undercount on every roll, first or not. Derived from
+// whichever hopDurationMs the constructor actually received (see maxParkillerHopMs below), not this
+// module-level default, so a test injecting a smaller value scales this too.
 
 /**
  * Drives every bot-assigned seat on the Master Client - bots never touch the network at all,
@@ -73,7 +73,7 @@ export class BotController {
     this.thinkDelayMs = thinkDelayMs
     this.hopDurationMs = hopDurationMs
     this.diceSpinMs = diceSpinMs
-    this.maxParkillerHopMs = 8 * hopDurationMs
+    this.maxParkillerHopMs = 18 * hopDurationMs
     this.unsubscribers = [
       host.turnStarted.on((player) => this.onTurnStarted(player.color)),
       host.moveChoicesReady.on((moves) => this.onMoveChoicesReady(moves)),
