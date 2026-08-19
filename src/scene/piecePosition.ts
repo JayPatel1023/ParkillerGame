@@ -162,3 +162,23 @@ export function getParkillerHopWaypoints(before: number, after: number, definiti
   }
   return hops
 }
+
+// PK1: the Parkiller's very first move needs to walk the connecting path from the center hub (its
+// hopFrom - see parkillerCenterWaypoint) out to the main loop before continuing along it like every
+// later move - reported directly, with a screenshot of arrows drawn across the board: without this,
+// the single lerp from hopFrom straight to getParkillerHopWaypoints' own first entry (already one
+// square past the home-entrance) covered that entire stretch in one hop's worth of time, reading as
+// an instant teleport clean across several squares instead of a walk. Reuses the same
+// homeCorridorWaypoints a regular piece walks in the opposite direction on its way home (already
+// the exact path connecting those two points - no new board data needed), traversed in reverse
+// (center-adjacent to loop-adjacent) since this class walks it in reverse, then the home-entrance
+// square itself (never a "hop" in the normal case, since hopFrom already sits right there - here it
+// has to be one), then the usual loop walk.
+export function getParkillerFirstMoveHopWaypoints(color: PieceColor, after: number, definition: BoardDefinition): [number, number][] {
+  const lane = definition.playerLanes.find((l) => l.color === color)
+  if (!lane) return []
+  const connectingHops = lane.homeCorridorWaypoints.slice(0, -1).reverse()
+  const entranceWaypoint = definition.trackWaypoints[lane.homeEntranceTrackIndex]
+  const loopHops = getParkillerHopWaypoints(lane.homeEntranceTrackIndex, after, definition)
+  return [...connectingHops, ...(entranceWaypoint ? [entranceWaypoint] : []), ...loopHops]
+}
