@@ -130,6 +130,13 @@ export function GameBoardScreen({
   }, [pendingMoves])
 
   function handleSelectPiece(piece: Piece) {
+    // Clicking the same piece a choice is already open for backs out of it - the only "cancel"
+    // affordance for the floating markers (see BoardScene's own PieceChoiceMarkers), since there's
+    // no dialog chrome here to put a Cancelar button on.
+    if (pieceChoice?.piece === piece) {
+      setPieceChoice(null)
+      return
+    }
     const options = visiblePendingMoves.filter((m) => m.piece === piece)
     if (options.length <= 1) {
       chooseMove(piece, options[0]?.amount)
@@ -151,13 +158,15 @@ export function GameBoardScreen({
     ? `Tercer dobles seguido: ${eliminatedByDoubles.color} pierde una ficha`
     : !isMyTurn
       ? `Esperando el turno de ${currentPlayer.color}...`
-      : visiblePendingReward
-        ? 'Elegí una ficha para tu recompensa'
-        : visiblePendingMoves.length > 0
-          ? 'Elegí una ficha para mover'
-          : lastRoll && !rolling
-            ? `Dados: ${lastRoll.dieA} y ${lastRoll.dieB}${isDouble ? ' (dobles)' : ''} · Parkiller: ${lastRoll.blackDie}`
-            : 'Tirá los dados para empezar tu turno'
+      : pieceChoice
+        ? 'Elegí con qué dado moverla'
+        : visiblePendingReward
+          ? 'Elegí una ficha para tu recompensa'
+          : visiblePendingMoves.length > 0
+            ? 'Elegí una ficha para mover'
+            : lastRoll && !rolling
+              ? `Dados: ${lastRoll.dieA} y ${lastRoll.dieB}${isDouble ? ' (dobles)' : ''} · Parkiller: ${lastRoll.blackDie}`
+              : 'Tirá los dados para empezar tu turno'
 
   return (
     <div className="game-screen-in" style={screenWrapperStyle}>
@@ -175,6 +184,8 @@ export function GameBoardScreen({
         onAnimationComplete={clearMoveAnimation}
         parkillerAnimation={parkillerAnimation}
         onParkillerAnimationComplete={clearParkillerAnimation}
+        pieceChoice={pieceChoice ? { piece: pieceChoice.piece, amounts: pieceChoice.options.map((o) => o.amount) } : null}
+        onChoosePieceAmount={confirmPieceChoice}
       />
 
       <div style={frameOverlayStyle} />
@@ -221,27 +232,6 @@ export function GameBoardScreen({
               Sí, salir
             </button>
           </div>
-        </div>
-      )}
-
-      {pieceChoice && (
-        <div style={overlayStyle}>
-          <div style={{ fontSize: 18, fontWeight: 600, color: '#f2ede0', textAlign: 'center' }}>¿Con qué dado mover esta ficha?</div>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
-            {pieceChoice.options.map((option) => (
-              <button
-                key={`${option.diceSource}-${option.amount}`}
-                className="chunky-btn"
-                onClick={() => confirmPieceChoice(option.amount)}
-                style={rollButtonStyle(true)}
-              >
-                Mover {option.amount}
-              </button>
-            ))}
-          </div>
-          <button className="chunky-btn" onClick={() => setPieceChoice(null)} style={secondaryButtonStyle}>
-            Cancelar
-          </button>
         </div>
       )}
 
