@@ -42,7 +42,9 @@ export interface TurnManagerLike {
   readonly localPlayerColor?: PieceColor | null
   start(): void
   requestRoll(): void
-  submitMove(chosenPiece: Piece): MoveResult | null
+  /** `amount` disambiguates when the piece has more than one pending option (reachable by both
+   * dice, to different squares) - see TurnManager.submitMove's own doc comment. */
+  submitMove(chosenPiece: Piece, amount?: number): MoveResult | null
   /** Online-only (HostTurnManagerBridge/RemoteTurnManager): stops listening for further network
    * messages. Optional so a local TurnManager (nothing to dispose - no subscriptions of its own)
    * still satisfies this interface structurally with zero changes, same as every other member. */

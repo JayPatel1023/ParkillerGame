@@ -3,6 +3,8 @@ import type { BoardDefinition } from '../core/board/boardDefinition'
 import type { PlayerState } from '../core/gameFlow/playerState'
 import { getColor } from '../core/colorPalette'
 import type { TurnManagerLike } from '../core/gameFlow/turnManagerLike'
+import type { Piece } from '../core/pieces/piece'
+import type { MoveOption } from '../core/rules/moveOption'
 import { useTurnManager } from '../hooks/useTurnManager'
 import { BoardScene } from '../scene/BoardScene'
 import { Confetti } from './Confetti'
@@ -116,6 +118,32 @@ export function GameBoardScreen({
   const visiblePendingReward = animationsSettled ? pendingReward : null
   const visibleForfeitedReward = animationsSettled ? forfeitedReward : null
 
+  // Reported directly ("SE DEBE PODER ELEGIR CON CUAL DE LOS DOS DADOS SE MUEVE EL PEON QUE SE
+  // DESEE"): a piece reachable by both dice (to two different squares) used to just move by
+  // whichever die TurnManager happened to check first, with no way to pick the other - clicking a
+  // piece now only moves it immediately when there's exactly one legal option; with two or more
+  // (see turnManager.ts's own offerMoves, which keeps every distinct amount instead of collapsing
+  // to one per piece), this holds the choice open until the player picks one.
+  const [pieceChoice, setPieceChoice] = useState<{ piece: Piece; options: MoveOption[] } | null>(null)
+  useEffect(() => {
+    setPieceChoice(null)
+  }, [pendingMoves])
+
+  function handleSelectPiece(piece: Piece) {
+    const options = visiblePendingMoves.filter((m) => m.piece === piece)
+    if (options.length <= 1) {
+      chooseMove(piece, options[0]?.amount)
+      return
+    }
+    setPieceChoice({ piece, options })
+  }
+
+  function confirmPieceChoice(amount: number) {
+    if (!pieceChoice) return
+    chooseMove(pieceChoice.piece, amount)
+    setPieceChoice(null)
+  }
+
   // What the turn banner's subtitle says - one place for this instead of scattering the same
   // priority order (doubles warning > not-my-turn > reward > move prompt > roll prompt) across
   // JSX conditionals.
@@ -137,7 +165,7 @@ export function GameBoardScreen({
         definition={definition}
         players={session.players}
         pendingMoves={visiblePendingMoves}
-        onSelectPiece={chooseMove}
+        onSelectPiece={handleSelectPiece}
         currentPlayerColor={currentPlayer.color}
         diceValues={diceValues}
         rolling={rolling}
@@ -193,6 +221,27 @@ export function GameBoardScreen({
               Sí, salir
             </button>
           </div>
+        </div>
+      )}
+
+      {pieceChoice && (
+        <div style={overlayStyle}>
+          <div style={{ fontSize: 18, fontWeight: 600, color: '#f2ede0', textAlign: 'center' }}>¿Con qué dado mover esta ficha?</div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+            {pieceChoice.options.map((option) => (
+              <button
+                key={`${option.diceSource}-${option.amount}`}
+                className="chunky-btn"
+                onClick={() => confirmPieceChoice(option.amount)}
+                style={rollButtonStyle(true)}
+              >
+                Mover {option.amount}
+              </button>
+            ))}
+          </div>
+          <button className="chunky-btn" onClick={() => setPieceChoice(null)} style={secondaryButtonStyle}>
+            Cancelar
+          </button>
         </div>
       )}
 

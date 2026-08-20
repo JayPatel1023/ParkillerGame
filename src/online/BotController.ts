@@ -99,7 +99,7 @@ export class BotController {
     const chosen = moves[0]
     this.scheduleRespectingBusy(this.thinkDelayMs, () => {
       if (this.host.currentPlayer.color !== color) return
-      this.host.submitMoveForBot(chosen.piece)
+      this.host.submitMoveForBot(chosen.piece, chosen.amount)
       // This move's own hop animation - amount is the exact number of squares it covers (see
       // MoveOption), same duration-per-square PieceMesh itself uses.
       this.markBusy(chosen.amount * this.hopDurationMs)

@@ -3,7 +3,10 @@ import type { PieceColor } from '../core/pieceColor'
 /** Sent via RoomTransport.sendToMaster - a non-master (or the Master's own UI, through the same
  * funnel) asking to have an action applied. Never carries a result - only the Master computes
  * that, from its own authoritative TurnManager. */
-export type IntentMessage = { type: 'rollIntent' } | { type: 'moveIntent'; color: PieceColor; pieceIndex: number }
+// `amount` disambiguates when the piece has more than one pending option (reachable by both dice,
+// to different squares) - omitted when it only has one, same as TurnManager.submitMove's own
+// optional parameter.
+export type IntentMessage = { type: 'rollIntent' } | { type: 'moveIntent'; color: PieceColor; pieceIndex: number; amount?: number }
 
 /** Sent via RoomTransport.broadcast, only ever by whoever is currently Master - the two primitive
  * inputs that fully determine TurnManager's next state. Never the resulting Piece/MoveResult/
@@ -13,7 +16,7 @@ export type IntentMessage = { type: 'rollIntent' } | { type: 'moveIntent'; color
  * includes the sender) replays these against its own local TurnManager instead. */
 export type BroadcastMessage =
   | { type: 'diceRolled'; dieA: number; dieB: number; blackDie: number }
-  | { type: 'moveChosen'; color: PieceColor; pieceIndex: number }
+  | { type: 'moveChosen'; color: PieceColor; pieceIndex: number; amount?: number }
 
 /** Sent once by whoever starts the game (always the Master, from the lobby) - `colors` is the
  * turn-order-assigned color list every peer must build its own `players` array from, in this
