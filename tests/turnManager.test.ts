@@ -87,6 +87,37 @@ describe('TurnManager - two-dice rulebook flow', () => {
     expect(red.pieces[1].state).toBe('Finished')
   })
 
+  it('offers both dice as separate choices for a piece reachable by either, and moves by whichever one is picked', () => {
+    // Reported directly ("SE DEBE PODER ELEGIR CON CUAL DE LOS DOS DADOS SE MUEVE EL PEON QUE SE
+    // DESEE"): the player never got an actual choice here before - dieA's own move for this piece
+    // silently won, dieB's own (different-destination) option for the exact same piece was dropped
+    // outright instead of being offered alongside it.
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 0
+
+    const dice = new ScriptedDice([3, 4, 1]) // neither die is the exit roll (5) - no exit-lock in play
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let latestMoves: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((m) => (latestMoves = m))
+
+    manager.requestRoll()
+
+    // dieA alone (3), dieB alone (4), and their sum (7, since neither die is exit-locked and this
+    // is the only piece in play to spend it on) are all distinct, legitimately offered choices.
+    const forPiece0 = latestMoves.filter((m) => m.piece === red.pieces[0])
+    expect(forPiece0.map((m) => m.amount).sort((a, b) => a - b)).toEqual([3, 4, 7])
+
+    // Deliberately pick the die that is NOT simply the first one TurnManager happened to compute -
+    // proves submitMove's own amount disambiguation actually picks the requested option, not just
+    // whichever one .find() would have hit first.
+    manager.submitMove(red.pieces[0], 4)
+    expect(red.pieces[0].trackPosition).toBe(4)
+  })
+
   it('exits the yard on a single die showing the exit roll', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)

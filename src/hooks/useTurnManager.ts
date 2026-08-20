@@ -104,8 +104,8 @@ export function useTurnManager(turnManager: TurnManagerLike) {
     turnManager.requestRoll()
   }
 
-  function chooseMove(piece: Piece) {
-    turnManager.submitMove(piece)
+  function chooseMove(piece: Piece, amount?: number) {
+    turnManager.submitMove(piece, amount)
   }
 
   function clearMoveAnimation() {

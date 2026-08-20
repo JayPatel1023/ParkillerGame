@@ -381,10 +381,19 @@ export class TurnManager {
     const restrictToExitOrCapture = (moves: MoveOption[]) =>
       moves.filter((m) => m.kind === 'ExitYard' || wouldCapture(this.board, m, this.players, this.parkillerCapturableThisRoll))
 
-    const bestPerPiece = new Map<Piece, MoveOption>()
+    // Keyed by piece + amount, not piece alone - a piece reachable by *both* dice (or a die and the
+    // sum) keeps every distinct option instead of silently collapsing to whichever die happened to
+    // be checked first. Reported directly ("SE DEBE PODER ELEGIR CON CUAL DE LOS DOS DADOS SE MUEVE
+    // EL PEON"): the player never actually got a choice here before - dieA's move for a piece always
+    // won, dieB's own option for that same piece was discarded outright even when it led somewhere
+    // meaningfully different. Two options with the *same* amount (e.g. a double, dieA===dieB) really
+    // are the identical move regardless of which die is "blamed" for it, so those still collapse to
+    // one entry - nothing to choose between there.
+    const byPieceAndAmount = new Map<string, MoveOption>()
     const addMoves = (moves: MoveOption[]) => {
       for (const move of moves) {
-        if (!bestPerPiece.has(move.piece)) bestPerPiece.set(move.piece, move)
+        const key = `${move.piece.color}:${move.piece.pieceIndex}:${move.amount}`
+        if (!byPieceAndAmount.has(key)) byPieceAndAmount.set(key, move)
       }
     }
     if (dieAMoves) addMoves(dieAHasExit ? restrictToExitOrCapture(dieAMoves) : dieAMoves)
@@ -396,7 +405,7 @@ export class TurnManager {
       addMoves(getValidMoves(this.board, this.currentPlayer, this.players, state.dieA + state.dieB, this.settings, 'sum'))
     }
 
-    let options = [...bestPerPiece.values()]
+    let options = [...byPieceAndAmount.values()]
 
     // PC3/PK8: capturing is mandatory whenever it's available - a player can't sidestep an
     // available capture by choosing to move a different, non-capturing piece instead.
@@ -420,9 +429,13 @@ export class TurnManager {
 
   // Returns the applied MoveResult (or null if the piece wasn't a valid choice) so callers - namely
   // useTurnManager - can see what happened (e.g. capturedPiece) without a separate moveApplied
-  // subscription racing the synchronous mutation this method already performs.
-  submitMove(chosenPiece: Piece): MoveResult | null {
-    const move = this.pendingMoves?.find((m) => m.piece === chosenPiece)
+  // subscription racing the synchronous mutation this method already performs. `amount` disambiguates
+  // when a piece has more than one pending option (e.g. reachable by both dieA and dieB, to
+  // different squares) - omit it when the piece only has one, same as every existing caller already
+  // does; passed but matching nothing (a stale/adversarial value) falls through to null, same as an
+  // unrecognized piece already does.
+  submitMove(chosenPiece: Piece, amount?: number): MoveResult | null {
+    const move = this.pendingMoves?.find((m) => m.piece === chosenPiece && (amount === undefined || m.amount === amount))
     if (!move) return null
     const isRewardMove = move.diceSource === 'reward'
     const before = snapshotPiece(chosenPiece)
