@@ -132,7 +132,8 @@ export interface CapsuleMeshConfig {
 }
 
 export interface ParkillerArmConfig {
-  arm: CapsuleMeshConfig
+  upperArm: CapsuleMeshConfig
+  lowerArm: CapsuleMeshConfig
   hand: SphereMeshConfig
 }
 
@@ -177,21 +178,32 @@ export const DEFAULT_PARKILLER_CONFIG: ParkillerGeometryConfig = {
   // which is exactly what produced the wrong-by-150° result above).
   // Pushing the *whole arm* further out (position AND bigger hands together) was tried alongside a
   // wider hood flare and reverted for reading as a "blob" from a head-on yaw - see that same
-  // comment on HOOD_PROFILE_RAW. This is a narrower fix, done without touching the hood at all:
-  // the shoulder attachment (arm.position) stays put - a sleeve visibly emerging from, and partly
-  // embedded in, the body reads as attached rather than floating - but the hand itself sat almost
-  // exactly on the body's own surface radius at hip height (~0.6-0.66, see BODY_PROFILE_RAW), so
-  // with the hand's own ~0.17 radius on top of that it was still 90% swallowed by the body mesh
-  // and barely readable as a hand at all against the new reference photo's own clearly separate,
-  // visible hand bump. Pushed out from 0.65 to 0.78 - enough to actually clear the body, deliberately
-  // short of the previously-reverted magnitude.
+  // comment on HOOD_PROFILE_RAW. The hand itself sat almost exactly on the body's own surface
+  // radius at hip height (~0.6-0.66, see BODY_PROFILE_RAW), so with the hand's own ~0.17 radius on
+  // top of that it was still 90% swallowed by the body mesh and barely readable as a hand at all
+  // against the reference photo's own clearly separate, visible hand bump. Pushed out from 0.65 to
+  // 0.78 (hand.position below) - enough to actually clear the body, deliberately short of the
+  // previously-reverted magnitude.
+  //
+  // Split into two capsules (shoulder->elbow->hand) instead of one straight shoulder->hand capsule
+  // - a bent elbow reads as a real arm, not a rigid rod, and was worth adopting on its own merits
+  // after prototyping it against an (otherwise-rejected, see ParkillerModelV2.tsx) alternate body
+  // structure proposal. shoulder/elbow were chosen to keep the exact same overall arm envelope the
+  // single-capsule version already had - shoulder is the reconstructed old capsule's own attachment
+  // point (2*oldCenter - hand, since arm.position was that capsule's midpoint), elbow is offset
+  // outward+forward from the old straight-line path for a visible but modest bend. Both capsules'
+  // own position/rotation/length were computed via three's own Quaternion/Euler math (matching how
+  // the original single-capsule arm's rotation was derived - see this file's own git history), not
+  // hand-guessed trig.
   arms: [
     {
-      arm: { position: [0.515, 1.12, 0.18], rotation: [0.255, -0.781, -2.537], scale: [0.12, 0.42, 0.14] },
+      upperArm: { position: [0.433, 1.245, 0.175], rotation: [0.242, -0.482, -2.221], scale: [0.1, 0.378, 0.1] },
+      lowerArm: { position: [0.698, 0.945, 0.235], rotation: [0.034, -0.111, -2.554], scale: [0.09, 0.174, 0.09] },
       hand: { position: [0.78, 0.82, 0.24], scale: [0.17, 0.21, 0.17] },
     },
     {
-      arm: { position: [-0.515, 1.12, 0.18], rotation: [0.255, 0.781, 2.537], scale: [0.12, 0.42, 0.14] },
+      upperArm: { position: [-0.433, 1.245, 0.175], rotation: [0.242, 0.482, 2.221], scale: [0.1, 0.378, 0.1] },
+      lowerArm: { position: [-0.698, 0.945, 0.235], rotation: [0.034, 0.111, 2.554], scale: [0.09, 0.174, 0.09] },
       hand: { position: [-0.78, 0.82, 0.24], scale: [0.17, 0.21, 0.17] },
     },
   ],
@@ -271,7 +283,11 @@ export function ParkillerModel({ color, config }: { color: PieceColor; config: P
 
       {config.arms.map((armConfig, i) => (
         <group key={i}>
-          <mesh position={armConfig.arm.position} rotation={armConfig.arm.rotation} scale={armConfig.arm.scale} castShadow>
+          <mesh position={armConfig.upperArm.position} rotation={armConfig.upperArm.rotation} scale={armConfig.upperArm.scale} castShadow>
+            <capsuleGeometry args={[1, 1, 8, 16]} />
+            <primitive object={mainMaterial} attach="material" />
+          </mesh>
+          <mesh position={armConfig.lowerArm.position} rotation={armConfig.lowerArm.rotation} scale={armConfig.lowerArm.scale} castShadow>
             <capsuleGeometry args={[1, 1, 8, 16]} />
             <primitive object={mainMaterial} attach="material" />
           </mesh>
