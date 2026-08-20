@@ -2,7 +2,7 @@ import type { BoardData } from '../board/boardData'
 import { Dice, type DiceLike } from '../dice'
 import type { PieceColor } from '../pieceColor'
 import { snapshotPiece, type Piece, type PieceSnapshot } from '../pieces/piece'
-import { applyMove, getValidMoves, isParkillerOnTrack, resolveBarrierElimination, wouldCapture } from '../rules/parchisRules'
+import { applyMove, getValidMoves, isParkillerOnTrack, ownBarrierTrackPosition, resolveBarrierElimination, wouldCapture } from '../rules/parchisRules'
 import type { MoveOption, MoveResult } from '../rules/moveOption'
 import type { RuleSettings } from '../rules/ruleSettings'
 import { hasWon, type PlayerState } from './playerState'
@@ -381,6 +381,26 @@ export class TurnManager {
     const restrictToExitOrCapture = (moves: MoveOption[]) =>
       moves.filter((m) => m.kind === 'ExitYard' || wouldCapture(this.board, m, this.players, this.parkillerCapturableThisRoll))
 
+    // PK9.1: a double obligates breaking an existing barrier of the player's own pawns before
+    // anything else this roll (PK9's own priority order: barrier-break, then PK9.2's rewards -
+    // already handled elsewhere, offered ahead of returning here at all - then PK9.3's shelter
+    // removal, i.e. the plain exit-lock just above). Re-checked fresh on every offerMoves() call
+    // (not just once at roll time), so once the first of the double's two identical-value dice
+    // actually breaks it, the second naturally sees no barrier left and stops restricting - no
+    // separate "already broken this roll" tracking needed. "(unless movement is impossible)" per
+    // the rulebook's own qualifier: if nothing can break it this roll, the restriction below comes
+    // back empty and the obligation is waived rather than forcing a false moveNotPossible.
+    const barrierPosition = state.dieA === state.dieB ? ownBarrierTrackPosition(this.currentPlayer) : null
+    const restrictToBarrierBreakOrCapture = (moves: MoveOption[]) =>
+      moves.filter((m) => m.piece.trackPosition === barrierPosition || wouldCapture(this.board, m, this.players, this.parkillerCapturableThisRoll))
+    const applyObligations = (moves: MoveOption[], dieHasExit: boolean): MoveOption[] => {
+      if (barrierPosition !== null) {
+        const barrierMoves = restrictToBarrierBreakOrCapture(moves)
+        if (barrierMoves.length > 0) return barrierMoves
+      }
+      return dieHasExit ? restrictToExitOrCapture(moves) : moves
+    }
+
     // Keyed by piece + amount, not piece alone - a piece reachable by *both* dice (or a die and the
     // sum) keeps every distinct option instead of silently collapsing to whichever die happened to
     // be checked first. Reported directly ("SE DEBE PODER ELEGIR CON CUAL DE LOS DOS DADOS SE MUEVE
@@ -396,12 +416,12 @@ export class TurnManager {
         if (!byPieceAndAmount.has(key)) byPieceAndAmount.set(key, move)
       }
     }
-    if (dieAMoves) addMoves(dieAHasExit ? restrictToExitOrCapture(dieAMoves) : dieAMoves)
-    if (dieBMoves) addMoves(dieBHasExit ? restrictToExitOrCapture(dieBMoves) : dieBMoves)
+    if (dieAMoves) addMoves(applyObligations(dieAMoves, dieAHasExit))
+    if (dieBMoves) addMoves(applyObligations(dieBMoves, dieBHasExit))
     // The sum can only combine both dice into one board-piece move once neither individual die is
-    // still obligated to a mandatory exit - otherwise it would let a player dodge that exit by
-    // spending both dice on a single already-in-play piece instead.
-    if (dieAMoves && dieBMoves && !dieAHasExit && !dieBHasExit) {
+    // still obligated to a mandatory exit or barrier-break - otherwise it would let a player dodge
+    // either obligation by spending both dice on a single already-in-play piece instead.
+    if (dieAMoves && dieBMoves && !dieAHasExit && !dieBHasExit && barrierPosition === null) {
       addMoves(getValidMoves(this.board, this.currentPlayer, this.players, state.dieA + state.dieB, this.settings, 'sum'))
     }
 

@@ -105,7 +105,8 @@ directly, and cross-reference `Parkiller_GameMaker-main/` (the client's original
 wherever the rulebook's prose alone was ambiguous.
 
 - **Two white dice** roll together each turn; a piece can move by die A's value, die B's value, or
-  their sum — up to two different pieces (or one piece twice) per roll.
+  their sum — up to two different pieces (or one piece twice) per roll. A piece reachable by both
+  dice (to two different squares) offers both as distinct choices rather than silently picking one.
 - **PC2.1**: a piece leaves the yard only when a die shows a **5** (or the sum is 5) — not the
   classic 6. Whenever an unspent die's value is the exit roll and a yard piece could use it, that
   specific die is locked to the exit (a same-valued move for a different piece isn't offered as an
@@ -119,15 +120,23 @@ wherever the rulebook's prose alone was ambiguous.
 - **PC3/PK8**: capturing is mandatory whenever available — a player can't sidestep a capture by
   moving a different, non-capturing piece instead.
 - **PC4/PC5**: reaching the final home-corridor square requires an exact roll. Capturing a pawn or
-  an opposing Parkiller grants a 20-square reward; finishing a pawn grants 10 — claimed immediately
-  with a piece already in play, or forfeited.
+  an opposing Parkiller grants "10 x 2" — two independently-resolved 10-square rewards, each
+  claimed immediately with a piece already in play or forfeited on its own (a piece able to use one
+  of the two never loses it just because the other can't be used); finishing a pawn grants a single
+  10.
 - **PC2.3**: rolling doubles grants an extra turn; a third consecutive double sends the last-moved
   piece back to its yard (exempt once it's in the home corridor).
+- **PK9.1**: a double also obligates breaking an existing barrier of the player's own pawns before
+  anything else that roll, ahead of collecting rewards or removing a pawn from the shelter — waived
+  if genuinely no legal move can break it that roll ("unless movement is impossible"). Re-checked
+  fresh each time moves are offered, so once one of the double's two dice breaks it, the other is
+  free again with no separate "already broken this roll" tracking needed.
 - **The Parkiller (PK1-8)**: one extra piece per color, moved by its own black die (rolled once per
   actual turn, skipped on a doubles bonus turn), traveling the shared track loop in the *opposite*
   direction from regular pawns. Landing on an opposing pawn sends it home with no reward; landing
-  on an opposing Parkiller eliminates it and grants the 20-square reward, but only via a single
-  die's own value during the roll that just produced doubles (PK6) — never the sum.
+  on an opposing Parkiller eliminates it and grants the same "10 x 2" reward as a regular capture,
+  but only via a single die's own value during the roll that just produced doubles (PK6) — never
+  the sum.
 - **PK5**: the reverse also holds — a pawn landing on an unprotected opposing Parkiller (without
   eliminating it) is sent straight back to its own yard instead, with no reward, and the move is
   never blocked outright, it always completes first. On a protected/safe square the two simply
@@ -147,10 +156,10 @@ wherever the rulebook's prose alone was ambiguous.
   `resolveBarrierElimination` the Parkiller's own barrier landings use.
 - Not implemented: PK10.1's ~14 hyper-specific scenarios about
   a Parkiller sitting directly on/near a starting square in combination with various pawn/Parkiller
-  counts already there, and PK9.1's mandatory-barrier-break-on-doubles rule (a player's own barrier
-  must open if a double allows it, ahead of ordinary moves). All scope cuts, flagged rather than
-  silently skipped. Also not implemented: the rulebook appendix's V1/V2 team and two-color-per-
-  player variants.
+  counts already there, and PK10.2 (a single Parkiller move eliminating two opposing Parkillers at
+  once — the current model only ever resolves one Parkiller-vs-Parkiller collision per landing
+  square). Both scope cuts, flagged rather than silently skipped. Also not implemented: the
+  rulebook appendix's V1/V2 team and two-color-per-player variants.
 
 ## Not in this milestone
 
