@@ -101,8 +101,8 @@ export class HostTurnManagerBridge implements TurnManagerLike {
     this.handleRollIntent(this.transport.localActorNr)
   }
 
-  submitMove(chosenPiece: Piece): MoveResult | null {
-    return this.handleMoveIntent(this.transport.localActorNr, chosenPiece.color, chosenPiece.pieceIndex)
+  submitMove(chosenPiece: Piece, amount?: number): MoveResult | null {
+    return this.handleMoveIntent(this.transport.localActorNr, chosenPiece.color, chosenPiece.pieceIndex, amount)
   }
 
   /** For BotController only - a bot seat has no connected actor to validate ownership against,
@@ -113,8 +113,8 @@ export class HostTurnManagerBridge implements TurnManagerLike {
   }
 
   /** For BotController only - see rollForBot(). */
-  submitMoveForBot(piece: Piece): MoveResult | null {
-    return this.performMove(piece)
+  submitMoveForBot(piece: Piece, amount?: number): MoveResult | null {
+    return this.performMove(piece, amount)
   }
 
   dispose(): void {
@@ -124,7 +124,7 @@ export class HostTurnManagerBridge implements TurnManagerLike {
   private handleIncoming(data: unknown, senderActorNr: number): void {
     const msg = data as GameMessage
     if (msg.type === 'rollIntent') this.handleRollIntent(senderActorNr)
-    else if (msg.type === 'moveIntent') this.handleMoveIntent(senderActorNr, msg.color, msg.pieceIndex)
+    else if (msg.type === 'moveIntent') this.handleMoveIntent(senderActorNr, msg.color, msg.pieceIndex, msg.amount)
   }
 
   // Cheap insurance against a stale/buggy client's message corrupting shared state (a late
@@ -140,11 +140,11 @@ export class HostTurnManagerBridge implements TurnManagerLike {
     this.performRoll()
   }
 
-  private handleMoveIntent(actorNr: number, color: PieceColor, pieceIndex: number): MoveResult | null {
+  private handleMoveIntent(actorNr: number, color: PieceColor, pieceIndex: number, amount?: number): MoveResult | null {
     if (!this.isValidActor(actorNr, color)) return null
     const piece = findPiece(this.players, color, pieceIndex)
     if (!piece) return null
-    return this.performMove(piece)
+    return this.performMove(piece, amount)
   }
 
   private performRoll(): void {
@@ -153,9 +153,9 @@ export class HostTurnManagerBridge implements TurnManagerLike {
     this.transport.broadcast({ type: 'diceRolled', dieA, dieB, blackDie })
   }
 
-  private performMove(piece: Piece): MoveResult | null {
-    const result = this.inner.submitMove(piece)
-    if (result) this.transport.broadcast({ type: 'moveChosen', color: piece.color, pieceIndex: piece.pieceIndex })
+  private performMove(piece: Piece, amount?: number): MoveResult | null {
+    const result = this.inner.submitMove(piece, amount)
+    if (result) this.transport.broadcast({ type: 'moveChosen', color: piece.color, pieceIndex: piece.pieceIndex, amount })
     return result
   }
 }

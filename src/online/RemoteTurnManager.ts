@@ -84,8 +84,8 @@ export class RemoteTurnManager implements TurnManagerLike {
     this.transport.sendToMaster({ type: 'rollIntent' })
   }
 
-  submitMove(chosenPiece: Piece): MoveResult | null {
-    this.transport.sendToMaster({ type: 'moveIntent', color: chosenPiece.color, pieceIndex: chosenPiece.pieceIndex })
+  submitMove(chosenPiece: Piece, amount?: number): MoveResult | null {
+    this.transport.sendToMaster({ type: 'moveIntent', color: chosenPiece.color, pieceIndex: chosenPiece.pieceIndex, amount })
     return null
   }
 
@@ -100,7 +100,7 @@ export class RemoteTurnManager implements TurnManagerLike {
       this.inner.requestRoll()
     } else if (msg.type === 'moveChosen') {
       const piece = findPiece(this.players, msg.color, msg.pieceIndex)
-      if (piece) this.inner.submitMove(piece)
+      if (piece) this.inner.submitMove(piece, msg.amount)
     }
   }
 }
