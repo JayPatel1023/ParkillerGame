@@ -232,19 +232,17 @@ const STACK_OFFSETS: [number, number][] = [
   [0, -0.36],
 ]
 
-// Reported directly alongside the above: even correctly positioned, two full-size pieces plus
-// the Parkiller's own larger footprint (see ParkillerMesh's own BODY_PROFILE_RAW - visibly wider
-// than a pawn) simply don't all fit inside the smallest boards' tiles (6-player: ~0.22 world
-// units wide) without *some* overlap of their own geometry - there is no offset large enough to
-// separate them that also keeps every piece's full radius inside a tile that size. Shrinking
-// every occupant slightly whenever a square is shared narrows that gap - not a full fix on its
-// own (still an offset problem first), but makes "inside the tile" actually reachable instead of
-// geometrically impossible for the tightest boards. Reported directly a second time, still
-// spilling past a home-corridor square specifically (narrower than a main track tile) - shrunk
-// further (0.72 -> 0.6), verified against the real per-board tile measurements to bring the worst
-// case (the Parkiller, on the tightest board) down to only ~0.01 world units of residual overspill
-// - not zero, but close, while still reading as "a pawn", not a miniature.
-const CROWDED_SCALE = 0.6
+// Used to shrink crowded pieces (0.6x) so two full-size pieces plus the Parkiller's own larger
+// footprint could actually fit inside the smallest boards' tiles without spilling past their
+// border - reported directly as an inconsistent-size problem in its own right ("말들의 크기를
+// 작게하지말고... 원래의 크기를 가지고" - don't shrink the pieces, keep them at their real size):
+// pieces visibly changing size depending on whether their square was shared read as a bug, not a
+// clever fix. BOARD_SIZE (boardGeometry.ts) now grows the *tiles* instead - see that constant's own
+// comment for the exact math - which was the actual fix; every occupant of a shared square renders
+// at its normal, unmodified size now (crowdedScale is still computed and passed through below so
+// the plumbing stays in place if a future board's own proportions ever need it again, but 1 means
+// it's a no-op today).
+const CROWDED_SCALE = 1
 
 // Unit tangent (along the path) and normal (across it) at a given waypoint index, from its
 // immediate neighbors - same direction-only math as computeTileCorners' own dirOf, reused here so
