@@ -464,3 +464,82 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     expect(offered[0].resultingTrackPosition).toBe(3)
   })
 })
+
+describe('TurnManager - mandatory barrier removal on doubles (PK9.1)', () => {
+  it('restricts a double roll to breaking an existing own barrier, not other legal moves', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 5 // own barrier at 5, pieces[0] + pieces[1]
+    red.pieces[2].state = 'OnTrack'
+    red.pieces[2].trackPosition = 0 // otherwise also free to move by 3 - must NOT be offered
+
+    const dice = new ScriptedDice([3, 3, 1])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let offered: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((moves) => (offered = moves))
+
+    manager.requestRoll()
+
+    expect(offered).toHaveLength(2)
+    expect(offered.map((m) => m.piece)).toEqual(expect.arrayContaining([red.pieces[0], red.pieces[1]]))
+    expect(offered.some((m) => m.piece === red.pieces[2])).toBe(false)
+  })
+
+  it('frees the second (identical-value) die once the first has already broken the barrier', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 5
+    red.pieces[2].state = 'OnTrack'
+    red.pieces[2].trackPosition = 0
+
+    const dice = new ScriptedDice([3, 3, 1])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let offered: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((moves) => (offered = moves))
+
+    manager.requestRoll()
+    manager.submitMove(red.pieces[0]) // 5 -> 8, breaks the barrier - re-offers for the second die
+
+    // Re-checked fresh (not "already used this roll") - once the barrier is actually gone, the
+    // second die is free for anything legal, including the piece excluded a moment ago.
+    expect(offered.some((m) => m.piece === red.pieces[2])).toBe(true)
+  })
+
+  it('waives the obligation when the barrier truly cannot be broken this roll ("unless movement is impossible")', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 5 // own barrier at 5
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 8
+    blue.pieces[1].state = 'OnTrack'
+    blue.pieces[1].trackPosition = 8 // an opposing barrier blocks the only square this double reaches
+    red.pieces[2].state = 'OnTrack'
+    red.pieces[2].trackPosition = 0 // otherwise free to move by 3
+
+    const dice = new ScriptedDice([3, 3, 1])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let offered: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((moves) => (offered = moves))
+
+    manager.requestRoll()
+
+    // Neither barrier pawn can legally move at all (blocked) - the obligation is waived rather than
+    // forcing a false "no moves possible", so whatever else was legal is offered normally.
+    expect(offered.some((m) => m.piece === red.pieces[2])).toBe(true)
+  })
+})
