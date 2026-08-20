@@ -13,6 +13,7 @@ import { BoardMesh, BOARD_THICKNESS } from './BoardMesh'
 import { PieceMesh } from './PieceMesh'
 import { ParkillerMesh } from './ParkillerMesh'
 import { DiceMesh } from './DiceMesh'
+import { PieceChoiceMarkers } from './PieceChoiceMarkers'
 import { TrackTile } from './TrackTile'
 import { CaptureImpactEffect } from './CaptureImpactEffect'
 import { useBoardColorSampler } from './useBoardColorSampler'
@@ -361,6 +362,11 @@ interface BoardSceneProps {
   onAnimationComplete: () => void
   parkillerAnimation: ParkillerMoveResult | null
   onParkillerAnimationComplete: () => void
+  /** Set only when the just-clicked piece has more than one legal amount to move by (reachable by
+   * both dice, or a die and the sum) - see PieceChoiceMarkers' own comment for why this floats
+   * small clickable markers above the piece itself instead of a flat 2D dialog. */
+  pieceChoice: { piece: Piece; amounts: number[] } | null
+  onChoosePieceAmount: (amount: number) => void
 }
 
 export function BoardScene({
@@ -377,6 +383,8 @@ export function BoardScene({
   onAnimationComplete,
   parkillerAnimation,
   onParkillerAnimationComplete,
+  pieceChoice,
+  onChoosePieceAmount,
 }: BoardSceneProps) {
   // While a move is still animating, its `hops` reconstruction runs against the piece's already-
   // fully-updated logical state (game rules apply moves instantly; only the visual hop-by-hop
@@ -708,6 +716,14 @@ export function BoardScene({
           />
         )
       })}
+
+      {pieceChoice &&
+        (() => {
+          const waypoint = getPieceWaypoint(pieceChoice.piece, definition)
+          if (!waypoint) return null
+          const anchor = toWorldPosition(waypoint, restHeightFor(pieceChoice.piece))
+          return <PieceChoiceMarkers anchor={anchor} amounts={pieceChoice.amounts} onChoose={onChoosePieceAmount} />
+        })()}
 
       <DiceMesh value={diceValues[0]} rolling={rolling} nudge={nudgeDice} onClick={onRollDice} column={-0.5} />
       <DiceMesh value={diceValues[1]} rolling={rolling} nudge={nudgeDice} onClick={onRollDice} column={0.5} />
