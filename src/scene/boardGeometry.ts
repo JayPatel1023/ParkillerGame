@@ -1,4 +1,18 @@
-export const BOARD_SIZE = 6
+// Reported directly ("말들의 크기를 작게하지말고... 원래의 크기를 가지고 한칸에 들어가게" - don't
+// shrink the pieces, fit them in one square at their real size): two full-size pieces sharing a
+// square (a barrier, or the Parkiller landing on a pawn) previously didn't both fit inside a track
+// tile without either overlapping or spilling past its border on the tightest board (6-player,
+// tile ~0.22 world units) - see BoardScene.tsx's own CROWDED_SCALE history for the shrink-based fix
+// this replaces. Rather than shrinking the *pieces* (inconsistent size, the actual complaint) or
+// the Parkiller specifically (its "clearly bigger than a pawn" sizing was itself an earlier
+// explicit request), this grows the *board* instead - tiles scale directly with this constant
+// (see toWorldPosition/estimateSquareSize below), while every piece's own size is a fixed absolute
+// world-unit constant completely unrelated to it, and FitBoardCamera's own distance depends only on
+// viewport size, not this constant - so growing it doesn't need any compensating zoom-out, it
+// simply gives full-size pieces more real room. 9.7 is the exact tileSize needed for the tightest
+// board's worst case (Parkiller + pawn, both at their current unmodified radii) to fit with zero
+// overlap and zero tile-edge overspill - rounded up to 10 for a small margin.
+export const BOARD_SIZE = 10
 // Just enough clearance above TrackTile's own surface (which itself sits at this same height - see
 // TrackTile.tsx) to avoid z-fighting between a piece's base and the tile underneath it. Only
 // correct for pieces actually standing on a raised TrackTile, i.e. OnTrack - see FLAT_SURFACE_HEIGHT
