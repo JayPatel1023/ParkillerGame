@@ -175,17 +175,24 @@ export const DEFAULT_PARKILLER_CONFIG: ParkillerGeometryConfig = {
   // Euler.setFromQuaternion, not hand-derived trig - a 2-angle-only derivation silently drops the
   // rotation.y component whenever the target direction doesn't lie exactly in the X-Z-free plane,
   // which is exactly what produced the wrong-by-150° result above).
-  // Pushing these further out (and the hands bigger) was tried alongside the wider hood flare above
-  // and reverted for the same reason - from a head-on yaw it widened the whole silhouette into the
-  // reported "blob" rather than reading as two separate hanging limbs.
+  // Pushing the *whole arm* further out (position AND bigger hands together) was tried alongside a
+  // wider hood flare and reverted for reading as a "blob" from a head-on yaw - see that same
+  // comment on HOOD_PROFILE_RAW. This is a narrower fix, done without touching the hood at all:
+  // the shoulder attachment (arm.position) stays put - a sleeve visibly emerging from, and partly
+  // embedded in, the body reads as attached rather than floating - but the hand itself sat almost
+  // exactly on the body's own surface radius at hip height (~0.6-0.66, see BODY_PROFILE_RAW), so
+  // with the hand's own ~0.17 radius on top of that it was still 90% swallowed by the body mesh
+  // and barely readable as a hand at all against the new reference photo's own clearly separate,
+  // visible hand bump. Pushed out from 0.65 to 0.78 - enough to actually clear the body, deliberately
+  // short of the previously-reverted magnitude.
   arms: [
     {
       arm: { position: [0.515, 1.12, 0.18], rotation: [0.255, -0.781, -2.537], scale: [0.12, 0.42, 0.14] },
-      hand: { position: [0.65, 0.82, 0.24], scale: [0.17, 0.21, 0.17] },
+      hand: { position: [0.78, 0.82, 0.24], scale: [0.17, 0.21, 0.17] },
     },
     {
       arm: { position: [-0.515, 1.12, 0.18], rotation: [0.255, 0.781, 2.537], scale: [0.12, 0.42, 0.14] },
-      hand: { position: [-0.65, 0.82, 0.24], scale: [0.17, 0.21, 0.17] },
+      hand: { position: [-0.78, 0.82, 0.24], scale: [0.17, 0.21, 0.17] },
     },
   ],
   fold: { position: [0, 0.75, 0.52], scale: [0.1, 0.5, 0.06] },

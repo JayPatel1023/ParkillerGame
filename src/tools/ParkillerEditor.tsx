@@ -29,13 +29,17 @@ import {
 // box, not guessed), so there's nothing left to miscalibrate, and adds a full reset alongside the
 // existing single-point undo.
 
-type View = 'back' | 'side' | 'front' | 'full'
+type View = 'back' | 'side' | 'front' | 'full' | 'angle'
 
 const VIEW_IMAGES: Record<View, string> = {
   back: '/reference/parkiller-back.png',
   side: '/reference/parkiller-side.png',
   front: '/reference/parkiller-front.png',
   full: '/reference/parkiller-full.png',
+  // Sent directly, later: a clearer 3/4-angle photo showing the robe's own flare/taper and one
+  // hand clearly separate from the body - what motivated pushing the hand out from the body's own
+  // surface (see ParkillerMesh.tsx's DEFAULT_PARKILLER_CONFIG, arms[].hand.position).
+  angle: '/reference/parkiller-angle.png',
 }
 
 // Measured directly against public/reference/parkiller-back.png (360x806): the figure's own red
@@ -199,6 +203,7 @@ export default function ParkillerEditor() {
             ['side', 'side (reference)'],
             ['front', 'front (reference)'],
             ['full', 'full sheet (reference)'],
+            ['angle', '3/4 angle (reference)'],
           ] as [View, string][]).map(([v, label]) => (
             <button
               key={v}
