@@ -53,7 +53,8 @@ const DEFAULT_ARM_PARAMS: ArmParams = { handDistance: 1, handSize: 1, armLength:
 
 function scaleArm(arm: ParkillerArmConfig, sign: 1 | -1, params: ArmParams): ParkillerArmConfig {
   return {
-    arm: { ...arm.arm, scale: [arm.arm.scale[0], round(arm.arm.scale[1] * params.armLength), arm.arm.scale[2]] },
+    upperArm: { ...arm.upperArm, scale: [arm.upperArm.scale[0], round(arm.upperArm.scale[1] * params.armLength), arm.upperArm.scale[2]] },
+    lowerArm: { ...arm.lowerArm, scale: [arm.lowerArm.scale[0], round(arm.lowerArm.scale[1] * params.armLength), arm.lowerArm.scale[2]] },
     hand: {
       position: [round(sign * Math.abs(arm.hand.position[0]) * params.handDistance), arm.hand.position[1], arm.hand.position[2]],
       scale: arm.hand.scale.map((s) => round(s * params.handSize)) as [number, number, number],
