@@ -70,6 +70,17 @@ export default function OnlineLobbyScreen() {
   const [session, setSession] = useState<GameSession | null>(null)
   // Set only once the game actually starts - who left, so the "stopped" screen can say so.
   const [stopReason, setStopReason] = useState('')
+  // Reported directly, via a screen recording of two real clients: the creator clicked "Empezar
+  // partida" alone (fully clickable the instant the room exists - see startGame()'s own comment on
+  // why solo-start is unrestricted) a few seconds before a friend finished typing in the room code,
+  // and that friend's join was rejected outright ("room has already started" - closeRoom() below
+  // means exactly that). Nothing was actually broken - solo-vs-bots play needs exactly this
+  // unrestricted button - but there was also no warning that clicking it alone commits the room
+  // and locks out anyone still on their way in, which is very easy to trigger by accident if a
+  // second real player was in fact expected. Confirming only in that specific case (still alone,
+  // i.e. the exact moment a friend joining a second later would get shut out) adds one extra click
+  // for genuine solo-vs-bots play without touching the gate itself.
+  const [confirmingSoloStart, setConfirmingSoloStart] = useState(false)
   const connectionRef = useRef<PhotonConnection | null>(null)
   // Stored so the cleanup below can dispose it - startGame() constructs this imperatively (only
   // when bot seats exist), not from its own effect, so nothing else was holding a reference to
@@ -388,7 +399,7 @@ export default function OnlineLobbyScreen() {
             {connectionRef.current.isMasterClient() ? (
               <button
                 className="chunky-btn"
-                onClick={startGame}
+                onClick={() => (seats.length <= 1 ? setConfirmingSoloStart(true) : startGame())}
                 disabled={seats.length > 1 && seats.length < playerCount}
                 style={chunkyButtonStyle(seats.length <= 1 || seats.length >= playerCount)}
               >
@@ -397,6 +408,30 @@ export default function OnlineLobbyScreen() {
             ) : (
               seats.length >= playerCount && <p style={hintStyle}>Esperando a que el anfitrión empiece la partida...</p>
             )}
+          </div>
+        )}
+
+        {confirmingSoloStart && (
+          <div style={overlayStyle}>
+            <div style={{ fontSize: 17, fontWeight: 700, color: '#f2ede0', textAlign: 'center' }}>¿Empezar solo/a?</div>
+            <p style={{ ...hintStyle, textAlign: 'center', maxWidth: 260, marginTop: 0 }}>
+              Las plazas vacías se llenarán con bots y nadie más va a poder unirse a esta sala después de esto.
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="chunky-btn" onClick={() => setConfirmingSoloStart(false)} style={secondaryButtonStyle}>
+                Cancelar
+              </button>
+              <button
+                className="chunky-btn"
+                onClick={() => {
+                  setConfirmingSoloStart(false)
+                  startGame()
+                }}
+                style={chunkyButtonStyle(true)}
+              >
+                Sí, empezar con bots
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -486,6 +521,34 @@ const inputStyle: React.CSSProperties = {
   border: '2px solid #1a3468',
   borderRadius: 10,
   boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.4)',
+}
+
+// Same overlay/secondary-button recipe as GameBoardScreen's own exit-confirmation dialog (kept as
+// a local copy, not a shared import, the same "each screen owns its own style objects" pattern
+// every other style constant in this file already follows).
+const overlayStyle: React.CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 8,
+  padding: '0 16px',
+  background: 'rgba(0,0,0,0.72)',
+  borderRadius: 28,
+}
+
+const secondaryButtonStyle: React.CSSProperties = {
+  padding: '11px 22px',
+  fontSize: 15,
+  fontWeight: 700,
+  color: '#f2ede0',
+  background: 'linear-gradient(165deg, rgba(255,255,255,0.1), rgba(255,255,255,0) 60%), rgba(58, 46, 30, 0.6)',
+  border: '3px solid #c9a24b',
+  borderRadius: 999,
+  boxShadow: '0 5px 0 #1a3468, 0 8px 12px rgba(0,0,0,0.35), inset 0 1px 1px rgba(255,255,255,0.2)',
+  cursor: 'pointer',
 }
 
 // Same chunky carved-wood recipe used across StartScreen/PlayerCountSelector/GameBoardScreen: a
