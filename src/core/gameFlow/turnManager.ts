@@ -176,7 +176,17 @@ export class TurnManager {
     // engine (game state always advances synchronously - only the visual playback takes time).
     const isBonusTurn = this.nextRollIsBonusTurn
     const parkillerResult = isBonusTurn ? this.noopParkillerResult() : this.resolveParkillerMove(blackDie)
-    this.parkillerMoved.emit(parkillerResult)
+    // PK6: once eliminated, a Parkiller is never rendered again (getParkillerWaypoint returns null
+    // for it - see that function's own comment), so nothing in the scene layer will ever exist to
+    // call back and clear the animation this event requests. Reported directly, via a screen
+    // recording: the roll button stayed permanently disabled from the very next roll after a
+    // player's own Parkiller died - useTurnManager set parkillerAnimation from this event
+    // unconditionally, animationsSettled never saw its matching onHopsComplete because BoardScene
+    // skips mounting <ParkillerMesh> entirely for an eliminated Parkiller, and nothing else was ever
+    // going to clear it. There's nothing to show either way - skip the event outright instead.
+    if (this.currentPlayer.parkiller.state === 'InPlay') {
+      this.parkillerMoved.emit(parkillerResult)
+    }
 
     // PK6/PK8: every double re-opens the window for a common piece to eliminate the Parkiller on
     // its very next move, regardless of whether the black die itself moved this roll.
