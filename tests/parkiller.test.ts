@@ -204,6 +204,37 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     expect(grants).toEqual([{ amount: 10, reason: 'capture' }])
   })
 
+  it('never emits parkillerMoved for a roll once the current player\'s own Parkiller is eliminated (PK6)', () => {
+    // Reproduces a real client-reported freeze: once a Parkiller is Eliminated, BoardScene never
+    // mounts a mesh for it again (getParkillerWaypoint returns null for it), so nothing would ever
+    // call back to clear the animation this event requests - useTurnManager set parkillerAnimation
+    // from it unconditionally regardless, permanently disabling the roll button from the very next
+    // roll onward. There's nothing to animate for a dead Parkiller, so the event must not fire at
+    // all - not fire with a same-position noop result the way a live Parkiller's skipped/bonus-turn
+    // roll correctly does (see the 'moves backward' test above and noopParkillerResult).
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.parkiller.state = 'Eliminated'
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 0
+
+    const dice = new ScriptedDice([2, 3, 4]) // blackDie=4 would move a live Parkiller - must be ignored entirely
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let parkillerEventFired = false
+    manager.parkillerMoved.on(() => (parkillerEventFired = true))
+    let latestMoves: MoveOption[] = []
+    manager.moveChoicesReady.on((m) => (latestMoves = m))
+
+    manager.requestRoll()
+
+    expect(parkillerEventFired).toBe(false)
+    // Turn flow itself must still proceed normally - not get stuck waiting on an animation that
+    // will now never even start.
+    expect(latestMoves.length).toBeGreaterThan(0)
+  })
+
   it('an opposing Parkiller guarding the exit sends a mandatorily-exiting pawn straight back to the yard (PK5)', () => {
     // Unlike buildTestBoard() above, Red's own entry square (0) is deliberately NOT a safe square
     // here - matching real generated board data, where an entry square is frequently unprotected
@@ -288,7 +319,10 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     expect(red.parkiller.trackPosition).toBe(16)
   })
 
-  it('an eliminated Parkiller stays out of play on later rolls', () => {
+  it('an eliminated Parkiller stays out of play on later rolls, and parkillerMoved never fires for it', () => {
+    // parkillerMoved not firing at all (rather than firing with a same-position noop result) is
+    // itself the fix for a real client-reported freeze - see this describe block's own dedicated
+    // test above for the full mechanism.
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)
     const blue = createPlayerState('Blue', board)
@@ -303,15 +337,8 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
 
     manager.requestRoll()
 
-    expect(result).toEqual({
-      color: 'Red',
-      before: 7,
-      after: 7,
-      beforeCorridorPosition: 0,
-      afterCorridorPosition: 0,
-      capturedPawn: null,
-      capturedParkillerColor: null,
-    })
+    expect(result).toBeNull()
+    expect(red.parkiller.state).toBe('Eliminated')
     expect(red.parkiller.trackPosition).toBe(7)
   })
 })
