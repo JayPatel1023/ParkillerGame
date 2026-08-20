@@ -380,3 +380,21 @@ export function resolveBarrierElimination(moverColor: PieceColor, piecesAtSquare
   if (aMatches !== bMatches) return aMatches ? b : a // exactly one shares the mover's color - the other one goes
   return a.arrivedAt >= b.arrivedAt ? a : b // both (mis)match the same way - later arrival goes
 }
+
+// PK9.1: "the same number on both dice (double)" obligates removing an existing barrier of the
+// player's *own* pawns before anything else that roll (PK9's own priority order puts this ahead of
+// PK9.2's rewards and PK9.3's shelter removal) - a barrier merely shared with an opponent (one own
+// pawn, one foreign) isn't "the player's own" to have to open, so only a same-color pair counts.
+// Only the player's own 4 pieces need checking, not the whole track. Returns the first one found if
+// somehow more than one exists (a rare-enough double edge case not worth its own tie-break rule).
+export function ownBarrierTrackPosition(player: PlayerState): number | null {
+  const counts = new Map<number, number>()
+  for (const piece of player.pieces) {
+    if (piece.state !== 'OnTrack') continue
+    counts.set(piece.trackPosition, (counts.get(piece.trackPosition) ?? 0) + 1)
+  }
+  for (const [position, count] of counts) {
+    if (count >= 2) return position
+  }
+  return null
+}
