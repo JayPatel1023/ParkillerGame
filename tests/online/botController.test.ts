@@ -43,6 +43,19 @@ describe('BotController', () => {
     const host = new HostTurnManagerBridge(inner, dice, players, transport, new Map<number, PieceColor>())
     const bots = new BotController(host, new Set<PieceColor>(['Red', 'Blue']), 10, 2, 2)
 
+    // Tracked via the moveApplied event, not a final-state snapshot: real gameplay can send an
+    // exited piece straight back to the yard again (captured, or bounced by an opposing Parkiller -
+    // PK5), so checking pieces.some(state !== 'InYard') only at the very end can go right back to
+    // false through no fault of the bot at all, on nothing more than unlucky timing of that one
+    // snapshot - flaky for a reason unrelated to what this test actually means to verify (that each
+    // bot can act autonomously at all). "Ever exited" is immune to that coincidence.
+    let redExited = false
+    let blueExited = false
+    inner.moveApplied.on((result) => {
+      if (result.movedPiece.color === 'Red') redExited = true
+      if (result.movedPiece.color === 'Blue') blueExited = true
+    })
+
     host.start()
 
     // Advance well past several rounds of "roll (10ms) -> move (10ms)" turns - the bots alone
@@ -51,8 +64,6 @@ describe('BotController', () => {
       vi.advanceTimersByTime(15)
     }
 
-    const redExited = players[0].pieces.some((p) => p.state !== 'InYard')
-    const blueExited = players[1].pieces.some((p) => p.state !== 'InYard')
     expect(redExited).toBe(true)
     expect(blueExited).toBe(true)
 
