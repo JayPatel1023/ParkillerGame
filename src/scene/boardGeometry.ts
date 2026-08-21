@@ -19,7 +19,13 @@
 // straight back into the zero-overlap margin above, so both grow together, keeping the same ~3%
 // margin ratio (12 / (9.7 * 1.2) ~= 1.03, matching 10/9.7's own ratio) rather than re-introducing
 // the crowding bug this constant was originally raised to fix.
-export const BOARD_SIZE = 12
+//
+// Bumped a third time, 12 -> 17, again paired with PIECE_BASE_RADIUS: still reported as too small,
+// this time pointing at a yard piece specifically dwarfed by its own yard-hole artwork. Given a
+// bigger jump than the previous round's exact-margin approach (~14.9 would exactly match the old
+// ~3% margin at the new radius) specifically for more breathing room this time, so a same-size
+// future request doesn't come right back to "barely fits."
+export const BOARD_SIZE = 17
 // Just enough clearance above TrackTile's own surface (which itself sits at this same height - see
 // TrackTile.tsx) to avoid z-fighting between a piece's base and the tile underneath it. Only
 // correct for pieces actually standing on a raised TrackTile, i.e. OnTrack - see FLAT_SURFACE_HEIGHT

@@ -59,7 +59,12 @@ const DEFAULT_POLAR_ANGLE = 0.85 // ~49° off vertical - shallower than before s
 // looking smaller on screen than before despite the increase, right back to the complaint that
 // prompted growing them. Split the difference: pulled back enough that the board reads noticeably
 // smaller than the too-big report, without zooming out so far it erases the piece-size gain.
-const CAMERA_DISTANCE = 19
+//
+// Scaled again from 19, proportionally with BOARD_SIZE's own 12 -> 17 (19 * 17/12 ~= 26.9, rounded
+// to 27) so the board's on-screen size relative to the viewport - already checked against the
+// too-big report above - stays exactly as it was this round, while the pieces (grown by a further,
+// separate ask this round - see PIECE_BASE_RADIUS) read larger against it than before.
+const CAMERA_DISTANCE = 27
 // Calibrated (not derived) against BOARD_SIZE=6 at a ~1.6:1 viewport aspect - see FitBoardCamera.
 const REFERENCE_MIN_DIMENSION_FACTOR = 620
 
