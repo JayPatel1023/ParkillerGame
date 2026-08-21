@@ -3,8 +3,20 @@ import { extend, useFrame, type BufferGeometryNode } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { Mesh } from 'three'
 import { RoundedBoxGeometry } from 'three-stdlib'
+import { BOARD_SIZE } from './boardGeometry'
 
 extend({ RoundedBoxGeometry })
+
+// Every position/size constant below was tuned by eye against BOARD_SIZE=6 (see CORNER_X/CORNER_Z's
+// own comment). BOARD_SIZE has grown since (currently 12) to give pieces more room, and everything
+// derived from board-image coordinates (toWorldPosition, the track loop itself) scales with it - but
+// these constants are hand-picked absolute world units, not derived from BOARD_SIZE, so they didn't
+// grow along with the board around them. Reported directly, with a screenshot: the dice tray had
+// drifted from its tuned gap (past the board's own edge) onto real track squares, since the edge
+// moved outward while these stayed put. Scaling everything here by the same ratio BOARD_SIZE grew by
+// keeps the tray in the same *relative* spot - the gap between the logo badge and the fleur-de-lis -
+// regardless of which BOARD_SIZE is live.
+const DICE_SCALE = BOARD_SIZE / 6
 
 declare global {
   namespace JSX {
@@ -25,18 +37,18 @@ declare global {
 // the gap between that badge and the fleur-de-lis ornament above it instead, checked clear of both
 // the real track (nearest point 0.091 normalized units away on the tightest board, 4p) and the
 // artwork.
-const CORNER_X = 2.37
-const CORNER_Z = 1.98
-const DIE_SPACING = 0.55
+const CORNER_X = 2.37 * DICE_SCALE
+const CORNER_Z = 1.98 * DICE_SCALE
+const DIE_SPACING = 0.55 * DICE_SCALE
 // The black die sits on its own row behind the two white ones (see `row` below) - a taller row
 // gap than the plain column spacing, since the black die is now physically bigger and would
 // otherwise overlap the white dice's row.
-const ROW_SPACING = 0.66
+const ROW_SPACING = 0.66 * DICE_SCALE
 // Reported directly, twice now: the dice read as too large on the board - not by a lot, just
 // enough to feel oversized next to the pieces. Trimmed about a sixth off (0.5 -> 0.42) the first
 // time, then further (0.42 -> 0.34) the second - keeping DIE_SPACING/ROW_SPACING as-is (smaller
 // dice only means more clearance between them, never less).
-const DIE_SIZE = 0.34
+const DIE_SIZE = 0.34 * DICE_SCALE
 // Reference photos had previously shown the black die - the one that moves the Parkiller -
 // noticeably bigger than the two white dice, so it was scaled up 30% to match. Reported directly
 // since, in the shipped game itself rather than those reference photos: make it the same size as
@@ -145,7 +157,7 @@ function createDiceFaceTexture(value: number, bodyColors: [string, string], pipC
 // Idle nudge (see GameBoardScreen.tsx's own idle timer): a gentle repeating hop + side-to-side
 // rock, clearly distinct from the fast tumbling `rolling` spin below, so it reads as "someone's
 // waiting on you" rather than as the dice already rolling on their own.
-const NUDGE_BOUNCE_HEIGHT = 0.06
+const NUDGE_BOUNCE_HEIGHT = 0.06 * DICE_SCALE
 const NUDGE_FREQ = 3.2
 
 // Settle punch + sparkle flash, requested directly ("반짝임/펄스" - a flash/pulse the instant a

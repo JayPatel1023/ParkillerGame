@@ -50,7 +50,16 @@ const DEFAULT_POLAR_ANGLE = 0.85 // ~49° off vertical - shallower than before s
 // past its edge) were getting cropped at real window sizes instead of sitting comfortably inside
 // the frame with margin. Pulled back from 6.6, then again from 9.5 once that still wasn't enough
 // margin on an actual wide desktop window.
-const CAMERA_DISTANCE = 12.5
+//
+// Reported directly again, from the opposite direction this time, once BOARD_SIZE grew 6 -> 12 to
+// give pieces more room: leaving this unchanged let the (now bigger) board fill almost the entire
+// screen on the very first turn. A *full* proportional pull-back (12.5 * 12/6 = 25) would restore
+// the original on-screen board size exactly, but pieces grew by a smaller factor than the board did
+// (1.2x vs 2x - see PIECE_BASE_RADIUS/BOARD_SIZE), so fully compensating the zoom would leave them
+// looking smaller on screen than before despite the increase, right back to the complaint that
+// prompted growing them. Split the difference: pulled back enough that the board reads noticeably
+// smaller than the too-big report, without zooming out so far it erases the piece-size gain.
+const CAMERA_DISTANCE = 19
 // Calibrated (not derived) against BOARD_SIZE=6 at a ~1.6:1 viewport aspect - see FitBoardCamera.
 const REFERENCE_MIN_DIMENSION_FACTOR = 620
 
