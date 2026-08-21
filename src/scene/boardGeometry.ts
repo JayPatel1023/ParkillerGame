@@ -12,7 +12,14 @@
 // simply gives full-size pieces more real room. 9.7 is the exact tileSize needed for the tightest
 // board's worst case (Parkiller + pawn, both at their current unmodified radii) to fit with zero
 // overlap and zero tile-edge overspill - rounded up to 10 for a small margin.
-export const BOARD_SIZE = 10
+//
+// Bumped again, 10 -> 12, alongside a matching PIECE_BASE_RADIUS increase (see PieceMesh.tsx):
+// reported directly that pieces now read as too small against the bigger board ("말들의 크기가
+// 너무작다"). Growing pieces without growing the board back out from under them would have eaten
+// straight back into the zero-overlap margin above, so both grow together, keeping the same ~3%
+// margin ratio (12 / (9.7 * 1.2) ~= 1.03, matching 10/9.7's own ratio) rather than re-introducing
+// the crowding bug this constant was originally raised to fix.
+export const BOARD_SIZE = 12
 // Just enough clearance above TrackTile's own surface (which itself sits at this same height - see
 // TrackTile.tsx) to avoid z-fighting between a piece's base and the tile underneath it. Only
 // correct for pieces actually standing on a raised TrackTile, i.e. OnTrack - see FLAT_SURFACE_HEIGHT
