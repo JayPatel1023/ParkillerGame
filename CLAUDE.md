@@ -117,8 +117,12 @@ wherever the rulebook's prose alone was ambiguous.
 - **PC2/PC2.4**: never more than two pawns share a square. A barrier (2 pawns, own or mixed) blocks
   every other piece from landing on or passing through that square — except the Parkiller, which
   jumps over barriers freely (PK4).
-- **PC3/PK8**: capturing is mandatory whenever available — a player can't sidestep a capture by
-  moving a different, non-capturing piece instead.
+- **PC3/PK8**: capturing is mandatory *per piece*, not across the whole roll — verified directly
+  against the reference implementation (`activarFichasMovibles()`/`wouldComer()` in
+  `Parkiller_GameMaker-main`): a piece that could capture with one die can't dodge into a
+  non-capturing move for itself, but a *different* piece stays completely free to use either die
+  normally, including the very die that would have captured — the rulebook's own "move another pawn
+  with the matching number, then the pawn in question" escape hatch.
 - **PC4/PC5**: reaching the final home-corridor square requires an exact roll. Capturing a pawn or
   an opposing Parkiller grants "10 x 2" — two independently-resolved 10-square rewards, each
   claimed immediately with a piece already in play or forfeited on its own (a piece able to use one

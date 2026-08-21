@@ -440,7 +440,16 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     ])
   })
 
-  it('forces a capturing move when one is available, even though a different piece also has a legal move (PC3/PK8)', () => {
+  it('locks a capturing piece to its capturing move, but leaves a different, non-capturing piece completely free (PC3/PK8)', () => {
+    // Verified directly against the reference implementation (activarFichasMovibles()/wouldComer()
+    // in Parkiller_GameMaker-main): mandatory capture is per-piece, not a blanket restriction across
+    // the whole roll - a piece that could capture can't dodge into a non-capturing move for itself,
+    // but that's the only restriction. The rulebook's own prose describes exactly this escape hatch
+    // ("if you want to avoid this, you can move another pawn with the matching number and then the
+    // pawn in question") - a *different* piece stays completely free to use either die (or the sum),
+    // including the very die that would have captured. An earlier version of this test asserted the
+    // opposite (any capture anywhere forces every other piece into a capturing move too) - that was
+    // the actual bug, not this one.
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)
     const blue = createPlayerState('Blue', board)
@@ -459,9 +468,45 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
 
     manager.requestRoll()
 
-    expect(offered).toHaveLength(1)
-    expect(offered[0].piece).toBe(red.pieces[0])
-    expect(offered[0].resultingTrackPosition).toBe(3)
+    const forCapturingPiece = offered.filter((m) => m.piece === red.pieces[0])
+    const forOtherPiece = offered.filter((m) => m.piece === red.pieces[1])
+    expect(forCapturingPiece).toHaveLength(1)
+    expect(forCapturingPiece[0].resultingTrackPosition).toBe(3)
+    expect(forOtherPiece.length).toBeGreaterThan(1)
+  })
+
+  it('lets a capture be avoided by redirecting the capturing die elsewhere and jumping past with the other die (PC3/PK8)', () => {
+    // The rulebook's own prose, and the reference implementation's tutorial message
+    // ("Si con un peón tienes posibilidad de comer, debes comer obligadamente, excepto que elijas
+    // mover otra pieza" - if a pawn of yours could capture, you must capture, unless you choose to
+    // move a different piece): spending the capturing die (3) on a *different* piece first, then
+    // using the *other* die (6, deliberately not 5 - the exit roll, which would otherwise lock this
+    // die to ExitYard-or-capture only and muddy what this test is actually isolating) on the
+    // near-capture piece lands it past the opponent's square (6, not 3) instead of capturing - no
+    // elimination, no reward, and the opponent stays exactly where it was.
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 0 // dieA=3 would capture blue.pieces[0]; dieB=6 jumps past it to 6
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 10
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 3
+
+    const dice = new ScriptedDice([3, 6, 1])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    manager.requestRoll()
+    manager.submitMove(red.pieces[1], 3) // spends dieA=3 on a different piece - not a capture
+
+    // red.pieces[0] is no longer locked to the capture - dieB=6 is now offered on it, landing past
+    // (not on) blue.pieces[0]'s square.
+    manager.submitMove(red.pieces[0], 6)
+
+    expect(red.pieces[0].trackPosition).toBe(6)
+    expect(blue.pieces[0].state).toBe('OnTrack')
+    expect(blue.pieces[0].trackPosition).toBe(3)
   })
 })
 
