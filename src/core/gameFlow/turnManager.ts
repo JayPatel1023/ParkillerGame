@@ -368,6 +368,12 @@ export class TurnManager {
     const dieBMoves = !state.dieBUsed
       ? getValidMoves(this.board, this.currentPlayer, this.players, state.dieB, this.settings, 'dieB')
       : null
+    // Only ever a candidate move source before either die is individually spent - same precondition
+    // the sum-move computation further down already required.
+    const sumMoves =
+      !state.dieAUsed && !state.dieBUsed
+        ? getValidMoves(this.board, this.currentPlayer, this.players, state.dieA + state.dieB, this.settings, 'sum')
+        : null
 
     // PC2.1: "A pawn must move to the starting square" whenever a die's own value is the exit
     // roll and a yard piece could use it - that die can only be spent on the exit, or on a move
@@ -378,6 +384,16 @@ export class TurnManager {
     // offered again next time around).
     const dieAHasExit = state.dieA === this.settings.exitRoll && (dieAMoves?.some((m) => m.kind === 'ExitYard') ?? false)
     const dieBHasExit = state.dieB === this.settings.exitRoll && (dieBMoves?.some((m) => m.kind === 'ExitYard') ?? false)
+    // PC2.1 also names the sum ("a die shows a 5, or the sum is 5") as its own, equally valid exit
+    // trigger, not just a single die - reported directly ("si sale 5 y quedan peones en el refugio
+    // deben salir"): with dieA=4/dieB=1, neither die alone is the exit roll, so the single-die-only
+    // checks above missed it entirely, and the player could dodge the exit outright by moving two
+    // other pieces with the 4 and the 1 individually - the sum itself was never touched, let alone
+    // obligated. Only meaningful when neither die already carries the narrower single-die lock
+    // above (that case is already fully handled, and using the sum then would just let a single die's
+    // own lock be bypassed by spending both dice on one already-in-play piece instead).
+    const sumHasExit =
+      !dieAHasExit && !dieBHasExit && state.dieA + state.dieB === this.settings.exitRoll && (sumMoves?.some((m) => m.kind === 'ExitYard') ?? false)
     const restrictToExitOrCapture = (moves: MoveOption[]) =>
       moves.filter((m) => m.kind === 'ExitYard' || wouldCapture(this.board, m, this.players, this.parkillerCapturableThisRoll))
 
@@ -398,7 +414,10 @@ export class TurnManager {
         const barrierMoves = restrictToBarrierBreakOrCapture(moves)
         if (barrierMoves.length > 0) return barrierMoves
       }
-      return dieHasExit ? restrictToExitOrCapture(moves) : moves
+      // sumHasExit restricts every move source alike, not just the sum's own moves - using either
+      // individual die on some other, non-capturing piece would just dodge the sum-only exit the
+      // same way a single die's own dieHasExit lock already prevents for that one die.
+      return dieHasExit || sumHasExit ? restrictToExitOrCapture(moves) : moves
     }
 
     // Keyed by piece + amount, not piece alone - a piece reachable by *both* dice (or a die and the
@@ -420,9 +439,12 @@ export class TurnManager {
     if (dieBMoves) addMoves(applyObligations(dieBMoves, dieBHasExit))
     // The sum can only combine both dice into one board-piece move once neither individual die is
     // still obligated to a mandatory exit or barrier-break - otherwise it would let a player dodge
-    // either obligation by spending both dice on a single already-in-play piece instead.
-    if (dieAMoves && dieBMoves && !dieAHasExit && !dieBHasExit && barrierPosition === null) {
-      addMoves(getValidMoves(this.board, this.currentPlayer, this.players, state.dieA + state.dieB, this.settings, 'sum'))
+    // either obligation by spending both dice on a single already-in-play piece instead. Still
+    // routed through applyObligations even here (dieHasExit=false, but sumHasExit is checked inside
+    // it too) so a sum-only exit obligation restricts the sum's own other move options exactly like
+    // it now restricts dieA/dieB's.
+    if (dieAMoves && dieBMoves && !dieAHasExit && !dieBHasExit && barrierPosition === null && sumMoves) {
+      addMoves(applyObligations(sumMoves, false))
     }
 
     let options = [...byPieceAndAmount.values()]
