@@ -295,6 +295,38 @@ describe('TurnManager - mandatory departure (PC2.1)', () => {
     expect(red.pieces[0].trackPosition).toBe(0)
     expect(red.pieces[1].trackPosition).toBe(0)
   })
+
+  // Reported directly ("si sale 5 y quedan peones en el refugio deben salir" - if a 5 comes up and
+  // there are still pawns in the shelter, they must come out): PC2.1 names the sum as an equally
+  // valid exit trigger ("a die shows a 5, or the sum is 5"), but the single-die-only checks above
+  // (dieAHasExit/dieBHasExit) missed a roll like 4+1 entirely - neither die is individually 5, so
+  // both were previously left completely free and a player could dodge the exit outright by moving
+  // two other already-in-play pieces with the 4 and the 1, never touching the sum-only exit at all.
+  it('a sum-only exit roll (neither die individually the exit roll) still locks both dice to the exit, not just the sum', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 2 // dieA=4 alone would move it to 6, dieB=1 alone to 3 - neither is a capture
+
+    const dice = new ScriptedDice([4, 1, 1]) // neither die is 5, but 4+1=5 (the exit roll)
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let latestMoves: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((m) => (latestMoves = m))
+    manager.requestRoll()
+
+    // Neither die individually offers a move for the already-in-play piece - both are locked to the
+    // sum-only exit, exactly like a single die's own exit lock already restricts that one die.
+    expect(latestMoves.some((m) => m.piece === red.pieces[0])).toBe(false)
+    expect(latestMoves.length).toBeGreaterThan(0)
+    expect(latestMoves.every((m) => m.kind === 'ExitYard' && m.diceSource === 'sum')).toBe(true)
+
+    const result = manager.submitMove(red.pieces[1])
+    expect(result).not.toBeNull()
+    expect(red.pieces[1].state).toBe('OnTrack')
+    expect(red.pieces[1].trackPosition).toBe(0)
+  })
 })
 
 describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
@@ -460,7 +492,11 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     blue.pieces[0].state = 'OnTrack'
     blue.pieces[0].trackPosition = 3 // dieA=3 moves red.pieces[0] 0 -> 3, capturing it
 
-    const dice = new ScriptedDice([3, 2, 1]) // dieB=2 would just move red.pieces[1] 10 -> 12, no capture
+    // dieB=4 (not 2): the original 3+2 summed to the exit roll (5) and, with yard pieces still
+    // present, unintentionally triggered the sum-exit obligation this same file tests separately
+    // below - collapsing this test's own unrelated "other piece stays free" case down to nothing.
+    // dieB=4 just moves red.pieces[1] 10 -> 14, no capture, sum 3+4=7 (not the exit roll).
+    const dice = new ScriptedDice([3, 4, 1])
     const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
 
     let offered: import('../src/core/rules/moveOption').MoveOption[] = []
@@ -586,5 +622,40 @@ describe('TurnManager - mandatory barrier removal on doubles (PK9.1)', () => {
     // Neither barrier pawn can legally move at all (blocked) - the obligation is waived rather than
     // forcing a false "no moves possible", so whatever else was legal is offered normally.
     expect(offered.some((m) => m.piece === red.pieces[2])).toBe(true)
+  })
+})
+
+describe('TurnManager - landing on an unprotected opposing Parkiller (PK5)', () => {
+  // Reported directly ("el azul cayó encima del parki rojo y se volvió loco...en vez de morir,
+  // contó 20" - blue landed on the red Parki and went crazy, instead of dying it counted 20): the
+  // applyMove/parchisRules.test.ts level already covers eliminatedByParkiller being set correctly
+  // in isolation, but not whether TurnManager's own reward plumbing (submitMove's own
+  // `capturedPiece || capturedParkillerColor` check) stays correctly silent for this specific
+  // result, only for a real capture/Parkiller-kill. This exercises the full requestRoll/submitMove
+  // path the actual game runs, not just applyMove in isolation.
+  it('sends the pawn home with no reward offered, on a plain (non-double) roll', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 2
+    blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+    blue.parkiller.trackPosition = 5 // not a safe square on this test board
+
+    const dice = new ScriptedDice([3, 7, 1]) // not a double - PK6's Parkiller-kill window stays closed
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let rewardOffered = false
+    manager.rewardOffered.on(() => (rewardOffered = true))
+
+    manager.requestRoll()
+    const result = manager.submitMove(red.pieces[0]) // 2 -> 5, lands on blue's unprotected Parkiller
+
+    expect(result?.eliminatedByParkiller).toBe(true)
+    expect(result?.capturedPiece).toBeNull()
+    expect(result?.capturedParkillerColor).toBeNull()
+    expect(red.pieces[0].state).toBe('InYard')
+    expect(blue.parkiller.state).toBe('InPlay')
+    expect(rewardOffered).toBe(false)
   })
 })
