@@ -427,10 +427,27 @@ export class TurnManager {
 
     let options = [...byPieceAndAmount.values()]
 
-    // PC3/PK8: capturing is mandatory whenever it's available - a player can't sidestep an
-    // available capture by choosing to move a different, non-capturing piece instead.
-    const capturingOptions = options.filter((m) => wouldCapture(this.board, m, this.players, this.parkillerCapturableThisRoll))
-    if (capturingOptions.length > 0) options = capturingOptions
+    // PC3/PK8: capturing is mandatory *per piece*, not across the whole roll - verified directly
+    // against the reference implementation (activarFichasMovibles()/wouldComer() in
+    // Parkiller_GameMaker-main), which locks a piece out of a die that *wouldn't* capture only when
+    // that same piece *could* capture with the roll's other die - never touching any other piece's
+    // own options. The rulebook's own prose describes exactly this escape hatch ("if you want to
+    // avoid this, you can move another pawn with the matching number and then the pawn in
+    // question"): a piece that could capture can't dodge into a non-capturing move for itself, but a
+    // *different* piece stays completely free to use either die normally, including the very die
+    // that would have captured. Reported directly as broken the previous way: capturing anywhere in
+    // the roll forced every other piece into a capturing move too, with no way to redirect a die
+    // elsewhere the way the rulebook explicitly allows.
+    const optionsByPiece = new Map<Piece, MoveOption[]>()
+    for (const move of options) {
+      const list = optionsByPiece.get(move.piece)
+      if (list) list.push(move)
+      else optionsByPiece.set(move.piece, [move])
+    }
+    options = [...optionsByPiece.values()].flatMap((pieceOptions) => {
+      const capturing = pieceOptions.filter((m) => wouldCapture(this.board, m, this.players, this.parkillerCapturableThisRoll))
+      return capturing.length > 0 ? capturing : pieceOptions
+    })
 
     this.pendingMoves = options
 
