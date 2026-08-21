@@ -39,7 +39,10 @@ export const PIECE_PROFILE_RAW: [number, number][] = [
 // too small against the now-bigger board/tiles. Scaled by the same ~1.2x BOARD_SIZE grew by, so
 // the piece-to-tile ratio (and the zero-overlap crowding fit that ratio depends on) stays exactly
 // what it was, not the yard-hole footprint match this was originally calibrated against alone.
-export const PIECE_BASE_RADIUS = 0.078
+//
+// Bumped again, 0.078 -> 0.1, alongside BOARD_SIZE's own 12 -> 17: reported directly, again, with
+// a screenshot of a single yard piece dwarfed by its own yard-hole artwork - still too small.
+export const PIECE_BASE_RADIUS = 0.1
 export const PROFILE_SCALE = PIECE_BASE_RADIUS / Math.max(...PIECE_PROFILE_RAW.map(([r]) => r))
 // Stretches the profile taller without widening the base - requested directly, twice now ("peones
 // más alargados" both times), each time with a reference photo of taller pawns. Applied only to
