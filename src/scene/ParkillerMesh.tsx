@@ -5,7 +5,19 @@ import type { Group } from 'three'
 import { getColor } from '../core/colorPalette'
 import type { PieceColor } from '../core/pieceColor'
 import { BASE_HEIGHT } from './boardGeometry'
-import { BOUNCE_HEIGHT, HOP_DURATION, INTRO_DURATION, INTRO_X_OFFSET, INTRO_Y_START, MAX_FRAME_DELTA, easeOutBounce, easeOutCubic } from './PieceMesh'
+import {
+  BOUNCE_HEIGHT,
+  HOP_DURATION,
+  INTRO_DURATION,
+  INTRO_X_OFFSET,
+  INTRO_Y_START,
+  MAX_FRAME_DELTA,
+  PIECE_HEIGHT_SCALE,
+  PIECE_PROFILE_RAW,
+  PROFILE_SCALE,
+  easeOutBounce,
+  easeOutCubic,
+} from './PieceMesh'
 
 // Reported directly, twice, in opposite directions: the Parkiller's own hop used to start the
 // instant parkillerMoved fired, well before the dice-spin animation (useTurnManager's own
@@ -72,12 +84,16 @@ function yawTowards(from: [number, number, number], to: [number, number, number]
 // matched to its own base radius) put the whole figure at roughly 2.3x a regular pawn's height -
 // the model's own proportions are much more slender than a pawn's, so matching the footprint
 // overscales the height. Matched to height instead - "clearly bigger than a pawn, not just
-// slightly wider" was always about height, not footprint - targeting ~1.4x PieceMesh's own total
-// pawn height (0.9116 raw * PROFILE_SCALE * PIECE_HEIGHT_SCALE, see PieceMesh.tsx) over this
-// model's own total raw height (hood tip at y=2.9).
-const PAWN_HEIGHT = 0.9116 * (0.065 / 0.335) * 1.43
+// slightly wider" was always about height, not footprint - targeting a multiple of PieceMesh's own
+// total pawn height (raw profile height * PROFILE_SCALE * PIECE_HEIGHT_SCALE, imported live rather
+// than duplicated as a hardcoded number so this stays correct whenever PIECE_BASE_RADIUS changes)
+// over this model's own total raw height (hood tip at y=2.9).
+//
+// Multiplier bumped 1.4 -> 1.55: reported directly, again, that the Parkiller specifically needed
+// to read bigger, on top of the general pawn-size increase (PIECE_BASE_RADIUS) both figures share.
+const PAWN_HEIGHT = PIECE_PROFILE_RAW[PIECE_PROFILE_RAW.length - 1][1] * PROFILE_SCALE * PIECE_HEIGHT_SCALE
 const MODEL_RAW_HEIGHT = 2.9
-const MODEL_SCALE = (PAWN_HEIGHT * 1.4) / MODEL_RAW_HEIGHT
+const MODEL_SCALE = (PAWN_HEIGHT * 1.55) / MODEL_RAW_HEIGHT
 
 // A continuous bell-like flare from a wide, near-flat base up to narrow shoulders - not the old
 // profile's straight vertical-walled cylinder through the midsection, which is nowhere in any of
