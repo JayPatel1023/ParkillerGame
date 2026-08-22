@@ -5,7 +5,7 @@ import { BOARD_DEFINITIONS } from '../data/boards'
 import { getColor } from '../core/colorPalette'
 import { BoardMesh } from './BoardMesh'
 import { PIECE_PROFILE_RAW, PROFILE_SCALE, PIECE_HEIGHT_SCALE } from './PieceMesh'
-import { toWorldPosition, FLAT_SURFACE_HEIGHT } from './boardGeometry'
+import { toWorldPosition, FLAT_SURFACE_HEIGHT, BOARD_SIZE } from './boardGeometry'
 
 // Requested directly: a flat photo (blurred or not) or a CSS pattern both read as "not
 // three-dimensional" - a real background needs actual depth (perspective, lighting, shadows), which
@@ -16,12 +16,21 @@ import { toWorldPosition, FLAT_SURFACE_HEIGHT } from './boardGeometry'
 // doesn't have) sitting in their yards so the board doesn't read as empty.
 const definition = BOARD_DEFINITIONS[4]
 
+// radius/height tuned by eye against BOARD_SIZE=6 (this screen's own BoardMesh, independent of
+// BoardScene's own gameplay camera - see that file's own CAMERA_DISTANCE for the same class of
+// bug). Reported directly, with a screenshot showing only a few yard hubs, cropped at the edges:
+// BOARD_SIZE has grown 3x since (6 -> 18, across several rounds of "pieces are still too small")
+// and this camera never followed, unlike BoardScene's own CAMERA_DISTANCE and DiceMesh's own
+// DICE_SCALE which both already scale with it - scaled by the same live ratio here instead of a
+// second hardcoded number that would just go stale again the next time BOARD_SIZE changes.
+const CAMERA_SCALE = BOARD_SIZE / 6
+
 function RotatingCamera() {
   const angleRef = useRef(0)
   useFrame((state, delta) => {
     angleRef.current += delta * 0.06
-    const radius = 4.3
-    const height = 3.6
+    const radius = 4.3 * CAMERA_SCALE
+    const height = 3.6 * CAMERA_SCALE
     state.camera.position.set(Math.sin(angleRef.current) * radius, height, Math.cos(angleRef.current) * radius)
     state.camera.lookAt(0, 0, 0)
   })
@@ -63,7 +72,11 @@ export function StartScreenBackground() {
       <ambientLight intensity={0.6} />
       <directionalLight position={[4, 8, 2]} intensity={1.1} castShadow />
       <directionalLight position={[-3, 4, -2]} intensity={0.35} />
-      <fog attach="fog" args={[new THREE.Color('#05070c'), 7, 22]} />
+      {/* near/far scaled by the same CAMERA_SCALE as RotatingCamera - also tuned against
+          BOARD_SIZE=6, so the board's own edges stayed just short of the fog the way they did
+          before BOARD_SIZE grew, instead of drifting into it now that everything else sits
+          further from the origin. */}
+      <fog attach="fog" args={[new THREE.Color('#05070c'), 7 * CAMERA_SCALE, 22 * CAMERA_SCALE]} />
       <Suspense fallback={null}>
         <BoardMesh imageUrl={definition.boardImage} />
         <DecorativePieces />
