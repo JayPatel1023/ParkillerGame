@@ -59,7 +59,14 @@ export const PIECE_PROFILE_RAW: [number, number][] = [
 //
 // Bumped an eighth time, 0.15 -> 0.17, alongside BOARD_SIZE's own 28 -> 32 - reported directly,
 // again, as still too small.
-export const PIECE_BASE_RADIUS = 0.17
+//
+// Bumped a ninth time, 0.17 -> 0.22, alongside BOARD_SIZE's own 32 -> 41 - reported directly,
+// again, as too small to make out. A bigger jump than most previous rounds: the board's own
+// on-screen size also just got genuinely smaller for the first time (the OrbitControls/far-plane
+// bug that had been silently blocking every earlier "shrink the board" request - see
+// CAMERA_DISTANCE's own comment - is now actually fixed), which on its own makes every piece read
+// smaller on screen even without this change, on top of the standalone "still too small" report.
+export const PIECE_BASE_RADIUS = 0.22
 export const PROFILE_SCALE = PIECE_BASE_RADIUS / Math.max(...PIECE_PROFILE_RAW.map(([r]) => r))
 // Stretches the profile taller without widening the base - requested directly, twice now ("peones
 // más alargados" both times), each time with a reference photo of taller pawns. Applied only to
@@ -75,6 +82,15 @@ const HIGHLIGHT_Y = 0.6766 * PROFILE_SCALE * PIECE_HEIGHT_SCALE
 // Same proportion of the ball's own equator radius (0.235 raw) as before, just carried over to
 // the new, narrower ball so the highlight band doesn't end up oversized relative to it.
 const HIGHLIGHT_RADIUS = 0.145 * PROFILE_SCALE
+
+// This piece's own total height in world units (the raw profile's own top point, 0.9116, scaled
+// the same way the rendered geometry itself is) - used below for the movable-cue marker's own
+// height offset, so it stays correctly positioned above the head regardless of how big
+// PIECE_BASE_RADIUS is currently set to, instead of a fixed guess that only matched one specific
+// size. Also usable by ParkillerMesh.tsx (imports PIECE_PROFILE_RAW/PROFILE_SCALE/PIECE_HEIGHT_SCALE
+// from here already for the exact same reason - its own PAWN_HEIGHT constant duplicates this
+// formula rather than importing it directly, kept as-is to avoid an unrelated refactor here).
+const PAWN_TOTAL_HEIGHT = PIECE_PROFILE_RAW[PIECE_PROFILE_RAW.length - 1][1] * PROFILE_SCALE * PIECE_HEIGHT_SCALE
 
 // Fixed regardless of how many squares a move covers - a previous version sped up per-hop
 // duration for long reward moves so total playback wouldn't drag, but that meant two moves of
@@ -153,17 +169,33 @@ interface PieceMeshProps {
 // counter-rotating double ring at the base plus a small spinning gold marker gem bobbing above the
 // piece's head. Kept off pieces that are merely "yours this turn" so the animated effect stays a
 // reliable "you can act on this one" signal instead of lighting up on every piece for the whole turn.
+//
+// Reported directly ("자기차례가 되여서 말을 이동할수있는말들을 시각적으로 알리게 효과를달라" - add a
+// visual effect showing which pieces can be moved on your turn): this cue already existed, but
+// verified live it was reading as essentially invisible - MARKER_BASE_Y/MARKER_SIZE were both
+// fixed absolute world-unit constants dating back to PIECE_BASE_RADIUS's very first value (0.065),
+// never updated across nine rounds of piece growth since (now 0.22, a ~3.4x increase). The marker
+// gem's old fixed height (0.4) ended up roughly mid-body on the current pawn instead of "above the
+// head with margin" as originally intended - confirmed directly via a zoomed screenshot, no marker
+// visible at all, buried inside the piece's own geometry. Both now derive from the pawn's own
+// actual current height/radius instead of a stale absolute guess, so they stay correctly
+// proportioned through any future size change. Ring opacity also bumped for better contrast -
+// the previous value read as a faint, easy-to-miss outline once actually checked at real board
+// scale, not the "faceted, and unlit is fine because Colors are Correct" it looked like in the
+// numbers alone.
 const RING_OUTER_SPIN_SPEED = 0.9 // radians/sec
 const RING_INNER_SPIN_SPEED = -1.3 // opposite direction from the outer ring, on purpose
 const RING_PULSE_SPEED = 1.5
-const RING_BASE_OPACITY = 0.55
-const RING_PULSE_AMPLITUDE = 0.3
+const RING_BASE_OPACITY = 0.8
+const RING_PULSE_AMPLITUDE = 0.2
 
 const MARKER_BOB_SPEED = 2.2
 const MARKER_BOB_AMPLITUDE = 0.05
 const MARKER_SPIN_SPEED = 2.0
-const MARKER_BASE_Y = 0.4 // world units above the piece's own base - clears the head with margin
-const MARKER_SIZE = 0.024
+// PAWN_TOTAL_HEIGHT (below, near the profile constants) * 1.3 - comfortably clears the head with
+// real margin, scaling correctly with piece size instead of a fixed guess.
+const MARKER_BASE_Y = PAWN_TOTAL_HEIGHT * 1.3
+const MARKER_SIZE = PIECE_BASE_RADIUS * 0.4
 
 const IDLE_SCALE = 1
 const SELECTABLE_SCALE = 1.3
