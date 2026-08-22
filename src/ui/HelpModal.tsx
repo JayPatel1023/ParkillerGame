@@ -86,6 +86,16 @@ export function HelpModal({ onClose }: { onClose: () => void }) {
             </div>
           ))}
         </div>
+        {/* Reported directly, right after this same reference card shipped: this summary is a
+            reminder, not the real thing - a link to the client's own actual rulebook PDF (already
+            in the repo, now also copied into public/ so Vite serves it as a static asset) opens
+            it in a new tab. Pinned as its own footer, not the last item in the scroll area, so
+            it's reachable without scrolling all the way down first. */}
+        <div style={footerStyle}>
+          <a href="/rules.pdf" target="_blank" rel="noopener noreferrer" style={rulebookLinkStyle}>
+            Ver el reglamento completo (PDF) ↗
+          </a>
+        </div>
       </div>
     </div>
   )
@@ -152,6 +162,22 @@ const scrollAreaStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: 16,
+}
+
+const footerStyle: React.CSSProperties = {
+  flexShrink: 0,
+  padding: '12px 18px',
+  borderTop: `2px solid ${BRAND_GOLD}55`,
+  display: 'flex',
+  justifyContent: 'center',
+  background: 'rgba(0,0,0,0.15)',
+}
+
+const rulebookLinkStyle: React.CSSProperties = {
+  fontSize: 14,
+  fontWeight: 700,
+  color: BRAND_GOLD,
+  textDecoration: 'none',
 }
 
 const sectionStyle: React.CSSProperties = {
