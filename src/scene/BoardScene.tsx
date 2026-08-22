@@ -74,7 +74,15 @@ const DEFAULT_POLAR_ANGLE = 0.85 // ~49° off vertical - shallower than before s
 //
 // Scaled a sixth time from 35, proportionally with BOARD_SIZE's own 22 -> 24 (35 * 24/22 ~= 38.2,
 // rounded to 38) - same reasoning as above.
-const CAMERA_DISTANCE = 38
+//
+// Scaled a seventh time from 38, proportionally with BOARD_SIZE's own 24 -> 28 (38 * 28/24 ~= 44.3,
+// rounded to 44) - same reasoning as above.
+//
+// Pulled back further still, 44 -> 50 - reported directly ("조금만더 줄일수있게 해달라" - let it be
+// reduced just a bit more): unlike every earlier CAMERA_DISTANCE change above, this one is not a
+// proportional BOARD_SIZE follow-up - it's a direct ask to shrink the board's own on-screen size a
+// little beyond what that proportional scaling already preserved, independent of piece size.
+const CAMERA_DISTANCE = 50
 // Calibrated (not derived) against BOARD_SIZE=6 at a ~1.6:1 viewport aspect - see FitBoardCamera.
 const REFERENCE_MIN_DIMENSION_FACTOR = 620
 
