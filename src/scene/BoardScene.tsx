@@ -10,8 +10,8 @@ import type { Piece } from '../core/pieces/piece'
 import type { PieceColor } from '../core/pieceColor'
 import type { MoveAnimationRequest } from '../hooks/useTurnManager'
 import { BoardMesh, BOARD_THICKNESS } from './BoardMesh'
-import { PieceMesh } from './PieceMesh'
-import { ParkillerMesh } from './ParkillerMesh'
+import { PieceMesh, PIECE_BASE_RADIUS } from './PieceMesh'
+import { ParkillerMesh, PARKILLER_FOOTPRINT_RADIUS } from './ParkillerMesh'
 import { DiceMesh } from './DiceMesh'
 import { PieceChoiceMarkers } from './PieceChoiceMarkers'
 import { TrackTile } from './TrackTile'
@@ -67,7 +67,10 @@ const DEFAULT_POLAR_ANGLE = 0.85 // ~49° off vertical - shallower than before s
 //
 // Scaled a fourth time from 27, proportionally with BOARD_SIZE's own 17 -> 18 (27 * 18/17 ~= 28.6,
 // rounded to 29) - same reasoning as above, keeping the board's own on-screen size unchanged.
-const CAMERA_DISTANCE = 29
+//
+// Scaled a fifth time from 29, proportionally with BOARD_SIZE's own 18 -> 22 (29 * 22/18 ~= 35.4,
+// rounded to 35) - same reasoning as above.
+const CAMERA_DISTANCE = 35
 // Calibrated (not derived) against BOARD_SIZE=6 at a ~1.6:1 viewport aspect - see FitBoardCamera.
 const REFERENCE_MIN_DIMENSION_FACTOR = 620
 
@@ -283,6 +286,15 @@ function localTangentNormal(waypoints: [number, number][], index: number): { tan
 // at that waypoint instead of the world's fixed axes - see STACK_OFFSETS' own comment for why on
 // both counts. `waypoints` is null for a piece the caller couldn't resolve a lane for (shouldn't
 // normally happen); falls back to the raw (unscaled, unrotated) fraction as-is.
+// The larger of the two occupant footprints a shared square can ever actually hold - a pawn+pawn
+// barrier or a pawn joining the Parkiller, never two Parkillers (each color has exactly one).
+// Sized off the Parkiller's own (bigger) footprint so the clamp below stays safe for either case.
+const MAX_OCCUPANT_RADIUS = Math.max(PIECE_BASE_RADIUS, PARKILLER_FOOTPRINT_RADIUS)
+// Leaves a visible gap from the tile's own drawn border, not just enough to avoid true geometric
+// overlap - reported directly, with a screenshot, as still "밟고있다" (stepping on the line) at an
+// offset that technically stayed inside the tile's raw half-width.
+const STACK_CLEARANCE_FACTOR = 0.85
+
 function localStackOffset(
   waypoints: [number, number][] | null,
   index: number,
@@ -290,10 +302,22 @@ function localStackOffset(
   across: number,
   tileSize: number,
 ): [number, number] {
-  if (!waypoints || !waypoints[index]) return [along, across]
+  // Reported directly, with a screenshot: two stacked pieces spilling past the tile's own border,
+  // "밟고있다" (stepping on the line) - these offsets are tuned as *fractions of tileSize* (see
+  // STACK_OFFSETS' own comment), which scales the *spacing* correctly across every board's own tile
+  // size, but says nothing about whether that spacing still clears each occupant's own footprint
+  // once PIECE_BASE_RADIUS itself grows (several rounds of "pieces are still too small" since these
+  // fractions were last tuned by eye). Clamping the offset's own magnitude against the tile's real
+  // half-width minus the larger occupant's own radius makes this correct by construction regardless
+  // of how big pieces get from here, instead of needing another by-eye re-tune each time.
+  const maxOffsetMagnitude = Math.max(0, tileSize / 2 - MAX_OCCUPANT_RADIUS) * STACK_CLEARANCE_FACTOR
+  const rawMagnitude = Math.hypot(along, across) * tileSize
+  const clampScale = rawMagnitude > maxOffsetMagnitude && rawMagnitude > 0 ? maxOffsetMagnitude / rawMagnitude : 1
+
+  if (!waypoints || !waypoints[index]) return [along * tileSize * clampScale, across * tileSize * clampScale]
   const { tangent, normal } = localTangentNormal(waypoints, index)
-  const scaledAlong = along * tileSize
-  const scaledAcross = across * tileSize
+  const scaledAlong = along * tileSize * clampScale
+  const scaledAcross = across * tileSize * clampScale
   return [scaledAlong * tangent[0] + scaledAcross * normal[0], scaledAlong * tangent[1] + scaledAcross * normal[1]]
 }
 
