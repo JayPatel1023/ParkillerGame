@@ -86,7 +86,9 @@ const DEFAULT_POLAR_ANGLE = 0.85 // ~49° off vertical - shallower than before s
 // Pulled back again, 50 -> 62: reported directly that the board still needed the browser's own
 // zoom pulled all the way down to its minimum just to see the whole thing - a stronger signal than
 // the previous round's "just a bit more", so a bigger pull-back this time.
-const CAMERA_DISTANCE = 62
+//
+// Pulled back a third time, 62 -> 75, reported directly again as still not reduced enough.
+const CAMERA_DISTANCE = 75
 // Calibrated (not derived) against BOARD_SIZE=6 at a ~1.6:1 viewport aspect - see FitBoardCamera.
 const REFERENCE_MIN_DIMENSION_FACTOR = 620
 
