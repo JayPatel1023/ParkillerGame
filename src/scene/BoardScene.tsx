@@ -16,6 +16,7 @@ import { DiceMesh } from './DiceMesh'
 import { PieceChoiceMarkers } from './PieceChoiceMarkers'
 import { TrackTile } from './TrackTile'
 import { CaptureImpactEffect } from './CaptureImpactEffect'
+import { BarrierIndicator } from './BarrierIndicator'
 import { useBoardColorSampler } from './useBoardColorSampler'
 import {
   getCaptureReturnWaypoints,
@@ -571,6 +572,21 @@ export function BoardScene({
   for (const piece of allPieces) addToStack(stackKeyFor(piece), pawnOccupantId(piece))
   for (const player of players) addToStack(parkillerStackKey(player.parkiller), parkillerOccupantId(player.color))
 
+  // Barrier ward effect (see BarrierIndicator's own comment): only the shared *track* actually has
+  // a "barrier blocks other players" rule (PC2.4) - a private home-corridor square, even shared by
+  // two of the same color's own pieces, blocks nobody else, so this deliberately only looks at
+  // `track-` keys, not every crowded key in stackGroups.
+  const barrierPositions: [number, number, number][] = []
+  for (const [key, group] of stackGroups) {
+    if (group.length < 2 || !key.startsWith('track-')) continue
+    const trackIndex = Number(key.slice('track-'.length))
+    const waypoint = definition.trackWaypoints[trackIndex]
+    // BASE_HEIGHT, not FLAT_SURFACE_HEIGHT - a track square sits on a raised TrackTile (see
+    // restHeightFor's own OnTrack case), unlike the flat yard/corridor/finished-hub squares
+    // FLAT_SURFACE_HEIGHT is for.
+    if (waypoint) barrierPositions.push(toWorldPosition(waypoint, BASE_HEIGHT))
+  }
+
   return (
     <Canvas shadows gl={{ alpha: true }}>
       {/* Orthographic, exactly vertically overhead instead of the earlier angled perspective
@@ -628,6 +644,13 @@ export function BoardScene({
             ))
           })()}
       </Suspense>
+
+      {/* Ground-level ward effect on every square with an actual barrier (PC2.4) - see
+          BarrierIndicator's own comment. Rendered above the tiles but below the pieces themselves
+          (next in this tree), so it reads as a glow the barrier's own pieces are standing in. */}
+      {barrierPositions.map((pos, i) => (
+        <BarrierIndicator key={`barrier-${i}`} position={pos} tileSize={tileSize} />
+      ))}
 
       {allPieces.map((piece, index) => {
         // Capture applies to the captured piece's own state (InYard) the instant the move is
