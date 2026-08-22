@@ -134,7 +134,10 @@ wherever the rulebook's prose alone was ambiguous.
   anything else that roll, ahead of collecting rewards or removing a pawn from the shelter — waived
   if genuinely no legal move can break it that roll ("unless movement is impossible"). Re-checked
   fresh each time moves are offered, so once one of the double's two dice breaks it, the other is
-  free again with no separate "already broken this roll" tracking needed.
+  free again with no separate "already broken this roll" tracking needed — except for putting the
+  barrier's other original pawn right back onto the exact square the first one just broke to, which
+  stays blocked for that one specific (piece, destination) pairing only, the rest of that die's own
+  options untouched.
 - **The Parkiller (PK1-8)**: one extra piece per color, moved by its own black die (rolled once per
   actual turn, skipped on a doubles bonus turn), traveling the shared track loop in the *opposite*
   direction from regular pawns. Landing on an opposing pawn sends it home with no reward; landing
