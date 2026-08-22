@@ -8,6 +8,7 @@ import type { MoveOption } from '../core/rules/moveOption'
 import { useTurnManager } from '../hooks/useTurnManager'
 import { BoardScene } from '../scene/BoardScene'
 import { Confetti } from './Confetti'
+import { RewardBurst } from './RewardBurst'
 import { RewardToast } from './RewardToast'
 
 // Reported directly, with a photoreal reference (ornate leather-and-gold game table, candlelit):
@@ -190,6 +191,7 @@ export function GameBoardScreen({
 
       <div style={frameOverlayStyle} />
 
+      <RewardBurst pendingReward={visiblePendingReward} />
       <RewardToast pendingReward={visiblePendingReward} forfeitedReward={visibleForfeitedReward} />
 
       <div style={turnCardStyle}>
