@@ -91,8 +91,16 @@ const DEFAULT_POLAR_ANGLE = 0.85 // ~49° off vertical - shallower than before s
 //
 // Pulled back a fourth time, 75 -> 100 - both a proportional follow-up to BOARD_SIZE's own 28 -> 32
 // (75 * 32/28 ~= 85.7) and, on top of that, a further independent reduction, reported directly
-// again as still not enough.
-const CAMERA_DISTANCE = 55
+// again as still not enough. Landed on 55 after actually fixing the OrbitControls/far-plane bug
+// that had made every earlier round of this exact request silently ineffective (see this file's
+// own root-cause comment on that, near OrbitControls itself) - 100 was correct but too extreme
+// once genuinely uncapped; 55 read as the right balance once real, visible tuning was possible.
+//
+// Scaled again, 55 -> 70, purely to follow BOARD_SIZE's own 32 -> 41 (a separate "pieces still too
+// small" request) proportionally (55 * 41/32 ~= 70.5) - keeps the board's own on-screen size
+// exactly where the previous round just correctly landed it, rather than undoing that by leaving
+// this fixed while the board's own world size grows out from under it.
+const CAMERA_DISTANCE = 70
 // Calibrated (not derived) against BOARD_SIZE=6 at a ~1.6:1 viewport aspect - see FitBoardCamera.
 const REFERENCE_MIN_DIMENSION_FACTOR = 620
 
@@ -825,20 +833,44 @@ export function BoardScene({
         <TrackDebugPath trackWaypoints={definition.trackWaypoints} safeTrackIndices={definition.safeTrackIndices} />
       )}
       {SHOW_HOME_CORRIDOR_DEBUG && <HomeCorridorDebugPath definition={definition} />}
-      {/* Reported directly, with screenshots: scroll-zoom had no distance limit at all - zooming
-          out far enough shrank the board to a speck (or past the far clipping plane entirely,
-          leaving just the table and HUD), and there was nothing stopping a stray scroll from
-          getting there. minDistance/maxDistance cap both ends - close enough to inspect a piece,
-          far enough to see the whole board with margin, never so far it disappears.
-          maxDistance was a bare 22 for a long time - harmless while CAMERA_DISTANCE's own default
-          stayed under that, but every "pull the board's framing back further" round after it
-          crossed that line (CAMERA_DISTANCE * viewport scale exceeding 22) was silently clamped
-          right back to 22 by OrbitControls itself, regardless of what CAMERA_DISTANCE was actually
-          set to - confirmed directly, this is the real reason several rounds of that request kept
-          reporting no visible change despite the code and deployment both being correct each time.
-          Tied to CAMERA_DISTANCE directly (3x its own value) instead of a second hardcoded number,
-          so it can never again silently undercut whatever that constant is currently set to. */}
-      <OrbitControls enablePan={false} minPolarAngle={0.2} maxPolarAngle={1.2} minDistance={3.5} maxDistance={CAMERA_DISTANCE * 3} />
+      <BoundedOrbitControls />
     </Canvas>
+  )
+}
+
+// Reported directly ("게임보드판을 축소하고 확대할수있는크기의범위를 규정해달라 지금은 무한대이다" -
+// define a range for how far the board can be zoomed in/out, right now it's unbounded): a fixed
+// minDistance/maxDistance (the previous version of this component) doesn't actually bound the
+// zoom range consistently - OrbitControls measures against the camera's own *live* position,
+// which FitBoardCamera sets using CAMERA_DISTANCE scaled by the current viewport's own shorter
+// dimension (see that component's own comment), not the raw constant. A static bound only happens
+// to match the intended range at the one reference viewport size this was tuned against; on a
+// narrower window the real default distance is larger than the raw constant, so a static max
+// could even clip the *default* view before the player touches the scroll wheel at all, and a
+// generous-enough static max to avoid that (like the previous 3x-the-raw-constant one) ends up
+// wide enough to feel unbounded in practice - which is the exact complaint here. Computing the
+// same live-scaled distance FitBoardCamera itself uses, then bounding *that*, keeps the zoom
+// range a fixed, sensible proportion of the actual default view on every viewport size instead.
+//
+// 0.5x-1.6x chosen directly by eye against the current default framing: 0.5x reads as a genuinely
+// useful close-up (individual pieces/dice clearly inspectable) without getting so close the board
+// stops reading as a board; 1.6x reads as "see a bit more of the table" without shrinking the
+// board down to where its own squares stop being individually legible - a real, visually-judged
+// range instead of an arbitrary multiplier.
+const ZOOM_IN_FACTOR = 0.5
+const ZOOM_OUT_FACTOR = 1.6
+
+function BoundedOrbitControls() {
+  const size = useThree((s) => s.size)
+  const scale = REFERENCE_MIN_DIMENSION_FACTOR / Math.min(size.width, size.height)
+  const defaultDistance = CAMERA_DISTANCE * scale
+  return (
+    <OrbitControls
+      enablePan={false}
+      minPolarAngle={0.2}
+      maxPolarAngle={1.2}
+      minDistance={defaultDistance * ZOOM_IN_FACTOR}
+      maxDistance={defaultDistance * ZOOM_OUT_FACTOR}
+    />
   )
 }
