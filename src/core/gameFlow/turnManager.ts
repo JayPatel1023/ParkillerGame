@@ -52,19 +52,39 @@ export interface MoveAnimationInfo {
 
 export type RewardReason = 'capture' | 'finish'
 
+// The amount actually being offered *this* time - RewardToast/RewardBurst (and every other
+// external listener) only ever need to know what's on the table right now, not the internal
+// bookkeeping of whether it's the first half of a capture's own 20, a re-offered remainder, or a
+// finish's own flat 10.
 export interface RewardGrant {
   amount: number
   reason: RewardReason
 }
 
-// PC 3/PC 4/PK7/PK8's reward size, in squares - both a capture (own or via the Parkiller) and a
-// finish grant reward(s) sized in these 10-square units, never one lump sum. A capture is worth
-// two of them ("10 x 2"), each offered, resolved and forfeited *independently* (see
-// pendingRewardQueue/offerNextReward) - reported directly: the previous single-20 model silently
-// forfeited the whole thing whenever no piece could make the full 20-square jump, even if a piece
-// could've made one of the two 10s ("La recompensa es de 10x2 ...si puede mover 10 debe hacerlo,
-// se pierde el otro 10 si no se puede mover"), confirmed against the rulebook's own PC4/PK8 text
-// ("cada salto de 10 casillas... el premio se sumaría al ya existente"). A finish is worth one.
+// PENDING_REWARD's own internal bookkeeping, on top of RewardGrant: excludePiece is set only when
+// re-offering a capture's *remainder* after the player already split off part of it onto one piece
+// - "another pawn" (the client's own rulebook wording) means that same piece can't also take the
+// rest, so it's excluded from this specific re-offer rather than tracked as a broader "already
+// used this reward" flag that would outlive this one grant.
+interface PendingReward extends RewardGrant {
+  excludePiece?: Piece
+}
+
+// PC 3/PC 4/PK7/PK8's reward size, in squares - a capture (own or via the Parkiller) is worth 20,
+// a finish worth 10 (a flat, non-splittable single unit either way).
+//
+// A capture's own 20 is a genuine *choice*, not a forced split - confirmed directly in the
+// client's own corrected rulebook (rules.pdf, "Bonus" pages, present on every one of Pawn
+// Capture/Parki Elimination/Bonuses): "Choose one: Move one Pawn 20 spaces. OR Move one Pawn 10
+// spaces and another pawn 10 spaces." This was previously always forced down the second path
+// (two independent, forced 10s) on the strength of an earlier, more literal client quote ("La
+// recompensa es de 10x2 ...si puede mover 10 debe hacerlo, se pierde el otro 10 si no se puede
+// mover") - the two aren't actually in conflict once read as "choice, with the always-split path
+// being *one* valid way to use it": offerReward now offers *both* a 20-in-one-piece move and a
+// 10-in-one-piece move together (same amount-keyed pattern offerMoves already uses for dieA/
+// dieB/sum), and only re-offers the remaining 10 - excluding whichever piece just moved - if the
+// player picks the smaller amount first. Picking the 20 outright resolves the whole reward in one
+// move, matching the rulebook's own first option exactly.
 const REWARD_UNIT = 10
 
 function mod(value: number, modulus: number): number {
@@ -127,11 +147,21 @@ export class TurnManager {
   private nextArrivalSequence = 1
   private diceState: DiceState | null = null
   private pendingMoves: MoveOption[] | null = null
-  // PC4/PK8's "10 x 2" reward units still owed - each drained one at a time via offerNextReward,
-  // so a piece unable to make one 10-square segment only forfeits *that* segment, not the pair. A
-  // capture made while collecting an earlier reward pushes more onto this queue rather than
-  // replacing it (PK8: "el premio se sumaría al ya existente").
-  private pendingRewardQueue: RewardReason[] = []
+  // A capture/Parkiller-elimination reward is worth 20, offered as a genuine *choice* (confirmed
+  // directly in the client's own corrected rulebook, "Bonus" pages: "Choose one: Move one Pawn 20
+  // spaces. OR Move one Pawn 10 spaces and another pawn 10 spaces.") rather than always forced into
+  // two separate fixed 10s - see offerReward's own comment for exactly how that choice is offered.
+  // A finish is worth a single, non-splittable 10 either way. Queued (not resolved immediately) so
+  // a capture made while already collecting an earlier reward stacks on top instead of replacing it
+  // (PK8: "el premio se sumaría al ya existente") - each entry still resolved one at a time via
+  // offerNextReward, so a reward nothing can use only forfeits *that* entry, not any others queued
+  // behind it.
+  private pendingRewardQueue: PendingReward[] = []
+  // Set only while a reward is actively being offered, so submitMove can tell whether the move it's
+  // about to apply is claiming a reward - and if so, whether it claimed the *whole* grant or only
+  // split off part of it (in which case the remainder needs re-queuing, excluding the piece that
+  // just moved - see submitMove's own reward-handling block).
+  private currentRewardGrant: PendingReward | null = null
   // PK2/PK6a: the black die only rolls once per actual turn - skipped on the bonus turn granted by
   // a double, verified directly against the reference implementation's turn controller
   // ("if (!obj_dado.tiene_otro_turno && parkiSigueVivo(...))"). Set by endTurn() for the *next*
@@ -232,7 +262,7 @@ export class TurnManager {
     // offerReward()'s own fallback (continueAfterMove()) already knows how to fall through to
     // offerMoves() once the reward is spent or forfeited.
     if (parkillerResult.capturedParkillerColor) {
-      this.pendingRewardQueue.push('capture', 'capture')
+      this.pendingRewardQueue.push({ reason: 'capture', amount: REWARD_UNIT * 2 })
       this.offerNextReward()
       return
     }
@@ -568,45 +598,86 @@ export class TurnManager {
       return result
     }
 
+    // This move claimed (part of) an active reward grant - if it only took the smaller, split-off
+    // amount (10 out of a capture's own 20), the rest is still owed, excluding this piece from
+    // taking it too ("another pawn" - see PendingReward's own comment). Checked before queueing any
+    // *new* reward below, so a capture-during-a-reward-chain still stacks on top of this remainder
+    // rather than ahead of it (pendingRewardQueue is drained front-to-back).
+    if (isRewardMove && this.currentRewardGrant) {
+      const grant = this.currentRewardGrant
+      this.currentRewardGrant = null
+      if (move.amount < grant.amount) {
+        this.pendingRewardQueue.push({ reason: grant.reason, amount: grant.amount - move.amount, excludePiece: chosenPiece })
+      }
+    }
+
     // PC 3/PC 4: capturing or finishing earns a reward, and PC 6.2 places collecting it ahead of
     // any dice still unspent. A move landing on this same reward can itself capture again, in
     // which case PC 5 adds the new reward on top rather than replacing it. PK7 rewards eliminating
     // an opposing Parkiller the same way a regular capture does.
-    if (result.capturedPiece || result.capturedParkillerColor) this.pendingRewardQueue.push('capture', 'capture')
-    if (result.pieceFinished) this.pendingRewardQueue.push('finish')
+    if (result.capturedPiece || result.capturedParkillerColor) this.pendingRewardQueue.push({ reason: 'capture', amount: REWARD_UNIT * 2 })
+    if (result.pieceFinished) this.pendingRewardQueue.push({ reason: 'finish', amount: REWARD_UNIT })
 
     this.offerNextReward()
     return result
   }
 
-  // Drains pendingRewardQueue one 10-square unit at a time - each unit gets its own independent
+  // Drains pendingRewardQueue one grant at a time - each grant gets its own independent
   // offerReward call (own mandatory-if-possible check, own forfeit if not), rather than resolving
   // the whole queue as one lump sum. Falls through to continueAfterMove once nothing's left owed,
   // whether that's because the queue started empty (an ordinary move) or just ran dry.
   private offerNextReward() {
-    const reason = this.pendingRewardQueue.shift()
-    if (!reason) {
+    const grant = this.pendingRewardQueue.shift()
+    if (!grant) {
       this.continueAfterMove()
       return
     }
-    this.offerReward({ amount: REWARD_UNIT, reason })
+    this.offerReward(grant)
   }
 
-  // Offers a bonus move for one earned reward unit - restricted (via getValidMoves' own exitRoll
+  // Offers a bonus move for the current reward grant - restricted (via getValidMoves' own exitRoll
   // check) to pieces already in play, per PC 5 ("you cannot remove a pawn from the shelter... and
-  // then claim it"). If nothing can use it, PC 5 forfeits just this unit rather than holding it for
-  // later, then moves on to whatever else is still queued. Deliberately not subject to mandatory
-  // capture (verified against the reference: reward moves let the player pick freely which piece to
-  // advance, capture available or not).
-  private offerReward(grant: RewardGrant) {
-    const moves = getValidMoves(this.board, this.currentPlayer, this.players, grant.amount, this.settings, 'reward')
+  // then claim it"). If nothing can use it, PC 5 forfeits the whole grant rather than holding it
+  // for later, then moves on to whatever else is still queued. Deliberately not subject to
+  // mandatory capture (verified against the reference: reward moves let the player pick freely
+  // which piece to advance, capture available or not).
+  //
+  // A splittable grant (a fresh capture's own 20 - see PendingReward's own comment for why this
+  // isn't forced down one fixed path) offers *both* amounts together: every piece that can move
+  // the full grant amount in one go, and every piece that can move exactly REWARD_UNIT instead -
+  // same amount-keyed-per-piece pattern offerMoves() already uses for dieA/dieB/sum, so a piece
+  // reachable both ways keeps both options rather than collapsing to one. Picking the smaller
+  // amount leaves the rest queued (handled back in submitMove, right after this move applies);
+  // picking the full amount resolves the whole grant in this one move.
+  private offerReward(grant: PendingReward) {
+    const canSplit = grant.reason === 'capture' && grant.amount > REWARD_UNIT
+    const excludePiece = grant.excludePiece
+    const fullMoves = getValidMoves(this.board, this.currentPlayer, this.players, grant.amount, this.settings, 'reward').filter(
+      (m) => m.piece !== excludePiece,
+    )
+    const splitMoves = canSplit
+      ? getValidMoves(this.board, this.currentPlayer, this.players, REWARD_UNIT, this.settings, 'reward').filter((m) => m.piece !== excludePiece)
+      : []
+
+    const byPieceAndAmount = new Map<string, MoveOption>()
+    const addMoves = (moves: MoveOption[]) => {
+      for (const move of moves) {
+        const key = `${move.piece.color}:${move.piece.pieceIndex}:${move.amount}`
+        if (!byPieceAndAmount.has(key)) byPieceAndAmount.set(key, move)
+      }
+    }
+    addMoves(fullMoves)
+    addMoves(splitMoves)
+    const moves = [...byPieceAndAmount.values()]
+
     if (moves.length === 0) {
-      this.rewardForfeited.emit(grant)
+      this.rewardForfeited.emit({ amount: grant.amount, reason: grant.reason })
       this.offerNextReward()
       return
     }
     this.pendingMoves = moves
-    this.rewardOffered.emit(grant)
+    this.currentRewardGrant = grant
+    this.rewardOffered.emit({ amount: grant.amount, reason: grant.reason })
     this.moveChoicesReady.emit(this.pendingMoves)
   }
 

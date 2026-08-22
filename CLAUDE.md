@@ -124,10 +124,13 @@ wherever the rulebook's prose alone was ambiguous.
   normally, including the very die that would have captured — the rulebook's own "move another pawn
   with the matching number, then the pawn in question" escape hatch.
 - **PC4/PC5**: reaching the final home-corridor square requires an exact roll. Capturing a pawn or
-  an opposing Parkiller grants "10 x 2" — two independently-resolved 10-square rewards, each
-  claimed immediately with a piece already in play or forfeited on its own (a piece able to use one
-  of the two never loses it just because the other can't be used); finishing a pawn grants a single
-  10.
+  an opposing Parkiller grants a 20-square reward, offered as a genuine choice per the rulebook's
+  own text — move one pawn the full 20, or split it as 10 + 10 across two different pawns (never
+  the same pawn twice). Picking the 10 split re-offers the remaining 10 excluding the pawn that
+  just claimed the first half; if nothing in play can use either the full 20 or the 10 split, the
+  whole 20-square grant is forfeited as one unit. A capture made while resolving an existing reward
+  chains a fresh 20-square grant on top rather than replacing or losing the original. Finishing a
+  pawn grants a single, non-splittable 10.
 - **PC2.3**: rolling doubles grants an extra turn; a third consecutive double sends the last-moved
   piece back to its yard (exempt once it's in the home corridor).
 - **PK9.1**: a double also obligates breaking an existing barrier of the player's own pawns before
@@ -141,9 +144,9 @@ wherever the rulebook's prose alone was ambiguous.
 - **The Parkiller (PK1-8)**: one extra piece per color, moved by its own black die (rolled once per
   actual turn, skipped on a doubles bonus turn), traveling the shared track loop in the *opposite*
   direction from regular pawns. Landing on an opposing pawn sends it home with no reward; landing
-  on an opposing Parkiller eliminates it and grants the same "10 x 2" reward as a regular capture,
-  but only via a single die's own value during the roll that just produced doubles (PK6) — never
-  the sum.
+  on an opposing Parkiller eliminates it and grants the same 20-square choice-based reward as a
+  regular capture, but only via a single die's own value during the roll that just produced doubles
+  (PK6) — never the sum.
 - **PK5**: the reverse also holds — a pawn landing on an unprotected opposing Parkiller (without
   eliminating it) is sent straight back to its own yard instead, with no reward, and the move is
   never blocked outright, it always completes first. On a protected/safe square the two simply

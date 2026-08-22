@@ -330,8 +330,13 @@ describe('TurnManager - mandatory departure (PC2.1)', () => {
 })
 
 describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
-  it('capturing an opponent grants two independent 10-square reward units ("10 x 2"), offered ahead of the remaining die', () => {
-    const board = buildTestBoard()
+  // Confirmed directly in the client's own corrected rulebook (rules.pdf, "Bonus" pages, present
+  // on every one of Pawn Capture/Parki Elimination/Bonuses): "Choose one: Move one Pawn 20 spaces.
+  // OR Move one Pawn 10 spaces and another pawn 10 spaces." Not a forced split into two independent
+  // 10s (the previous version of this test, and this file's own history before it) - a genuine
+  // choice, with the always-split path being one valid way to use it, not the only one.
+  it('capturing an opponent grants a 20-square reward, offered as a choice between one pawn moving 20 or two different pawns moving 10 each', () => {
+    const board = buildBigTestBoard() // plenty of track room so a 20-square jump never nears home
     const red = createPlayerState('Red', board)
     const blue = createPlayerState('Blue', board)
     red.pieces[0].state = 'OnTrack'
@@ -354,30 +359,58 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     // to know which piece to keep rendering at the capture square until the animation finishes.
     const submitResult = manager.submitMove(red.pieces[0]) // 5 -> 8 (die A = 3), lands on and captures Blue's piece
     expect(submitResult?.capturedPiece).toBe(blue.pieces[0])
-
     expect(blue.pieces[0].state).toBe('InYard')
-    // first of the two independently-resolved 10-square units, not one lump 20
-    expect(grants).toEqual([{ amount: 10, reason: 'capture' }])
-    // offered moves are now the reward (die B is still unspent but must wait per PC 6.2)
-    expect(latestMoves.length).toBeGreaterThan(0)
-    expect(latestMoves.every((m) => m.diceSource === 'reward' && m.amount === 10)).toBe(true)
-    expect(latestMoves.some((m) => m.piece === red.pieces[1])).toBe(true)
 
-    manager.submitMove(red.pieces[1]) // spends the first 10-unit: track 0 -> 10
-    expect(red.pieces[1].state).toBe('OnTrack')
+    // A single 20-square grant, not two independent 10s.
+    expect(grants).toEqual([{ amount: 20, reason: 'capture' }])
+    // Both amounts offered together for whichever piece(s) can reach them - pieces[1] (at 0) can
+    // reach both 10 and 20 cleanly on this board.
+    expect(latestMoves.some((m) => m.piece === red.pieces[1] && m.amount === 20 && m.diceSource === 'reward')).toBe(true)
+    expect(latestMoves.some((m) => m.piece === red.pieces[1] && m.amount === 10 && m.diceSource === 'reward')).toBe(true)
+
+    // Picks the split path: only the 10-amount option for pieces[1].
+    manager.submitMove(red.pieces[1], 10) // spends half the grant: track 0 -> 10
     expect(red.pieces[1].trackPosition).toBe(10)
 
-    // the second 10-unit is offered independently right after, per Carlos's own report: a piece
-    // able to make one of the two 10s must not lose the other one to a since-vacated combined check
+    // The remaining 10 is re-offered - excluding pieces[1] itself ("another pawn", not the same one
+    // taking both halves).
     expect(grants).toEqual([
-      { amount: 10, reason: 'capture' },
+      { amount: 20, reason: 'capture' },
       { amount: 10, reason: 'capture' },
     ])
-    expect(latestMoves.length).toBeGreaterThan(0)
+    expect(latestMoves.some((m) => m.piece === red.pieces[1])).toBe(false)
+    expect(latestMoves.every((m) => m.amount === 10)).toBe(true)
+    expect(latestMoves.some((m) => m.piece === red.pieces[0])).toBe(true)
 
-    manager.submitMove(red.pieces[0]) // spends the second 10-unit: track 8 -> 18
-    expect(red.pieces[0].state).toBe('OnTrack')
+    manager.submitMove(red.pieces[0]) // spends the remaining 10: track 8 -> 18
     expect(red.pieces[0].trackPosition).toBe(18)
+    // Nothing left owed - exactly the two grants above, no third.
+    expect(grants).toHaveLength(2)
+  })
+
+  it('capturing an opponent and taking the full 20 on one pawn resolves the whole grant in one move, no remainder', () => {
+    const board = buildBigTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 8
+
+    const dice = new ScriptedDice([3, 1, 1])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    const grants: RewardGrant[] = []
+    manager.rewardOffered.on((g) => grants.push(g))
+
+    manager.requestRoll()
+    manager.submitMove(red.pieces[0]) // 5 -> 8, captures blue.pieces[0]
+    expect(grants).toEqual([{ amount: 20, reason: 'capture' }])
+
+    manager.submitMove(red.pieces[0], 20) // takes the full grant in one move: 8 -> 28
+    expect(red.pieces[0].trackPosition).toBe(28)
+    // No remainder offered - the whole 20 was claimed at once.
+    expect(grants).toHaveLength(1)
   })
 
   it('finishing a piece grants a 10-square reward', () => {
@@ -413,7 +446,7 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     blue.pieces[0].state = 'OnTrack'
     blue.pieces[0].trackPosition = 8
     blue.pieces[1].state = 'OnTrack'
-    blue.pieces[1].trackPosition = 21
+    blue.pieces[1].trackPosition = 18 // exactly where pieces[0] lands claiming the remainder below
 
     const dice = new ScriptedDice([3, 1, 1])
     const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
@@ -422,22 +455,26 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     manager.rewardOffered.on((g) => grants.push(g))
 
     manager.requestRoll()
-    manager.submitMove(red.pieces[0]) // 5 -> 8, captures blue.pieces[0] - queues two 10-square units
+    manager.submitMove(red.pieces[0]) // 5 -> 8, captures blue.pieces[0] - queues a 20-square grant
     expect(blue.pieces[0].state).toBe('InYard')
 
-    manager.submitMove(red.pieces[1]) // spends the first 10-unit: 1 -> 11, no capture there
+    // Splits the grant: pieces[1] takes only the 10-amount half (1 -> 11, no capture there).
+    manager.submitMove(red.pieces[1], 10)
     expect(red.pieces[1].trackPosition).toBe(11)
 
-    manager.submitMove(red.pieces[1]) // spends the second 10-unit: 11 -> 21, captures blue.pieces[1]
+    // The remaining 10 is re-offered excluding pieces[1] - pieces[0] (still at 8) takes it instead,
+    // landing exactly on blue.pieces[1] and capturing it.
+    manager.submitMove(red.pieces[0])
+    expect(red.pieces[0].trackPosition).toBe(18)
     expect(blue.pieces[1].state).toBe('InYard')
 
-    // the original pair's two units, plus the first of a fresh pair queued by this second capture -
+    // The original 20 (split into two offerings), plus a fresh 20 queued by this second capture -
     // proves a capture made *during* an existing reward chain adds onto it rather than replacing it
-    // or leaving the turn stuck once the original pair runs out.
+    // or leaving the turn stuck once the original grant runs out.
     expect(grants).toEqual([
+      { amount: 20, reason: 'capture' },
       { amount: 10, reason: 'capture' },
-      { amount: 10, reason: 'capture' },
-      { amount: 10, reason: 'capture' },
+      { amount: 20, reason: 'capture' },
     ])
   })
 
@@ -451,8 +488,8 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     blue.pieces[0].trackPosition = 17
     // red.pieces[1..3] stay InYard - a reward can never move a piece out of the shelter (PC 5), and
     // red.pieces[0] itself would overshoot its own finish (2 to its home entrance + 6-square
-    // corridor = 8, less than either 10-square unit), so nothing qualifies for either half of the
-    // pair - both must be forfeited independently, not just the first.
+    // corridor = 8, less than either the full 20 or its split 10), so nothing qualifies for either
+    // option and the whole grant is forfeited as one unit.
     const dice = new ScriptedDice([3, 1, 1])
     const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
 
@@ -466,10 +503,7 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
 
     expect(blue.pieces[0].state).toBe('InYard')
     expect(offered).toBeNull()
-    expect(forfeited).toEqual([
-      { amount: 10, reason: 'capture' },
-      { amount: 10, reason: 'capture' },
-    ])
+    expect(forfeited).toEqual([{ amount: 20, reason: 'capture' }])
   })
 
   it('locks a capturing piece to its capturing move, but leaves a different, non-capturing piece completely free (PC3/PK8)', () => {
