@@ -45,7 +45,10 @@ export const PIECE_PROFILE_RAW: [number, number][] = [
 //
 // Bumped a fourth time, 0.1 -> 0.108, alongside BOARD_SIZE's own 17 -> 18 - reported directly,
 // again, as still too small.
-export const PIECE_BASE_RADIUS = 0.108
+//
+// Bumped a fifth time, 0.108 -> 0.12, alongside BOARD_SIZE's own 18 -> 20 - reported directly,
+// again, as still too small.
+export const PIECE_BASE_RADIUS = 0.12
 export const PROFILE_SCALE = PIECE_BASE_RADIUS / Math.max(...PIECE_PROFILE_RAW.map(([r]) => r))
 // Stretches the profile taller without widening the base - requested directly, twice now ("peones
 // más alargados" both times), each time with a reference photo of taller pawns. Applied only to

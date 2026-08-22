@@ -28,7 +28,18 @@
 //
 // Bumped a fourth time, 17 -> 18, alongside another small PIECE_BASE_RADIUS increase - reported
 // directly, again, as still too small.
-export const BOARD_SIZE = 18
+//
+// Bumped a fifth time, 18 -> 22, alongside PIECE_BASE_RADIUS - reported directly, again, as still
+// too small. BoardScene's own localStackOffset now also clamps a shared square's stacking offset
+// directly against the live piece/Parkiller footprint radius (not just a fixed fraction of tile
+// size, which was the actual cause of a separately-reported "stepping on the tile's own border
+// line" bug at this same size), so further growth here no longer risks reopening that one on its
+// own - this bump is purely about the "still too small" ask. 22 rather than a straight 20 (the
+// previous round's own proportional bump) specifically gives that clamp enough real tile size to
+// also keep a pawn+Parkiller pair (the bigger of the two possible shared-square combinations, and
+// notably bigger than a same-size pawn+pawn barrier) from overlapping each other while both still
+// individually clear the tile's own border.
+export const BOARD_SIZE = 22
 // Just enough clearance above TrackTile's own surface (which itself sits at this same height - see
 // TrackTile.tsx) to avoid z-fighting between a piece's base and the tile underneath it. Only
 // correct for pieces actually standing on a raised TrackTile, i.e. OnTrack - see FLAT_SURFACE_HEIGHT
