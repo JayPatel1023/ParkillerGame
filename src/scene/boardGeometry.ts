@@ -39,7 +39,10 @@
 // also keep a pawn+Parkiller pair (the bigger of the two possible shared-square combinations, and
 // notably bigger than a same-size pawn+pawn barrier) from overlapping each other while both still
 // individually clear the tile's own border.
-export const BOARD_SIZE = 22
+//
+// Bumped a sixth time, 22 -> 24, alongside PIECE_BASE_RADIUS - reported directly, again, as still
+// too small.
+export const BOARD_SIZE = 24
 // Just enough clearance above TrackTile's own surface (which itself sits at this same height - see
 // TrackTile.tsx) to avoid z-fighting between a piece's base and the tile underneath it. Only
 // correct for pieces actually standing on a raised TrackTile, i.e. OnTrack - see FLAT_SURFACE_HEIGHT
