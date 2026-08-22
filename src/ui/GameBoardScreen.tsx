@@ -8,6 +8,7 @@ import type { MoveOption } from '../core/rules/moveOption'
 import { useTurnManager } from '../hooks/useTurnManager'
 import { BoardScene } from '../scene/BoardScene'
 import { Confetti } from './Confetti'
+import { HelpModal } from './HelpModal'
 import { RewardBurst } from './RewardBurst'
 import { RewardToast } from './RewardToast'
 
@@ -50,6 +51,11 @@ export function GameBoardScreen({
   // A live game (turns, dice, positions) is real in-progress state a stray click shouldn't be able
   // to throw away - confirm before actually leaving instead of exiting immediately on one click.
   const [confirmingExit, setConfirmingExit] = useState(false)
+  // Reported directly, with a screenshot pointing at the exit button's own corner: no way to check
+  // the rules mid-game without leaving. Doesn't pause anything - the game clock/turn state (there
+  // isn't one to pause anyway; it's all synchronous) keeps running underneath exactly like the exit
+  // confirmation dialog already does.
+  const [showingHelp, setShowingHelp] = useState(false)
   const {
     currentPlayer,
     lastRoll,
@@ -218,9 +224,15 @@ export function GameBoardScreen({
         ))}
       </div>
 
+      <button className="chunky-btn" onClick={() => setShowingHelp(true)} title="Cómo se juega" style={helpButtonStyle}>
+        ?
+      </button>
+
       <button className="chunky-btn" onClick={() => setConfirmingExit(true)} title="Salir del juego" style={exitButtonStyle}>
         ✕
       </button>
+
+      {showingHelp && <HelpModal onClose={() => setShowingHelp(false)} />}
 
       {confirmingExit && (
         <div style={overlayStyle}>
@@ -513,6 +525,13 @@ const exitButtonStyle: React.CSSProperties = {
   cursor: 'pointer',
   fontFamily: 'system-ui, sans-serif',
   lineHeight: 1,
+}
+
+// Same medallion shape as exitButtonStyle, sitting just to its left - reported directly, with a
+// screenshot pointing at that same corner, asking for a way to check the rules mid-game.
+const helpButtonStyle: React.CSSProperties = {
+  ...exitButtonStyle,
+  right: 16 + 46 + 10,
 }
 
 const overlayStyle: React.CSSProperties = {
