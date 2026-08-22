@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BoardData } from '../../src/core/board/boardData'
+import type { DiceLike } from '../../src/core/dice'
 import { createPlayerState } from '../../src/core/gameFlow/playerState'
 import { TurnManager } from '../../src/core/gameFlow/turnManager'
 import type { PieceColor } from '../../src/core/pieceColor'
@@ -8,6 +9,20 @@ import { BotController } from '../../src/online/BotController'
 import { RecordingDice } from '../../src/online/dice'
 import { HostTurnManagerBridge } from '../../src/online/HostTurnManagerBridge'
 import { FakeRoomNetwork } from './fakeRoomTransport'
+
+// Same technique as turnManager.test.ts's own ScriptedDice - a fixed, hand-picked sequence
+// (RecordingDice needs a real DiceLike to wrap, not a bare array).
+class ScriptedDice implements DiceLike {
+  private queue: number[]
+  constructor(queue: number[]) {
+    this.queue = [...queue]
+  }
+  roll(): number {
+    const next = this.queue.shift()
+    if (next === undefined) throw new Error('ScriptedDice ran out of scripted rolls')
+    return next
+  }
+}
 
 const MASTER_ACTOR = 1
 
@@ -66,6 +81,57 @@ describe('BotController', () => {
 
     expect(redExited).toBe(true)
     expect(blueExited).toBe(true)
+
+    bots.dispose()
+  })
+
+  // Reported directly ("두번째 옮길차례가 되면 한참있다가 움직인다" - the second move waits a long
+  // while): the *second* piece-move of a single turn (spending the second die, after the first is
+  // already submitted) is scheduled using the busy window the roll itself set - and this class used
+  // to budget a flat 18-square worst case for the Parkiller's own hop there, regardless of the
+  // actual black die rolled. Verified directly against resolveParkillerMove (turnManager.ts): a
+  // single roll's Parkiller hop is always capped at the black die's own value (1-6). The *first*
+  // move of a turn is scheduled synchronously inside rollForBot() itself, before that busy window
+  // is even set, so it was never actually affected by this - only the second one was, which is
+  // exactly the "first move is fine, second is slow" pattern reported.
+  it("budgets the second move of a turn by the actual black die rolled, not a fixed worst case", () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5 // dieA moves this one
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 8 // dieB moves this one - two independent moves this roll
+    // dieA=2, dieB=4 (not 3 - 2+3 sums to the exit roll, 5, which with red's other pieces still in
+    // the yard would make the exit mandatory and mask the very thing this test means to isolate),
+    // blackDie=1 (small, the case under test).
+    const dice = new RecordingDice(new ScriptedDice([2, 4, 1]))
+    const inner = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+    const network = new FakeRoomNetwork(MASTER_ACTOR)
+    const transport = network.createTransport(MASTER_ACTOR)
+    const host = new HostTurnManagerBridge(inner, dice, [red, blue], transport, new Map<number, PieceColor>())
+    const thinkDelayMs = 50
+    const hopDurationMs = 100
+    const diceSpinMs = 50
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), thinkDelayMs, hopDurationMs, diceSpinMs)
+
+    let redMoveCount = 0
+    inner.moveApplied.on((result) => {
+      if (result.movedPiece.color === 'Red') redMoveCount++
+    })
+
+    host.start()
+    vi.advanceTimersByTime(thinkDelayMs) // the roll fires
+    vi.advanceTimersByTime(thinkDelayMs) // the first move (piece0, dieA) fires right after
+    expect(redMoveCount).toBe(1)
+
+    // From here, the old behavior (18-square fixed budget) would leave the second move waiting
+    // until well past diceSpin + 18*hopDurationMs = 50 + 1800 = 1850ms after the roll; the fix's
+    // own budget (blackDie=1) is diceSpin + 1*hopDurationMs = 150ms after the roll. Advancing to
+    // 400ms total (from start) is comfortably past the fix's own expected time and comfortably
+    // short of the old behavior's.
+    vi.advanceTimersByTime(400 - thinkDelayMs * 2)
+    expect(redMoveCount).toBe(2)
 
     bots.dispose()
   })

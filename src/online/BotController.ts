@@ -25,19 +25,6 @@ const BOT_THINK_DELAY_MS = 700
 // HOP_DURATION_MS matches PieceMesh.tsx's HOP_DURATION (in seconds, *1000 here).
 const DICE_SPIN_MS = 450
 const HOP_DURATION_MS = 320
-// The Parkiller's own black die is 1-6, so an ordinary hop after a roll takes at most 6 squares'
-// worth of hop time - but any roll before it's fully crossed its own lane's home corridor (see
-// Parkiller.corridorPosition's own doc comment - PK1) spends the die walking that corridor one real
-// square at a time instead, at the same normal pace as every other hop (per the client's own
-// explicit instruction that a glide across it read as "just skipping/jumping over it"), and the
-// single roll that finishes crossing can also spend any leftover pips immediately moving along the
-// loop too. This class has no visibility into Parkiller.corridorPosition/corridorLength or board
-// data to size that stretch exactly (this class doesn't get told the actual black die value either,
-// only MoveOption for the white dice), so this generously covers the worst case (every real board's
-// own 8-square corridor + the loop-entrance square + up to 6 loop squares, with headroom for a
-// longer hand-traced corridor) rather than risking an undercount on any roll. Derived from whichever
-// hopDurationMs the constructor actually received (see maxParkillerHopMs below), not this
-// module-level default, so a test injecting a smaller value scales this too.
 
 /**
  * Drives every bot-assigned seat on the Master Client - bots never touch the network at all,
@@ -55,12 +42,22 @@ export class BotController {
   private readonly thinkDelayMs: number
   private readonly hopDurationMs: number
   private readonly diceSpinMs: number
-  private readonly maxParkillerHopMs: number
   private readonly unsubscribers: Array<() => void>
   private readonly pendingTimeouts = new Set<ReturnType<typeof setTimeout>>()
   // Real time (Date.now()-based, so it advances correctly under vitest's fake timers too) before
   // which this class won't schedule its *next* action - see this file's own top comment.
   private busyUntilMs = 0
+  // The most recent roll's own black die (1-6) - see onTurnStarted's own use of it below. Reported
+  // directly ("두번째 옮길차례가 되면 한참있다가 움직인다" - the second move waits a long while):
+  // this class used to budget a flat, wildly overcautious 18-square worst case for the Parkiller's
+  // own hop after *every* roll, on the mistaken assumption that a single roll could span its whole
+  // home-corridor length plus more. Verified directly against resolveParkillerMove
+  // (turnManager.ts): a single roll's Parkiller hop is *always* capped at the black die's own value
+  // (1-6, whether crossing corridor, entering the loop, or a mix) - PK1's own "distance always
+  // equals the die" guarantee. Tracking the die's real value here (via diceRolled, which fires
+  // synchronously inside rollForBot() below - see HostTurnManagerBridge's own performRoll()) budgets
+  // the *actual* worst case for that specific roll instead of a fixed, mostly-wrong overestimate.
+  private lastBlackDie = 6
 
   constructor(
     host: HostTurnManagerBridge,
@@ -74,9 +71,9 @@ export class BotController {
     this.thinkDelayMs = thinkDelayMs
     this.hopDurationMs = hopDurationMs
     this.diceSpinMs = diceSpinMs
-    this.maxParkillerHopMs = 18 * hopDurationMs
     this.unsubscribers = [
       host.turnStarted.on((player) => this.onTurnStarted(player.color)),
+      host.diceRolled.on((roll) => (this.lastBlackDie = roll.blackDie)),
       host.moveChoicesReady.on((moves) => this.onMoveChoicesReady(moves)),
     ]
   }
@@ -86,9 +83,11 @@ export class BotController {
     this.scheduleRespectingBusy(this.thinkDelayMs, () => {
       if (this.host.currentPlayer.color !== color) return // stale - state moved on before this fired
       this.host.rollForBot()
-      // A roll always plays the white-dice spin, and may also play the Parkiller's own hop -
-      // nothing scheduled after this should fire before both have had time to finish.
-      this.markBusy(this.diceSpinMs + this.maxParkillerHopMs)
+      // A roll always plays the white-dice spin, and may also play the Parkiller's own hop (up to
+      // lastBlackDie squares, just updated by the diceRolled subscription above, synchronously,
+      // before this line runs) - nothing scheduled after this should fire before both have had
+      // time to finish.
+      this.markBusy(this.diceSpinMs + this.lastBlackDie * this.hopDurationMs)
     })
   }
 
