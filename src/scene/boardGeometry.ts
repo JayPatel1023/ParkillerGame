@@ -45,7 +45,10 @@
 //
 // Bumped a seventh time, 24 -> 28, alongside PIECE_BASE_RADIUS's own bigger 0.13 -> 0.15 jump -
 // reported directly, again, as still too small.
-export const BOARD_SIZE = 28
+//
+// Bumped an eighth time, 28 -> 32, alongside PIECE_BASE_RADIUS - reported directly, again, as
+// still too small.
+export const BOARD_SIZE = 32
 // Just enough clearance above TrackTile's own surface (which itself sits at this same height - see
 // TrackTile.tsx) to avoid z-fighting between a piece's base and the tile underneath it. Only
 // correct for pieces actually standing on a raised TrackTile, i.e. OnTrack - see FLAT_SURFACE_HEIGHT

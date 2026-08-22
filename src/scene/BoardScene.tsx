@@ -88,7 +88,11 @@ const DEFAULT_POLAR_ANGLE = 0.85 // ~49° off vertical - shallower than before s
 // the previous round's "just a bit more", so a bigger pull-back this time.
 //
 // Pulled back a third time, 62 -> 75, reported directly again as still not reduced enough.
-const CAMERA_DISTANCE = 75
+//
+// Pulled back a fourth time, 75 -> 100 - both a proportional follow-up to BOARD_SIZE's own 28 -> 32
+// (75 * 32/28 ~= 85.7) and, on top of that, a further independent reduction, reported directly
+// again as still not enough.
+const CAMERA_DISTANCE = 55
 // Calibrated (not derived) against BOARD_SIZE=6 at a ~1.6:1 viewport aspect - see FitBoardCamera.
 const REFERENCE_MIN_DIMENSION_FACTOR = 620
 
@@ -102,7 +106,17 @@ function FitBoardCamera() {
   const distance = CAMERA_DISTANCE * scale
   const y = distance * Math.cos(DEFAULT_POLAR_ANGLE)
   const z = distance * Math.sin(DEFAULT_POLAR_ANGLE)
-  return <PerspectiveCamera makeDefault position={[0, y, z]} fov={FOV_DEGREES} near={0.1} far={50} />
+  // far was a bare 50 for a long time - harmless while `distance` stayed under that, but every
+  // "pull the board's framing back further" round after it crossed that line was silently clipping
+  // the *entire board* out of the camera's own visible range instead of just reading as smaller -
+  // confirmed directly (a screenshot of nothing but the empty background) once OrbitControls' own
+  // matching maxDistance cap (see its own comment below) was fixed first and stopped masking this
+  // one underneath it. Scaled off the *actual* computed distance (not the raw CAMERA_DISTANCE
+  // constant, which doesn't account for the viewport-size `scale` above) with generous headroom,
+  // so it can never again silently undercut whatever distance this frame actually needs - including
+  // OrbitControls' own maxDistance, which a player can scroll out to interactively.
+  const far = distance * 4
+  return <PerspectiveCamera makeDefault position={[0, y, z]} fov={FOV_DEGREES} near={0.1} far={far} />
 }
 
 // A soft-edged dark ellipse baked into a canvas texture, not a real-time WebGL shadow - see the
@@ -815,8 +829,16 @@ export function BoardScene({
           out far enough shrank the board to a speck (or past the far clipping plane entirely,
           leaving just the table and HUD), and there was nothing stopping a stray scroll from
           getting there. minDistance/maxDistance cap both ends - close enough to inspect a piece,
-          far enough to see the whole board with margin, never so far it disappears. */}
-      <OrbitControls enablePan={false} minPolarAngle={0.2} maxPolarAngle={1.2} minDistance={3.5} maxDistance={22} />
+          far enough to see the whole board with margin, never so far it disappears.
+          maxDistance was a bare 22 for a long time - harmless while CAMERA_DISTANCE's own default
+          stayed under that, but every "pull the board's framing back further" round after it
+          crossed that line (CAMERA_DISTANCE * viewport scale exceeding 22) was silently clamped
+          right back to 22 by OrbitControls itself, regardless of what CAMERA_DISTANCE was actually
+          set to - confirmed directly, this is the real reason several rounds of that request kept
+          reporting no visible change despite the code and deployment both being correct each time.
+          Tied to CAMERA_DISTANCE directly (3x its own value) instead of a second hardcoded number,
+          so it can never again silently undercut whatever that constant is currently set to. */}
+      <OrbitControls enablePan={false} minPolarAngle={0.2} maxPolarAngle={1.2} minDistance={3.5} maxDistance={CAMERA_DISTANCE * 3} />
     </Canvas>
   )
 }
