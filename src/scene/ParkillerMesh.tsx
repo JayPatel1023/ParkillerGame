@@ -114,6 +114,15 @@ const BODY_PROFILE_RAW: [number, number][] = [
   [0.2, 2.0],
 ]
 
+// This model's own widest point (the base, 0.78 raw) scaled to world units - the actual footprint
+// a stacking offset needs to clear, bigger than a pawn's own PIECE_BASE_RADIUS and computed live
+// from the same MODEL_SCALE the rendered mesh itself uses, not a separately-guessed constant that
+// could drift out of sync with it. Exported for BoardScene's own localStackOffset (see that file's
+// own comment) - the two most common "2 occupants share a square" cases are a pawn+pawn barrier
+// and a pawn joining the Parkiller, and a stacking offset sized only for the smaller pawn footprint
+// would still let the Parkiller spill past a tile's own border in the second case.
+export const PARKILLER_FOOTPRINT_RADIUS = 0.78 * MODEL_SCALE
+
 // Tapers continuously from the shoulder to a sharp point, matching every view on the sheet - the
 // old profile's radius actually *increased* from 0.26 to 0.29 between y=2.0 and y=2.32 before
 // tapering, which is exactly the mid-hood bulge reported as wrong.
