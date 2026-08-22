@@ -64,7 +64,10 @@ const DEFAULT_POLAR_ANGLE = 0.85 // ~49° off vertical - shallower than before s
 // to 27) so the board's on-screen size relative to the viewport - already checked against the
 // too-big report above - stays exactly as it was this round, while the pieces (grown by a further,
 // separate ask this round - see PIECE_BASE_RADIUS) read larger against it than before.
-const CAMERA_DISTANCE = 27
+//
+// Scaled a fourth time from 27, proportionally with BOARD_SIZE's own 17 -> 18 (27 * 18/17 ~= 28.6,
+// rounded to 29) - same reasoning as above, keeping the board's own on-screen size unchanged.
+const CAMERA_DISTANCE = 29
 // Calibrated (not derived) against BOARD_SIZE=6 at a ~1.6:1 viewport aspect - see FitBoardCamera.
 const REFERENCE_MIN_DIMENSION_FACTOR = 620
 
