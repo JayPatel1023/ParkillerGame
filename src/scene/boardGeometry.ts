@@ -25,7 +25,10 @@
 // bigger jump than the previous round's exact-margin approach (~14.9 would exactly match the old
 // ~3% margin at the new radius) specifically for more breathing room this time, so a same-size
 // future request doesn't come right back to "barely fits."
-export const BOARD_SIZE = 17
+//
+// Bumped a fourth time, 17 -> 18, alongside another small PIECE_BASE_RADIUS increase - reported
+// directly, again, as still too small.
+export const BOARD_SIZE = 18
 // Just enough clearance above TrackTile's own surface (which itself sits at this same height - see
 // TrackTile.tsx) to avoid z-fighting between a piece's base and the tile underneath it. Only
 // correct for pieces actually standing on a raised TrackTile, i.e. OnTrack - see FLAT_SURFACE_HEIGHT
