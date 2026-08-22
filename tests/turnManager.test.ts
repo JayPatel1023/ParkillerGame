@@ -596,6 +596,38 @@ describe('TurnManager - mandatory barrier removal on doubles (PK9.1)', () => {
     expect(offered.some((m) => m.piece === red.pieces[2])).toBe(true)
   })
 
+  // Confirmed directly in the client's own rulebook, "Opening a Barrier" page: "If you open a
+  // barrier by rolling a double, you cannot use that same double to create another barrier...
+  // Both pawns must finish on different spaces. You cannot recreate the barrier using the same
+  // double." The previous test only confirmed the second die becomes free again, not that "free"
+  // still excludes reforming the exact barrier that was just broken.
+  it('does not let the same double put the barrier back together on the square it was just broken from', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 5 // own barrier at 5, pieces[0] + pieces[1]
+    red.pieces[2].state = 'OnTrack'
+    red.pieces[2].trackPosition = 0
+
+    const dice = new ScriptedDice([3, 3, 1])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let offered: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((moves) => (offered = moves))
+
+    manager.requestRoll()
+    manager.submitMove(red.pieces[0]) // 5 -> 8, breaks the barrier
+
+    // pieces[1] is still sitting at 5 and the second die is also worth 3 - landing it on 8 would
+    // put it right back together with pieces[0], recreating the exact barrier just broken.
+    expect(offered.some((m) => m.piece === red.pieces[1] && m.resultingTrackPosition === 8)).toBe(false)
+    // pieces[2] is unrelated to that barrier - still completely free to use the second die normally.
+    expect(offered.some((m) => m.piece === red.pieces[2] && m.resultingTrackPosition === 3)).toBe(true)
+  })
+
   it('waives the obligation when the barrier truly cannot be broken this roll ("unless movement is impossible")', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)

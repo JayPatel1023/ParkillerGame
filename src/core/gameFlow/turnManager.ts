@@ -141,6 +141,18 @@ export class TurnManager {
   // doubles - verified directly against the reference's doblete_mata_parkiller flag, which opens on
   // any double and closes again after the very first subsequent piece move (capture or not).
   private parkillerCapturableThisRoll = false
+  // The barrier position offerMoves() most recently computed (PK9.1's own obligation) - kept as a
+  // field, not a local, so submitMove() can tell whether the move it's about to apply is the one
+  // breaking that barrier. Null whenever no barrier obligation was active on the last offerMoves()
+  // call.
+  private lastOfferedBarrierPosition: number | null = null
+  // PK9.1's own "IMPORTANT!" qualifier: breaking a barrier with one half of a double forbids using
+  // the double's *other* half to put the barrier's other original pawn right back onto the same
+  // square, recreating it - confirmed directly in the client's own rulebook ("you cannot recreate
+  // the barrier using the same double"). Sized to the exact square the break landed on, not a
+  // boolean flag, since offerMoves() needs to exclude only *that* specific destination for *that*
+  // specific piece, not restrict the second die generally.
+  private brokenBarrierThisRoll: { position: number; movedToPosition: number } | null = null
 
   // `dice` accepts anything roll()-shaped, not just the real Dice class - tests inject an exact
   // roll queue instead of a seed, since a seed's resulting face values aren't hand-pickable.
@@ -212,6 +224,7 @@ export class TurnManager {
     }
 
     this.diceState = { dieA, dieB, dieAUsed: false, dieBUsed: false }
+    this.brokenBarrierThisRoll = null
 
     // PC 6.2: collecting a reward takes priority over any dice still unspent - if the Parkiller's
     // own move just eliminated an opposing Parkiller, its PK7 reward is offered ahead of the
@@ -407,6 +420,7 @@ export class TurnManager {
     // the rulebook's own qualifier: if nothing can break it this roll, the restriction below comes
     // back empty and the obligation is waived rather than forcing a false moveNotPossible.
     const barrierPosition = state.dieA === state.dieB ? ownBarrierTrackPosition(this.currentPlayer) : null
+    this.lastOfferedBarrierPosition = barrierPosition
     const restrictToBarrierBreakOrCapture = (moves: MoveOption[]) =>
       moves.filter((m) => m.piece.trackPosition === barrierPosition || wouldCapture(this.board, m, this.players, this.parkillerCapturableThisRoll))
     const applyObligations = (moves: MoveOption[], dieHasExit: boolean): MoveOption[] => {
@@ -448,6 +462,16 @@ export class TurnManager {
     }
 
     let options = [...byPieceAndAmount.values()]
+
+    // PK9.1's own "IMPORTANT!" qualifier: once a double breaks a barrier, that double's other half
+    // can't put the barrier's other original pawn right back onto the exact square the first one
+    // just landed on - that would just recreate the barrier this same obligation forced open a
+    // moment ago. Only that one specific (piece, destination) pairing is excluded - the piece is
+    // still completely free to land anywhere else.
+    if (this.brokenBarrierThisRoll) {
+      const { position, movedToPosition } = this.brokenBarrierThisRoll
+      options = options.filter((m) => !(m.piece.trackPosition === position && m.resultingTrackPosition === movedToPosition))
+    }
 
     // PC3/PK8: capturing is mandatory *per piece*, not across the whole roll - verified directly
     // against the reference implementation (activarFichasMovibles()/wouldComer() in
@@ -500,6 +524,19 @@ export class TurnManager {
     const before = snapshotPiece(chosenPiece)
 
     const result = applyMove(this.board, move, this.players, this.settings, this.parkillerCapturableThisRoll, this.nextArrivalSequence++)
+    // PK9.1's own "IMPORTANT!" qualifier (see brokenBarrierThisRoll's own comment): this move just
+    // broke an own-color barrier if it started exactly on the square offerMoves() most recently
+    // flagged as one, on a double (barrier-break obligation is only ever offered on a double, and
+    // never via the sum, so this can't misfire on an unrelated own-color pair coincidentally
+    // sharing a square for some other reason).
+    if (
+      !isRewardMove &&
+      this.diceState &&
+      this.diceState.dieA === this.diceState.dieB &&
+      before.trackPosition === this.lastOfferedBarrierPosition
+    ) {
+      this.brokenBarrierThisRoll = { position: before.trackPosition, movedToPosition: move.resultingTrackPosition }
+    }
     // PK6/PK8: the window to kill the Parkiller with a common piece closes after this roll's first
     // move, whether or not it was actually used for that.
     this.parkillerCapturableThisRoll = false
