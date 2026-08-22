@@ -30,6 +30,17 @@ export default defineConfig({
         // the app shell.
         globPatterns: ['**/*.{js,css,html,jpg,png,svg,ico}'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        // Reported directly ("직접 문서로 가게 만들라" - make it go directly to the document):
+        // clicking the help card's own rulebook PDF link opened the app's start screen instead of
+        // the PDF. Root cause - the service worker's default navigateFallback serves index.html
+        // for *any* full-page navigation request that doesn't match a precached asset, and
+        // rules.pdf is deliberately excluded from precache above (globPatterns has no .pdf, per
+        // that same comment - it's a 30MB reference document, not something every visitor should
+        // download upfront) - target="_blank" on an <a> is exactly this kind of "navigate" request,
+        // so it hit that fallback instead of reaching the real file. Excluding it here lets the
+        // browser fetch it from the network/its own HTTP cache like any other uncached static
+        // asset, same as it already would if this PWA had no service worker at all.
+        navigateFallbackDenylist: [/\.pdf$/],
       },
     }),
   ],
