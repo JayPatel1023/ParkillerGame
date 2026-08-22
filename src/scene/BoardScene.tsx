@@ -70,7 +70,10 @@ const DEFAULT_POLAR_ANGLE = 0.85 // ~49° off vertical - shallower than before s
 //
 // Scaled a fifth time from 29, proportionally with BOARD_SIZE's own 18 -> 22 (29 * 22/18 ~= 35.4,
 // rounded to 35) - same reasoning as above.
-const CAMERA_DISTANCE = 35
+//
+// Scaled a sixth time from 35, proportionally with BOARD_SIZE's own 22 -> 24 (35 * 24/22 ~= 38.2,
+// rounded to 38) - same reasoning as above.
+const CAMERA_DISTANCE = 38
 // Calibrated (not derived) against BOARD_SIZE=6 at a ~1.6:1 viewport aspect - see FitBoardCamera.
 const REFERENCE_MIN_DIMENSION_FACTOR = 620
 
