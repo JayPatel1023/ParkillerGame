@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { beginLocalGame } from './core/gameFlow/localGameSession'
 import { TURN_ORDER_BY_COUNT } from './core/turnOrder'
+import type { PieceColor } from './core/pieceColor'
 import { BOARD_DEFINITIONS } from './data/boards'
+import { ColorSelector } from './ui/ColorSelector'
 import { GameBoardScreen } from './ui/GameBoardScreen'
 import { PlayerCountSelector } from './ui/PlayerCountSelector'
 import { StartScreen } from './ui/StartScreen'
@@ -10,18 +12,33 @@ import ComponentPreview from './tools/ComponentPreview'
 import ParkillerEditor from './tools/ParkillerEditor'
 import OnlineLobbyScreen from './ui/OnlineLobbyScreen'
 
-type Screen = 'start' | 'selectCount' | 'game'
+type Screen = 'start' | 'selectCount' | 'selectColor' | 'game'
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('start')
   const [playerCount, setPlayerCount] = useState(4)
+  // null means classic hotseat (every color passed around one device) - see ColorSelector's own
+  // "Jugar todos los colores" option. Non-null means vs-bots: the human plays only this color,
+  // every other color in this count's own TURN_ORDER_BY_COUNT is bot-driven.
+  const [humanColor, setHumanColor] = useState<PieceColor | null>(null)
   // Only actually used once screen === 'game', but built unconditionally here (not inside that
   // conditional branch below) since hooks can't be called conditionally - cheap to construct
   // early, and beginLocalGame's own turnStarted emit is harmless before anything's listening.
+  // Rebuilt whenever playerCount OR humanColor changes - a stale session (and, in vs-bots mode,
+  // its own still-running BotController) must never survive into the next game; see the cleanup
+  // effect just below for why that needs its own explicit disposal, not just letting it be
+  // garbage-collected.
   const localSession = useMemo(
-    () => beginLocalGame(BOARD_DEFINITIONS[playerCount], TURN_ORDER_BY_COUNT[playerCount]),
-    [playerCount],
+    () => beginLocalGame(BOARD_DEFINITIONS[playerCount], TURN_ORDER_BY_COUNT[playerCount], humanColor ?? undefined),
+    [playerCount, humanColor],
   )
+  // vs-bots mode's own BotController holds pending setTimeouts (see botController.ts) that must be
+  // cleared before the next session replaces this one, or a bot from a *previous* game could still
+  // fire a stale roll/move into whatever session happens to exist by then - the exact same disposal
+  // OnlineLobbyScreen already does for its own BotController on unmount/room change.
+  useEffect(() => {
+    return () => localSession.dispose?.()
+  }, [localSession])
 
   // Reading window.location.hash directly (as this used to) never re-renders on its own - setting
   // the hash doesn't touch React state, so OnlineLobbyScreen's own onExit (`location.hash = ''`)
@@ -64,6 +81,15 @@ export default function App() {
         <PlayerCountSelector
           onConfirm={(count) => {
             setPlayerCount(count)
+            setScreen('selectColor')
+          }}
+        />
+      )}
+      {screen === 'selectColor' && (
+        <ColorSelector
+          colors={TURN_ORDER_BY_COUNT[playerCount]}
+          onConfirm={(color) => {
+            setHumanColor(color)
             setScreen('game')
           }}
         />
