@@ -37,9 +37,15 @@ function piecesOnTrackSquare(allPlayers: readonly PlayerState[], trackPosition: 
 }
 
 // Home-corridor squares are private to one color (no opponent piece can ever enter another
-// color's corridor), so occupancy here is just "how many of my own pieces already sit here" - the
-// reference implementation caps every corridor square but the true final one at 1 piece; the final
-// square allows all 4 to stack freely once finished.
+// color's corridor), so occupancy here is just "how many of my own pieces already sit here".
+// Verified directly against the reference implementation's own puedeApilarEnFinales() - every
+// corridor square but the true final one caps at 2 of the player's own pieces, exactly like PC2's
+// general "never more than two pawns per square" rule (a corridor barrier is a real, legal thing,
+// not a track-only concept - PC2.4's own rulebook text explicitly calls out doubles forcing a
+// barrier open "including those in the finish zone"); the final square alone allows all 4 to stack
+// freely once finished. An earlier version of this comment claimed the cap was 1, not 2 - that was
+// wrong, traced to having read the general per-square cap check without finding
+// puedeApilarEnFinales's own more permissive rule for corridor squares specifically.
 function ownPiecesInCorridor(allPlayers: readonly PlayerState[], color: PieceColor, corridorPosition: number): number {
   let count = 0
   for (const player of allPlayers) {
@@ -162,7 +168,7 @@ export function getValidMoves(
       } else {
         const corridorIndex = amount - distanceToHomeEntrance - 1
         const isFinal = corridorIndex === lane.corridorLength - 1
-        if (!isFinal && ownPiecesInCorridor(allPlayers, player.color, corridorIndex) >= 1) continue
+        if (!isFinal && ownPiecesInCorridor(allPlayers, player.color, corridorIndex) >= 2) continue
         const kind = isFinal ? 'FinishMove' : 'CorridorMove'
         moves.push({ piece, kind, resultingTrackPosition: -1, resultingCorridorPosition: corridorIndex, amount, diceSource })
       }
@@ -174,7 +180,7 @@ export function getValidMoves(
       if (newCorridorPos > lane.corridorLength - 1) continue // overshoot - exact count required
 
       const isFinal = newCorridorPos === lane.corridorLength - 1
-      if (!isFinal && ownPiecesInCorridor(allPlayers, player.color, newCorridorPos) >= 1) continue
+      if (!isFinal && ownPiecesInCorridor(allPlayers, player.color, newCorridorPos) >= 2) continue
       const kind = isFinal ? 'FinishMove' : 'CorridorMove'
       moves.push({ piece, kind, resultingTrackPosition: -1, resultingCorridorPosition: newCorridorPos, amount, diceSource })
     }
@@ -392,6 +398,26 @@ export function ownBarrierTrackPosition(player: PlayerState): number | null {
   for (const piece of player.pieces) {
     if (piece.state !== 'OnTrack') continue
     counts.set(piece.trackPosition, (counts.get(piece.trackPosition) ?? 0) + 1)
+  }
+  for (const [position, count] of counts) {
+    if (count >= 2) return position
+  }
+  return null
+}
+
+// Same obligation as ownBarrierTrackPosition, for a barrier formed in the player's own home
+// corridor instead of the shared track - PC2.4's own rulebook text names this outright ("a double
+// forces the player to open a barrier, including those in the finish zone"), and it's a real,
+// reachable state now that ownPiecesInCorridor's own cap allows two of a color's own pieces to
+// share a non-final corridor square (see that function's own comment). Deliberately excludes the
+// final slot - a piece there is 'Finished', not 'InHomeCorridor' (a different state entirely, not
+// counted here), and finished pieces are done playing regardless of how many share that square, so
+// there's nothing a double could meaningfully "break" there.
+export function ownCorridorBarrierPosition(player: PlayerState): number | null {
+  const counts = new Map<number, number>()
+  for (const piece of player.pieces) {
+    if (piece.state !== 'InHomeCorridor') continue
+    counts.set(piece.corridorPosition, (counts.get(piece.corridorPosition) ?? 0) + 1)
   }
   for (const [position, count] of counts) {
     if (count >= 2) return position

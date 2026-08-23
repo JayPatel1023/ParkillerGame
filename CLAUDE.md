@@ -116,7 +116,12 @@ wherever the rulebook's prose alone was ambiguous.
   though the entry square is otherwise a safe zone.
 - **PC2/PC2.4**: never more than two pawns share a square. A barrier (2 pawns, own or mixed) blocks
   every other piece from landing on or passing through that square — except the Parkiller, which
-  jumps over barriers freely (PK4).
+  jumps over barriers freely (PK4). Applies identically inside a player's own home corridor, not
+  just the shared track — verified directly against the reference implementation's own
+  `puedeApilarEnFinales()`: every non-final corridor square caps at 2 of the player's own pieces,
+  exactly like the general per-square cap, forming a real corridor barrier (PK9.1's own doubles
+  obligation applies to it too). Only the true final corridor square is uncapped, since a piece
+  there is already `Finished`, not still in play.
 - **PC3/PK8**: capturing is mandatory *per piece*, not across the whole roll — verified directly
   against the reference implementation (`activarFichasMovibles()`/`wouldComer()` in
   `Parkiller_GameMaker-main`): a piece that could capture with one die can't dodge into a
@@ -135,12 +140,14 @@ wherever the rulebook's prose alone was ambiguous.
   piece back to its yard (exempt once it's in the home corridor).
 - **PK9.1**: a double also obligates breaking an existing barrier of the player's own pawns before
   anything else that roll, ahead of collecting rewards or removing a pawn from the shelter — waived
-  if genuinely no legal move can break it that roll ("unless movement is impossible"). Re-checked
-  fresh each time moves are offered, so once one of the double's two dice breaks it, the other is
-  free again with no separate "already broken this roll" tracking needed — except for putting the
-  barrier's other original pawn right back onto the exact square the first one just broke to, which
-  stays blocked for that one specific (piece, destination) pairing only, the rest of that die's own
-  options untouched.
+  if genuinely no legal move can break it that roll ("unless movement is impossible"). Applies to a
+  barrier on the shared track *or* in the player's own home corridor alike — PC2.4's own rulebook
+  text calls this out by name ("including those in the finish zone"), and a corridor barrier is a
+  real, reachable state (see PC2.4 below). Re-checked fresh each time moves are offered, so once one
+  of the double's two dice breaks it, the other is free again with no separate "already broken this
+  roll" tracking needed — except for putting the barrier's other original pawn right back onto the
+  exact square the first one just broke to, which stays blocked for that one specific (piece,
+  destination) pairing only, the rest of that die's own options untouched.
 - **The Parkiller (PK1-8)**: one extra piece per color, moved by its own black die (rolled once per
   actual turn, skipped on a doubles bonus turn), traveling the shared track loop in the *opposite*
   direction from regular pawns. Landing on an opposing pawn sends it home with no reward; landing
