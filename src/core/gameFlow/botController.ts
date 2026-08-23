@@ -1,6 +1,9 @@
-import type { PieceColor } from '../core/pieceColor'
-import type { MoveOption } from '../core/rules/moveOption'
-import type { HostTurnManagerBridge } from './HostTurnManagerBridge'
+import type { PieceColor } from '../pieceColor'
+import type { MoveOption, MoveResult } from '../rules/moveOption'
+import type { Piece } from '../pieces/piece'
+import type { DiceRoll } from './turnManager'
+import type { Listenable } from './turnManagerLike'
+import type { PlayerState } from './playerState'
 
 // Purely for feel, mirrors the human roll-spin delay in useTurnManager's rollDice() - an instant
 // bot turn would read as broken/too fast rather than "an opponent playing quickly".
@@ -19,25 +22,42 @@ const BOT_THINK_DELAY_MS = 700
 // which reads as an instant jump, not a bug in the strict sense, but exactly the "light speed"
 // symptom reported. `busyUntilMs` tracks a running "don't act again before this real time" bound,
 // extended by every action this class takes, so a slow-playing animation is never cut short by
-// the next one - this class has no access to the scene layer's own timing constants (online/ and
-// scene/ are peers, per CLAUDE.md's layering), so the values below are duplicated from there and
-// must be kept in sync: DICE_SPIN_MS matches useTurnManager.ts's own constant of the same name,
-// HOP_DURATION_MS matches PieceMesh.tsx's HOP_DURATION (in seconds, *1000 here).
+// the next one - this class has no direct access to the scene layer's own timing constants
+// (gameFlow/ and scene/ are peers, per CLAUDE.md's layering), so the values below are duplicated
+// from there and must be kept in sync: DICE_SPIN_MS matches useTurnManager.ts's own constant of
+// the same name, HOP_DURATION_MS matches PieceMesh.tsx's HOP_DURATION (in seconds, *1000 here).
 const DICE_SPIN_MS = 450
 const HOP_DURATION_MS = 320
 
+/** The narrow surface BotController actually needs to drive a game - satisfied structurally by
+ * both HostTurnManagerBridge (online, see its own rollForBot()/submitMoveForBot() doc comments -
+ * bots have no connected actor, so they bypass that class's own actor-ownership validation) and
+ * LocalBotSession (local vs-bots play, src/gameFlow/localGameSession.ts - a bot there has no
+ * "ownership" concept to bypass at all, since it's one shared device; rollForBot/submitMoveForBot
+ * there are just plain requestRoll/submitMove under these two names). Moved here from src/online/
+ * (where this class originally lived, online-only) so src/core/ - which local play's own
+ * localGameSession.ts belongs to - doesn't have to depend on src/online/, a strictly higher layer
+ * per CLAUDE.md's own architecture. */
+export interface BotDrivableSession {
+  readonly currentPlayer: PlayerState
+  readonly turnStarted: Listenable<PlayerState>
+  readonly diceRolled: Listenable<DiceRoll>
+  readonly moveChoicesReady: Listenable<MoveOption[]>
+  rollForBot(): void
+  submitMoveForBot(piece: Piece, amount?: number): MoveResult | null
+}
+
 /**
- * Drives every bot-assigned seat on the Master Client - bots never touch the network at all,
- * they act directly on the same authoritative HostTurnManagerBridge the Master's own UI binds to,
- * via its rollForBot()/submitMoveForBot() (which skip the actor-ownership check that
- * requestRoll()/submitMove() enforce, since a bot has no connected actor to validate against).
+ * Drives every bot-assigned color in a game - bots act directly on the same authoritative session
+ * object the real UI binds to, via its own rollForBot()/submitMoveForBot() (see BotDrivableSession's
+ * own doc comment for why those exist as a separate pair from requestRoll()/submitMove()).
  *
  * Move selection for this pass is deliberately simple - the first legal option, whatever it is.
  * A real heuristic (prefer captures/finishes) is Phase 2 polish, not required to prove the
  * architecture or to make bots functional.
  */
 export class BotController {
-  private readonly host: HostTurnManagerBridge
+  private readonly session: BotDrivableSession
   private readonly botColors: Set<PieceColor>
   private readonly thinkDelayMs: number
   private readonly hopDurationMs: number
@@ -60,29 +80,29 @@ export class BotController {
   private lastBlackDie = 6
 
   constructor(
-    host: HostTurnManagerBridge,
+    session: BotDrivableSession,
     botColors: Set<PieceColor>,
     thinkDelayMs = BOT_THINK_DELAY_MS,
     hopDurationMs = HOP_DURATION_MS,
     diceSpinMs = DICE_SPIN_MS,
   ) {
-    this.host = host
+    this.session = session
     this.botColors = botColors
     this.thinkDelayMs = thinkDelayMs
     this.hopDurationMs = hopDurationMs
     this.diceSpinMs = diceSpinMs
     this.unsubscribers = [
-      host.turnStarted.on((player) => this.onTurnStarted(player.color)),
-      host.diceRolled.on((roll) => (this.lastBlackDie = roll.blackDie)),
-      host.moveChoicesReady.on((moves) => this.onMoveChoicesReady(moves)),
+      session.turnStarted.on((player) => this.onTurnStarted(player.color)),
+      session.diceRolled.on((roll) => (this.lastBlackDie = roll.blackDie)),
+      session.moveChoicesReady.on((moves) => this.onMoveChoicesReady(moves)),
     ]
   }
 
   private onTurnStarted(color: PieceColor): void {
     if (!this.botColors.has(color)) return
     this.scheduleRespectingBusy(this.thinkDelayMs, () => {
-      if (this.host.currentPlayer.color !== color) return // stale - state moved on before this fired
-      this.host.rollForBot()
+      if (this.session.currentPlayer.color !== color) return // stale - state moved on before this fired
+      this.session.rollForBot()
       // A roll always plays the white-dice spin, and may also play the Parkiller's own hop (up to
       // lastBlackDie squares, just updated by the diceRolled subscription above, synchronously,
       // before this line runs) - nothing scheduled after this should fire before both have had
@@ -93,12 +113,12 @@ export class BotController {
 
   private onMoveChoicesReady(moves: MoveOption[]): void {
     if (moves.length === 0) return
-    const color = this.host.currentPlayer.color
+    const color = this.session.currentPlayer.color
     if (!this.botColors.has(color)) return
     const chosen = moves[0]
     this.scheduleRespectingBusy(this.thinkDelayMs, () => {
-      if (this.host.currentPlayer.color !== color) return
-      this.host.submitMoveForBot(chosen.piece, chosen.amount)
+      if (this.session.currentPlayer.color !== color) return
+      this.session.submitMoveForBot(chosen.piece, chosen.amount)
       // This move's own hop animation - amount is the exact number of squares it covers (see
       // MoveOption), same duration-per-square PieceMesh itself uses.
       this.markBusy(chosen.amount * this.hopDurationMs)

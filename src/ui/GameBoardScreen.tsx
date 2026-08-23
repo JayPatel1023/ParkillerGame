@@ -291,12 +291,15 @@ export function GameBoardScreen({
 // phones) - matches the reference's row of player badges rather than the earlier per-side
 // columns. Pieces-at-home count uses data already on PlayerState (Piece.state === 'Finished'),
 // no new game-state tracking needed.
-// isLocal (online play only - session.turnManager.localPlayerColor, undefined for local
-// pass-and-play) marks which pill is *this client's own* seat, distinct from isCurrentTurn (whose
-// turn it is right now) - reported directly: once a game actually starts, nothing on screen said
-// which color a given online player even was anymore (the lobby's own "(vos)" tag only exists
-// before that point) - important with more than 2 real people in a room, where "wait for your own
-// name to light up" isn't enough to know which color that even is in the first place.
+// isLocal (session.turnManager.localPlayerColor - online play's own seat, or the human's chosen
+// color in local vs-bots play; null/undefined for classic local pass-and-play, where every color
+// is equally "yours") marks which pill is *this player's own* seat, distinct from isCurrentTurn
+// (whose turn it is right now) - reported directly for online play: once a game actually starts,
+// nothing on screen said which color a given online player even was anymore (the lobby's own
+// "(vos)" tag only exists before that point) - important with more than 2 real people in a room,
+// where "wait for your own name to light up" isn't enough to know which color that even is in the
+// first place. The same tag is just as useful once local play also has non-human seats (bots) to
+// tell apart from the human's own.
 function PlayerPill({ player, isCurrentTurn, isLocal }: { player: PlayerState; isCurrentTurn: boolean; isLocal: boolean }) {
   const home = player.pieces.filter((p) => p.state === 'Finished').length
   const color = getColor(player.color)
