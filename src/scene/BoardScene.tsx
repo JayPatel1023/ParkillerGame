@@ -16,6 +16,7 @@ import { DiceMesh } from './DiceMesh'
 import { PieceChoiceMarkers } from './PieceChoiceMarkers'
 import { TrackTile } from './TrackTile'
 import { CaptureImpactEffect } from './CaptureImpactEffect'
+import { FinishCelebrationEffect } from './FinishCelebrationEffect'
 import { BarrierIndicator } from './BarrierIndicator'
 import { useBoardColorSampler } from './useBoardColorSampler'
 import {
@@ -613,10 +614,27 @@ export function BoardScene({
     }
   }
 
+  // Same trailing-edge pattern as the capture effects above (fires once the piece's own hop
+  // animation has actually finished playing, not the instant the rules apply the move) - a golden
+  // burst at the exact home-corridor square a piece just completed its journey to, see
+  // FinishCelebrationEffect's own comment for why this looks nothing like a capture's impact.
+  const [finishCelebrations, setFinishCelebrations] = useState<CaptureImpact[]>([])
+  const nextFinishIdRef = useRef(0)
+
   useEffect(() => {
     const prevMove = prevMoveAnimationRef.current
     if (!moveAnimation && prevMove && (prevMove.capturedPiece || prevMove.capturedParkillerColor)) {
       spawnCaptureEffects(prevMove.after.trackPosition, prevMove.capturedPiece, prevMove.capturedParkillerColor)
+    }
+    if (!moveAnimation && prevMove && prevMove.after.state === 'Finished') {
+      const lane = definition.playerLanes.find((l) => l.color === prevMove.piece.color)
+      const waypoint = lane?.homeCorridorWaypoints[prevMove.after.corridorPosition]
+      if (waypoint) {
+        setFinishCelebrations((prev) => [
+          ...prev,
+          { id: nextFinishIdRef.current++, position: toWorldPosition(waypoint, FLAT_SURFACE_HEIGHT), color: getColor(prevMove.piece.color) },
+        ])
+      }
     }
     prevMoveAnimationRef.current = moveAnimation
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -791,6 +809,14 @@ export function BoardScene({
           position={impact.position}
           color={impact.color}
           onComplete={() => setImpacts((prev) => prev.filter((i) => i.id !== impact.id))}
+        />
+      ))}
+
+      {finishCelebrations.map((celebration) => (
+        <FinishCelebrationEffect
+          key={celebration.id}
+          position={celebration.position}
+          onComplete={() => setFinishCelebrations((prev) => prev.filter((c) => c.id !== celebration.id))}
         />
       ))}
 
