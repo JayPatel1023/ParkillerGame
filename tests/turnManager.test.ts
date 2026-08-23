@@ -68,16 +68,22 @@ describe('TurnManager - two-dice rulebook flow', () => {
     manager.requestRoll()
 
     expect(offered).toEqual({ dieA: 4, dieB: 2, blackDie: 1 })
-    expect(latestMoves).toHaveLength(2)
-    const forPiece0 = latestMoves.find((m) => m.piece === red.pieces[0])
+    // Three options, not two: piece0's own die B (1 -> 3) happens to land exactly on piece1's own
+    // square, which - now that a corridor square legally holds two of a color's own pieces (a real
+    // corridor barrier, see parchisRules.test.ts) - is a genuinely legal third choice, not a
+    // collision to avoid. Same "keeps every distinct option, doesn't silently collapse" design this
+    // game already applies to any piece reachable by more than one die.
+    expect(latestMoves).toHaveLength(3)
+    const forPiece0ViaA = latestMoves.find((m) => m.piece === red.pieces[0] && m.diceSource === 'dieA')
+    const forPiece0ViaB = latestMoves.find((m) => m.piece === red.pieces[0] && m.diceSource === 'dieB')
     const forPiece1 = latestMoves.find((m) => m.piece === red.pieces[1])
-    expect(forPiece0?.diceSource).toBe('dieA')
-    expect(forPiece0?.amount).toBe(4)
-    expect(forPiece1?.diceSource).toBe('dieB')
-    expect(forPiece1?.amount).toBe(2)
+    expect(forPiece0ViaA).toMatchObject({ diceSource: 'dieA', amount: 4, kind: 'FinishMove' })
+    expect(forPiece0ViaB).toMatchObject({ diceSource: 'dieB', amount: 2, kind: 'CorridorMove', resultingCorridorPosition: 3 })
+    expect(forPiece1).toMatchObject({ diceSource: 'dieB', amount: 2, kind: 'FinishMove' })
 
-    // spend die A on piece 0 - die B should still be offered afterward for piece 1
-    manager.submitMove(red.pieces[0])
+    // Spend die A on piece 0 explicitly (disambiguating from its own die-B option) - die B should
+    // still be offered afterward for piece 1.
+    manager.submitMove(red.pieces[0], 4)
     expect(red.pieces[0].state).toBe('Finished')
     expect(latestMoves).toHaveLength(1)
     expect(latestMoves[0].piece).toBe(red.pieces[1])
@@ -688,6 +694,33 @@ describe('TurnManager - mandatory barrier removal on doubles (PK9.1)', () => {
     // Neither barrier pawn can legally move at all (blocked) - the obligation is waived rather than
     // forcing a false "no moves possible", so whatever else was legal is offered normally.
     expect(offered.some((m) => m.piece === red.pieces[2])).toBe(true)
+  })
+
+  // PC2.4's own rulebook text: a double forces the player to open a barrier "including those in
+  // the finish zone" - the obligation isn't track-only. Same restriction as the very first test in
+  // this block, just with the barrier sitting in the player's own home corridor instead.
+  it('also restricts a double roll to breaking an existing own barrier in the home corridor', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'InHomeCorridor'
+    red.pieces[0].corridorPosition = 1
+    red.pieces[1].state = 'InHomeCorridor'
+    red.pieces[1].corridorPosition = 1 // own corridor barrier, pieces[0] + pieces[1]
+    red.pieces[2].state = 'OnTrack'
+    red.pieces[2].trackPosition = 0 // otherwise also free to move by 2 - must NOT be offered
+
+    const dice = new ScriptedDice([2, 2, 1])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let offered: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((moves) => (offered = moves))
+
+    manager.requestRoll()
+
+    expect(offered).toHaveLength(2)
+    expect(offered.map((m) => m.piece)).toEqual(expect.arrayContaining([red.pieces[0], red.pieces[1]]))
+    expect(offered.some((m) => m.piece === red.pieces[2])).toBe(false)
   })
 })
 

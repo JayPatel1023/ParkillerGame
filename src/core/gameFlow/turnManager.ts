@@ -2,7 +2,15 @@ import type { BoardData } from '../board/boardData'
 import { Dice, type DiceLike } from '../dice'
 import type { PieceColor } from '../pieceColor'
 import { snapshotPiece, type Piece, type PieceSnapshot } from '../pieces/piece'
-import { applyMove, getValidMoves, isParkillerOnTrack, ownBarrierTrackPosition, resolveBarrierElimination, wouldCapture } from '../rules/parchisRules'
+import {
+  applyMove,
+  getValidMoves,
+  isParkillerOnTrack,
+  ownBarrierTrackPosition,
+  ownCorridorBarrierPosition,
+  resolveBarrierElimination,
+  wouldCapture,
+} from '../rules/parchisRules'
 import type { MoveOption, MoveResult } from '../rules/moveOption'
 import type { RuleSettings } from '../rules/ruleSettings'
 import { hasWon, type PlayerState } from './playerState'
@@ -13,6 +21,11 @@ export interface DiceRoll {
   /** The Parkiller's own die (PK2) - a 3rd, black die, rolled and resolved before dieA/dieB. */
   blackDie: number
 }
+
+/** A barrier obligation's location - the shared track or the player's own home corridor (PC2.4:
+ * "including those in the finish zone"). `position` is a trackPosition for 'track', a
+ * corridorPosition for 'corridor' - the two are separate numeric spaces. */
+type BarrierLocation = { kind: 'track'; position: number } | { kind: 'corridor'; position: number }
 
 export interface ParkillerMoveResult {
   color: PieceColor
@@ -174,15 +187,18 @@ export class TurnManager {
   // The barrier position offerMoves() most recently computed (PK9.1's own obligation) - kept as a
   // field, not a local, so submitMove() can tell whether the move it's about to apply is the one
   // breaking that barrier. Null whenever no barrier obligation was active on the last offerMoves()
-  // call.
-  private lastOfferedBarrierPosition: number | null = null
+  // call. A barrier can be on the shared track or in the player's own home corridor (PC2.4's own
+  // rulebook text: a double forces the player to open a barrier "including those in the finish
+  // zone") - `kind` distinguishes the two since track positions and corridor positions are
+  // separate numeric spaces that can otherwise collide on the same number.
+  private lastOfferedBarrierPosition: BarrierLocation | null = null
   // PK9.1's own "IMPORTANT!" qualifier: breaking a barrier with one half of a double forbids using
   // the double's *other* half to put the barrier's other original pawn right back onto the same
   // square, recreating it - confirmed directly in the client's own rulebook ("you cannot recreate
   // the barrier using the same double"). Sized to the exact square the break landed on, not a
   // boolean flag, since offerMoves() needs to exclude only *that* specific destination for *that*
   // specific piece, not restrict the second die generally.
-  private brokenBarrierThisRoll: { position: number; movedToPosition: number } | null = null
+  private brokenBarrierThisRoll: (BarrierLocation & { resultingTrackPosition: number; resultingCorridorPosition: number }) | null = null
 
   // `dice` accepts anything roll()-shaped, not just the real Dice class - tests inject an exact
   // roll queue instead of a seed, since a seed's resulting face values aren't hand-pickable.
@@ -449,12 +465,25 @@ export class TurnManager {
     // separate "already broken this roll" tracking needed. "(unless movement is impossible)" per
     // the rulebook's own qualifier: if nothing can break it this roll, the restriction below comes
     // back empty and the obligation is waived rather than forcing a false moveNotPossible.
-    const barrierPosition = state.dieA === state.dieB ? ownBarrierTrackPosition(this.currentPlayer) : null
-    this.lastOfferedBarrierPosition = barrierPosition
+    //
+    // A track barrier and a corridor barrier existing *simultaneously* is a rare enough edge case
+    // (the player would need two separate own-pairs stacked in two different places at once) that
+    // this picks the track one first, matching this obligation's own pre-corridor-barrier
+    // precedent, rather than adding a rule the client's own text never actually addresses.
+    const trackBarrier = state.dieA === state.dieB ? ownBarrierTrackPosition(this.currentPlayer) : null
+    const corridorBarrier = state.dieA === state.dieB && trackBarrier === null ? ownCorridorBarrierPosition(this.currentPlayer) : null
+    const barrierLocation: BarrierLocation | null =
+      trackBarrier !== null ? { kind: 'track', position: trackBarrier } : corridorBarrier !== null ? { kind: 'corridor', position: corridorBarrier } : null
+    this.lastOfferedBarrierPosition = barrierLocation
+    const pieceIsAtBarrier = (piece: Piece): boolean =>
+      barrierLocation !== null &&
+      (barrierLocation.kind === 'track'
+        ? piece.state === 'OnTrack' && piece.trackPosition === barrierLocation.position
+        : piece.state === 'InHomeCorridor' && piece.corridorPosition === barrierLocation.position)
     const restrictToBarrierBreakOrCapture = (moves: MoveOption[]) =>
-      moves.filter((m) => m.piece.trackPosition === barrierPosition || wouldCapture(this.board, m, this.players, this.parkillerCapturableThisRoll))
+      moves.filter((m) => pieceIsAtBarrier(m.piece) || wouldCapture(this.board, m, this.players, this.parkillerCapturableThisRoll))
     const applyObligations = (moves: MoveOption[], dieHasExit: boolean): MoveOption[] => {
-      if (barrierPosition !== null) {
+      if (barrierLocation !== null) {
         const barrierMoves = restrictToBarrierBreakOrCapture(moves)
         if (barrierMoves.length > 0) return barrierMoves
       }
@@ -487,7 +516,7 @@ export class TurnManager {
     // routed through applyObligations even here (dieHasExit=false, but sumHasExit is checked inside
     // it too) so a sum-only exit obligation restricts the sum's own other move options exactly like
     // it now restricts dieA/dieB's.
-    if (dieAMoves && dieBMoves && !dieAHasExit && !dieBHasExit && barrierPosition === null && sumMoves) {
+    if (dieAMoves && dieBMoves && !dieAHasExit && !dieBHasExit && barrierLocation === null && sumMoves) {
       addMoves(applyObligations(sumMoves, false))
     }
 
@@ -499,8 +528,14 @@ export class TurnManager {
     // moment ago. Only that one specific (piece, destination) pairing is excluded - the piece is
     // still completely free to land anywhere else.
     if (this.brokenBarrierThisRoll) {
-      const { position, movedToPosition } = this.brokenBarrierThisRoll
-      options = options.filter((m) => !(m.piece.trackPosition === position && m.resultingTrackPosition === movedToPosition))
+      const broken = this.brokenBarrierThisRoll
+      options = options.filter((m) => {
+        const sameOrigin =
+          broken.kind === 'track'
+            ? m.piece.state === 'OnTrack' && m.piece.trackPosition === broken.position
+            : m.piece.state === 'InHomeCorridor' && m.piece.corridorPosition === broken.position
+        return !(sameOrigin && m.resultingTrackPosition === broken.resultingTrackPosition && m.resultingCorridorPosition === broken.resultingCorridorPosition)
+      })
     }
 
     // PC3/PK8: capturing is mandatory *per piece*, not across the whole roll - verified directly
@@ -559,13 +594,18 @@ export class TurnManager {
     // flagged as one, on a double (barrier-break obligation is only ever offered on a double, and
     // never via the sum, so this can't misfire on an unrelated own-color pair coincidentally
     // sharing a square for some other reason).
-    if (
-      !isRewardMove &&
-      this.diceState &&
-      this.diceState.dieA === this.diceState.dieB &&
-      before.trackPosition === this.lastOfferedBarrierPosition
-    ) {
-      this.brokenBarrierThisRoll = { position: before.trackPosition, movedToPosition: move.resultingTrackPosition }
+    const brokenLocation = this.lastOfferedBarrierPosition
+    const startedAtBarrier =
+      brokenLocation !== null &&
+      (brokenLocation.kind === 'track'
+        ? before.state === 'OnTrack' && before.trackPosition === brokenLocation.position
+        : before.state === 'InHomeCorridor' && before.corridorPosition === brokenLocation.position)
+    if (!isRewardMove && this.diceState && this.diceState.dieA === this.diceState.dieB && startedAtBarrier && brokenLocation) {
+      this.brokenBarrierThisRoll = {
+        ...brokenLocation,
+        resultingTrackPosition: move.resultingTrackPosition,
+        resultingCorridorPosition: move.resultingCorridorPosition,
+      }
     }
     // PK6/PK8: the window to kill the Parkiller with a common piece closes after this roll's first
     // move, whether or not it was actually used for that.

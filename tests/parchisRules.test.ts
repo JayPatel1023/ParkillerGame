@@ -165,7 +165,14 @@ describe('parchisRules', () => {
       expect(move?.resultingTrackPosition).toBe(3)
     })
 
-    it('a home-corridor square already holding one piece blocks another from landing there', () => {
+    it('a home-corridor square already holding one own piece allows a second to join it (a real corridor barrier)', () => {
+      // PC2.4's own rulebook text calls this out directly - a double forces the player to open a
+      // barrier "including those in the finish zone" - meaning a corridor barrier is a real, legal
+      // thing to form, not something the general "never more than two pawns per square" cap should
+      // block below 2. Verified directly against the reference implementation's own
+      // puedeApilarEnFinales(), which caps every non-final corridor square at 2, exactly like the
+      // shared track - not 1, as an earlier version of this test (and the code it was checking)
+      // wrongly assumed.
       const board = buildTestBoard()
       const red = createPlayerState('Red', board)
 
@@ -175,8 +182,32 @@ describe('parchisRules', () => {
       red.pieces[1].corridorPosition = 1
 
       const settings = defaultRuleSettings()
-      const moves = getValidMoves(board, red, [red], 1, settings) // piece1 would land on piece0's square (2), not the final (3)
-      expect(moves.find((m) => m.piece === red.pieces[1])).toBeUndefined()
+      const moves = getValidMoves(board, red, [red], 1, settings) // piece1 joins piece0's square (2), not the final (3)
+      const move = moves.find((m) => m.piece === red.pieces[1])
+      expect(move).toEqual({
+        piece: red.pieces[1],
+        kind: 'CorridorMove',
+        resultingTrackPosition: -1,
+        resultingCorridorPosition: 2,
+        amount: 1,
+        diceSource: 'sum',
+      })
+    })
+
+    it('a home-corridor square already holding two own pieces blocks a third from landing there', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+
+      red.pieces[0].state = 'InHomeCorridor'
+      red.pieces[0].corridorPosition = 2
+      red.pieces[1].state = 'InHomeCorridor'
+      red.pieces[1].corridorPosition = 2
+      red.pieces[2].state = 'InHomeCorridor'
+      red.pieces[2].corridorPosition = 1
+
+      const settings = defaultRuleSettings()
+      const moves = getValidMoves(board, red, [red], 1, settings) // piece2 would land on the already-full square (2), not the final (3)
+      expect(moves.find((m) => m.piece === red.pieces[2])).toBeUndefined()
     })
 
     it('the final home-corridor square allows multiple pieces to stack', () => {
