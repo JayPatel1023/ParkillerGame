@@ -16,7 +16,16 @@ extend({ RoundedBoxGeometry })
 // face stays exactly at y=0 by extruding downward, not upward, so every position that assumes
 // "the board's playing surface is at y=0" (piece rest heights, TrackTile placement - all of
 // boardGeometry.ts) needs no changes.
-export const BOARD_THICKNESS = 0.14
+//
+// That 0.14 was tuned at BOARD_SIZE=6 (this file's own git history confirms it - both landed in the
+// same commit) and, unlike DICE_SCALE/CAMERA_SCALE elsewhere, was never carried forward as
+// BOARD_SIZE grew through many later "board/pieces too small" rounds, up to its current 41 (~6.8x).
+// Reported directly, with a close-up screenshot of the board's own edge reading as an almost
+// paper-thin sliver ("보드두께도 너무 작다" - the board thickness is also too small): the edge really
+// had become proportionally ~7x thinner than the "elegant lacquered board, not a plank" ratio this
+// was actually tuned to. Scaled proportionally with BOARD_SIZE instead of picking a fresh number, so
+// it lands back on that already-validated ratio rather than re-guessing it from scratch.
+export const BOARD_THICKNESS = 0.14 * (BOARD_SIZE / 6)
 
 export function BoardMesh({ imageUrl }: { imageUrl: string }) {
   const texture = useTexture(imageUrl)
