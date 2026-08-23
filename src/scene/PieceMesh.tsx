@@ -66,7 +66,16 @@ export const PIECE_PROFILE_RAW: [number, number][] = [
 // bug that had been silently blocking every earlier "shrink the board" request - see
 // CAMERA_DISTANCE's own comment - is now actually fixed), which on its own makes every piece read
 // smaller on screen even without this change, on top of the standalone "still too small" report.
-export const PIECE_BASE_RADIUS = 0.22
+//
+// Bumped a tenth time, 0.22 -> 0.28 - reported directly, again, as still too small. Nine
+// consecutive "still too small" reports in a row (matching the seventh round's own reasoning for
+// its bigger-than-usual step) calls for a decisively larger jump rather than another small nudge -
+// checked directly against the tightest (6-player) board's own measured tile size (~1.478, so
+// radius ~0.739) first: even at 0.28 a single piece still occupies well under half that tile
+// radius, and the existing stacking clamp (BoardScene.tsx's own localStackOffset/MAX_OCCUPANT_RADIUS)
+// scales with this constant automatically, so two pieces sharing a square still can't spill past
+// their tile's own border regardless of how large this gets.
+export const PIECE_BASE_RADIUS = 0.28
 export const PROFILE_SCALE = PIECE_BASE_RADIUS / Math.max(...PIECE_PROFILE_RAW.map(([r]) => r))
 // Stretches the profile taller without widening the base - requested directly, twice now ("peones
 // más alargados" both times), each time with a reference photo of taller pawns. Applied only to
