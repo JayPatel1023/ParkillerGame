@@ -5,9 +5,15 @@ import type { DiceRoll } from './turnManager'
 import type { Listenable } from './turnManagerLike'
 import type { PlayerState } from './playerState'
 
-// Purely for feel, mirrors the human roll-spin delay in useTurnManager's rollDice() - an instant
-// bot turn would read as broken/too fast rather than "an opponent playing quickly".
-const BOT_THINK_DELAY_MS = 700
+// Purely for feel - an instant bot turn would read as broken/too fast rather than "an opponent
+// playing quickly". Reported directly ("봇이 게임하는게 좀 빠르다... 사람의 속도처럼 하되 너무느리거나
+// 시간간격을 너무 오래두지는말라" - the bot plays a bit fast, make it feel human-paced but not too
+// slow either): 700ms (originally just mirroring the human roll-spin delay in useTurnManager's
+// rollDice(), a different animation with its own separate timing) wasn't long enough to read as an
+// opponent actually deciding - a roll lands and the next action fires again almost immediately,
+// which also made it hard to visually confirm each step was legitimate rather than skipped.
+// Bumped to a still-brisk but clearly deliberate pause, short of dragging.
+const BOT_THINK_DELAY_MS = 1100
 
 // Reported directly: a bot's pieces sometimes hopped at a normal, readable pace and sometimes
 // moved "at light speed" - hard to tell a bug from a feature. Root cause: this class used to wait
