@@ -30,9 +30,9 @@ export interface ActorInfo {
 /**
  * Thin wrapper around the Photon Realtime SDK - implements RoomTransport (what the turn-sync
  * bridges depend on) plus the connection/lobby/room-property surface OnlineLobbyScreen needs for
- * seat assignment. Nothing here has been exercised against a real Photon App ID yet (none was
- * available while building this) - the API calls are correct per the SDK's own source, but a real
- * two-tab connection test is still a required follow-up before shipping.
+ * seat assignment. Verified live against a real Photon App ID with two independent clients - room
+ * creation, joining by code, seat assignment, starting the game, and a dice roll broadcast all
+ * relayed correctly and produced identical state on both sides.
  */
 export class PhotonConnection implements RoomTransport {
   private client: InstanceType<typeof LBC>
