@@ -159,12 +159,14 @@ wherever the rulebook's prose alone was ambiguous.
   never blocked outright, it always completes first. On a protected/safe square the two simply
   coexist as a barrier instead (PK4).
 - **PK5/PK10**: landing on an existing barrier (2 pawns already sharing that square) never just
-  coexists with both — the Parkiller always eliminates exactly one. A pawn sharing the
-  Parkiller's own color is protected ahead of one that doesn't ("a pawn protects its Parkiller");
-  once color alone doesn't decide it (both share a color, whether that's the Parkiller's own or a
-  third one), arrival order breaks the tie via `Piece.arrivedAt`, a turn-sequence counter
-  (`TurnManager`'s own `nextArrivalSequence`), stamped whenever a piece lands on a new track
-  square.
+  coexists with both, protected square or not — the Parkiller always eliminates exactly one. A
+  pawn sharing the Parkiller's own color is protected ahead of one that doesn't ("a pawn protects
+  its Parkiller"); once color alone doesn't decide it (both share a color, whether that's the
+  Parkiller's own or a third one), arrival order breaks the tie via `Piece.arrivedAt`, a
+  turn-sequence counter (`TurnManager`'s own `nextArrivalSequence`), stamped whenever a piece
+  lands on a new track square. A *protected* square's shield only ever covers a genuinely lone
+  pawn (PK4/PK5: they simply form a barrier together, no capture) — it never extends to an
+  already-formed 2-pawn barrier the Parkiller then lands on top of.
 - First player to get all 4 pieces home wins immediately (classic mobile-app simplification, not
   the traditional tabletop full-ranking rule).
 - **PC2.1**: two different-colored opposing pawns already sharing your own entry square are not a
