@@ -42,6 +42,23 @@ const SPARKLE_ORBIT_SPEED = 0.6
 const SPARKLE_RISE_HEIGHT = 0.32
 const SPARKLE_CYCLE_SECONDS = 2.6
 
+// Reported directly, with a screenshot at normal camera height ("현재 방화벽이 아래선에서만 효과가
+// 나타나고있는데 높이를 좀주어 알리게 시작적으로 크게 알리게 해달라" - the barrier effect currently
+// only shows at the bottom/ground line, give it some height so it reads clearly): the ring/glow/
+// sparkles above are all genuinely there, but every one of them sits within a few sparkle-rises of
+// the ground - reads fine looking straight down (this component's own original design target), but
+// nearly flattens away to a thin line from the game's actual default camera angle (well off
+// vertical - see BoardScene's own DEFAULT_POLAR_ANGLE), which is how it's actually seen in normal
+// play. A tall, tapering beacon column fixes that - visible from any reasonable camera angle since
+// its height, not just its footprint, is what carries the "something is here" signal, the same
+// "spotlight on this square" language PieceMesh's own selectable-cue beam uses, just persistent
+// (pulsing, not a one-shot) since a barrier lasts across turns rather than a single moment.
+const BEAM_COLOR = '#ffcf7a'
+const BEAM_BASE_OPACITY = 0.28
+const BEAM_PULSE_AMPLITUDE = 0.14
+const BEAM_PULSE_SPEED = 1.1
+const BEAM_HEIGHT_FACTOR = 2.6 // multiplied by tileSize - towers well above a resting piece
+
 interface SparkleSpec {
   radius: number
   angleOffset: number
@@ -54,6 +71,7 @@ export function BarrierIndicator({ position, tileSize }: { position: [number, nu
   const outerRingRef = useRef<Mesh>(null)
   const innerRingRef = useRef<Mesh>(null)
   const glowRef = useRef<Mesh>(null)
+  const beamRef = useRef<Mesh>(null)
   const sparkleRefs = useRef<(Mesh | null)[]>([])
   const elapsedRef = useRef(0)
 
@@ -95,6 +113,10 @@ export function BarrierIndicator({ position, tileSize }: { position: [number, nu
       const s = 1 + pulse * 0.08
       glowRef.current.scale.set(s, s, 1)
     }
+    if (beamRef.current) {
+      const beamPulse = Math.sin(t * BEAM_PULSE_SPEED) * 0.5 + 0.5
+      ;(beamRef.current.material as THREE.MeshBasicMaterial).opacity = BEAM_BASE_OPACITY + beamPulse * BEAM_PULSE_AMPLITUDE
+    }
 
     sparkles.forEach((s, i) => {
       const mesh = sparkleRefs.current[i]
@@ -126,6 +148,13 @@ export function BarrierIndicator({ position, tileSize }: { position: [number, nu
       <mesh ref={innerRingRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.007, 0]}>
         <ringGeometry args={[ringRadius - ringWidth * 2.2, ringRadius - ringWidth * 1.5, 48]} />
         <meshBasicMaterial color={RING_INNER_COLOR} transparent opacity={RING_BASE_OPACITY * 0.7} side={THREE.DoubleSide} depthWrite={false} />
+      </mesh>
+      {/* Tapering beacon column - see BEAM_HEIGHT_FACTOR's own comment for why this exists: the
+          ring/glow/sparkles above all read fine looking straight down but nearly flatten away at
+          the game's actual default camera angle, while a tall column stays legible from any angle. */}
+      <mesh ref={beamRef} position={[0, (tileSize * BEAM_HEIGHT_FACTOR) / 2, 0]}>
+        <coneGeometry args={[ringRadius * 0.85, tileSize * BEAM_HEIGHT_FACTOR, 24, 1, true]} />
+        <meshBasicMaterial color={BEAM_COLOR} transparent opacity={BEAM_BASE_OPACITY} side={THREE.DoubleSide} depthWrite={false} />
       </mesh>
       {sparkles.map((s, i) => (
         <mesh key={i} ref={(el) => (sparkleRefs.current[i] = el)} position={[s.radius, 0, 0]}>
