@@ -3,6 +3,7 @@ import { extend, useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { Group } from 'three'
 import { RoundedBoxGeometry } from 'three-stdlib'
+import { PIECE_BASE_RADIUS } from './PieceMesh'
 
 extend({ RoundedBoxGeometry })
 
@@ -14,10 +15,21 @@ extend({ RoundedBoxGeometry })
 // same glossy rounded-box material language as the real dice (DiceMesh.tsx), just showing a plain
 // numeral rather than pips, since a choice can be a die's own face value (1-6) or the two dice's sum
 // (up to 12) - pips alone can't represent that range.
-const MARKER_SIZE = 0.34
-const HOVER_HEIGHT = 0.85
-const MARKER_SPACING = 0.46
-const BOB_HEIGHT = 0.05
+//
+// These sizes were tuned once, when PIECE_BASE_RADIUS was 0.065, and - unlike DICE_SCALE/
+// CAMERA_SCALE/BOARD_THICKNESS, this project's other "scale with the piece/board" constants - never
+// carried forward through the ten later rounds of piece growth since (now 0.28, a ~4.3x increase).
+// Reported directly, with a screenshot showing the markers crowded into an overlapping cluster
+// above the piece instead of a clean spread row ("선택 주사위들의 현시도 바로해달라" - fix the display
+// of these choice dice too): at the current piece size, the old absolute spacing/size read as tiny
+// and packed tight against a piece more than four times bigger than what they were ever tuned
+// against. Scaled by the same ratio PIECE_BASE_RADIUS itself grew by, restoring the original,
+// already-correct proportions instead of re-guessing new absolute numbers.
+const MARKER_SCALE = PIECE_BASE_RADIUS / 0.065
+const MARKER_SIZE = 0.34 * MARKER_SCALE
+const HOVER_HEIGHT = 0.85 * MARKER_SCALE
+const MARKER_SPACING = 0.46 * MARKER_SCALE
+const BOB_HEIGHT = 0.05 * MARKER_SCALE
 const BOB_FREQ = 2.2
 
 function createNumberFaceTexture(text: string): THREE.CanvasTexture {

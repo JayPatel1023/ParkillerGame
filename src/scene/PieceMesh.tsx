@@ -110,6 +110,19 @@ const PAWN_TOTAL_HEIGHT = PIECE_PROFILE_RAW[PIECE_PROFILE_RAW.length - 1][1] * P
 export const HOP_DURATION = 0.32 // seconds per square hopped - slow enough that each step reads clearly
 export const BOUNCE_HEIGHT = 0.24 // world units, how high each hop arcs - a more emphatic, visible bounce
 
+// Reported directly ("말이 이동할때 통통뛰게 해달라" - make the piece bounce springily when it
+// moves): the existing hop was a plain sine arc - smooth up, smooth down, the piece's own shape
+// never changing - which reads as gliding/floating rather than a genuine springy hop. Classic
+// squash-and-stretch (the piece compresses short-and-wide right at each square, the ground contact
+// points where t=0/t=1, then stretches tall-and-thin at the peak of the arc where t=0.5) is what
+// actually reads as "bouncy" - it's driven directly off the same `bounce` height already being
+// computed for position, so it's automatically in sync with the arc with no separate timing to
+// keep aligned.
+const HOP_SQUASH_Y = 0.8 // compressed height at each square (ground contact)
+const HOP_STRETCH_Y = 1.22 // stretched height at the peak of the arc
+const HOP_SQUASH_XZ = 1.14 // widened footprint at each square, complementing the Y squash
+const HOP_STRETCH_XZ = 0.92 // narrowed footprint at the peak, complementing the Y stretch
+
 // Caps how much animation time a single frame can advance. Without this, a slow/dropped frame
 // (e.g. CPU contention from screen-recording software) can push `delta` past HOP_DURATION in one
 // tick, completing an entire hop with no interpolated frame ever rendered - visually the piece
@@ -295,9 +308,8 @@ export function PieceMesh({
     // brightness/ring-size flash. Scale itself uses easeOutBack directly below for the pop-overshoot.
     const flashFade = selectable ? 1 - easeOutCubic(flashT) : 0
 
-    mesh.scale.setScalar(
-      crowdedScale * (selectable ? THREE.MathUtils.lerp(IDLE_SCALE, SELECTABLE_SCALE, easeOutBack(flashT)) : IDLE_SCALE),
-    )
+    const uniformScale = crowdedScale * (selectable ? THREE.MathUtils.lerp(IDLE_SCALE, SELECTABLE_SCALE, easeOutBack(flashT)) : IDLE_SCALE)
+    mesh.scale.setScalar(uniformScale)
     if (bodyMaterialRef.current) {
       const steadyEmissive = selectable ? SELECTABLE_EMISSIVE : isCurrentTurn ? TURN_EMISSIVE : IDLE_EMISSIVE
       bodyMaterialRef.current.emissiveIntensity = steadyEmissive + flashFade * FLASH_EMISSIVE_BOOST
@@ -385,6 +397,11 @@ export function PieceMesh({
     const z = THREE.MathUtils.lerp(from[2], to[2], t)
     const bounce = Math.sin(t * Math.PI) * BOUNCE_HEIGHT
     mesh.position.set(x, BASE_HEIGHT + bounce, z)
+
+    const hopPhase = bounce / BOUNCE_HEIGHT // 0 at each square (ground contact), 1 at the arc's peak
+    const squashStretchY = THREE.MathUtils.lerp(HOP_SQUASH_Y, HOP_STRETCH_Y, hopPhase)
+    const squashStretchXZ = THREE.MathUtils.lerp(HOP_SQUASH_XZ, HOP_STRETCH_XZ, hopPhase)
+    mesh.scale.set(uniformScale * squashStretchXZ, uniformScale * squashStretchY, uniformScale * squashStretchXZ)
 
     if (t >= 1) {
       hopIndexRef.current += 1
