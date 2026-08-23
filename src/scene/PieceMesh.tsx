@@ -192,11 +192,29 @@ interface PieceMeshProps {
 // the previous value read as a faint, easy-to-miss outline once actually checked at real board
 // scale, not the "faceted, and unlit is fine because Colors are Correct" it looked like in the
 // numbers alone.
+// Reported directly, again ("말이 이동할 차례가 되였을 때 효과를 잘알리게해달라" - make the effect
+// clearly noticeable when a piece can move): a live screenshot of the yard showed the cue was
+// there and animating correctly, but essentially camouflaged - both rings and the marker were gold
+// (#ffcc00/#fff4c2), sitting directly on top of the yard slot's own gold decorative ring artwork,
+// so the "you can act on this one" ring blended straight into board art that looks the same
+// whether or not a piece is selectable. Rebuilt for actual contrast against ANY background instead
+// of just more of the same gold: a dark navy outline ring sits behind the bright rings (reads
+// against light board art AND against another piece's own bright color alike, the way text gets a
+// dark stroke for legibility over a busy image), a soft white-hot glow disc underneath (same
+// "reads before the eye resolves the ring itself" trick BarrierIndicator's own fix used), and a
+// thin vertical light beam rising from the piece through the marker - a "spotlight on this exact
+// piece" language nothing else on this board uses, so it can't be mistaken for decoration.
+const GLOW_COLOR = '#fff6d8'
+const OUTLINE_COLOR = '#1a2a4a'
 const RING_OUTER_SPIN_SPEED = 0.9 // radians/sec
 const RING_INNER_SPIN_SPEED = -1.3 // opposite direction from the outer ring, on purpose
 const RING_PULSE_SPEED = 1.5
-const RING_BASE_OPACITY = 0.8
-const RING_PULSE_AMPLITUDE = 0.2
+const RING_BASE_OPACITY = 0.95
+const RING_PULSE_AMPLITUDE = 0.15
+const GLOW_BASE_OPACITY = 0.35
+const GLOW_PULSE_AMPLITUDE = 0.15
+const BEAM_BASE_OPACITY = 0.4
+const BEAM_PULSE_AMPLITUDE = 0.2
 
 const MARKER_BOB_SPEED = 2.2
 const MARKER_BOB_AMPLITUDE = 0.05
@@ -204,7 +222,7 @@ const MARKER_SPIN_SPEED = 2.0
 // PAWN_TOTAL_HEIGHT (below, near the profile constants) * 1.3 - comfortably clears the head with
 // real margin, scaling correctly with piece size instead of a fixed guess.
 const MARKER_BASE_Y = PAWN_TOTAL_HEIGHT * 1.3
-const MARKER_SIZE = PIECE_BASE_RADIUS * 0.4
+const MARKER_SIZE = PIECE_BASE_RADIUS * 0.55
 
 const IDLE_SCALE = 1
 const SELECTABLE_SCALE = 1.3
@@ -242,6 +260,8 @@ export function PieceMesh({
   const indicatorGroupRef = useRef<Group>(null)
   const ringOuterRef = useRef<Mesh>(null)
   const ringInnerRef = useRef<Mesh>(null)
+  const glowRef = useRef<Mesh>(null)
+  const beamRef = useRef<Mesh>(null)
   const markerRef = useRef<Group>(null)
   const indicatorElapsedRef = useRef(0)
   const bodyMaterialRef = useRef<THREE.MeshPhysicalMaterial>(null)
@@ -304,6 +324,15 @@ export function PieceMesh({
         if (ringInnerRef.current) {
           ;(ringInnerRef.current.material as THREE.MeshBasicMaterial).opacity = ringOpacity
           ringInnerRef.current.scale.setScalar(ringScale)
+        }
+        if (glowRef.current) {
+          const glowMat = glowRef.current.material as THREE.MeshBasicMaterial
+          glowMat.opacity = GLOW_BASE_OPACITY + pulse * GLOW_PULSE_AMPLITUDE + flashFade * 0.3
+          const glowScale = 1 + flashFade * FLASH_RING_SCALE_BOOST
+          glowRef.current.scale.set(glowScale, glowScale, 1)
+        }
+        if (beamRef.current) {
+          ;(beamRef.current.material as THREE.MeshBasicMaterial).opacity = BEAM_BASE_OPACITY + pulse * BEAM_PULSE_AMPLITUDE
         }
 
         if (markerRef.current) {
@@ -409,23 +438,47 @@ export function PieceMesh({
             "lay flat" rotation once; each ring's own rotation.z then spins it within that already-
             flattened plane, independent of the other ring. */}
         <group position={[0, 0.004, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          {/* Soft glow disc under everything else - reads at a glance from across the board, before
+              the eye even resolves the ring's own thin geometry (same trick BarrierIndicator uses). */}
+          <mesh ref={glowRef} position={[0, 0, -0.001]}>
+            <circleGeometry args={[PIECE_BASE_RADIUS * 2.6, 32]} />
+            <meshBasicMaterial color={GLOW_COLOR} transparent opacity={GLOW_BASE_OPACITY} depthWrite={false} />
+          </mesh>
+          {/* Dark outline ring behind the bright ones, sized just outside them - gives the cue a hard
+              edge that reads against ANY background (light board art, another bright piece, the gold
+              yard-hole rings this used to disappear into) instead of only against a dark one. */}
+          <mesh>
+            <ringGeometry args={[PIECE_BASE_RADIUS * 1.5, PIECE_BASE_RADIUS * 2.28, 40]} />
+            <meshBasicMaterial color={OUTLINE_COLOR} transparent opacity={0.55} side={THREE.DoubleSide} depthWrite={false} />
+          </mesh>
           <mesh ref={ringOuterRef}>
             <ringGeometry args={[PIECE_BASE_RADIUS * 1.55, PIECE_BASE_RADIUS * 1.8, 40]} />
-            <meshBasicMaterial color="#ffcc00" transparent opacity={RING_BASE_OPACITY} side={THREE.DoubleSide} />
+            <meshBasicMaterial color="#ffcc00" transparent opacity={RING_BASE_OPACITY} side={THREE.DoubleSide} depthWrite={false} />
           </mesh>
           <mesh ref={ringInnerRef}>
             {/* Low segment count on purpose - reads as a faceted/angular ring, distinct from the
                 smooth outer one, rather than two identical circles just spinning oppositely. */}
             <ringGeometry args={[PIECE_BASE_RADIUS * 2.0, PIECE_BASE_RADIUS * 2.2, 6]} />
-            <meshBasicMaterial color="#fff4c2" transparent opacity={RING_BASE_OPACITY} side={THREE.DoubleSide} />
+            <meshBasicMaterial color="#fff4c2" transparent opacity={RING_BASE_OPACITY} side={THREE.DoubleSide} depthWrite={false} />
           </mesh>
         </group>
+        {/* Thin vertical light beam from the ring up to just under the marker - a "spotlight on this
+            exact piece" language nothing else on the board uses, so the cue reads as a directed
+            effect even from a wide, zoomed-out camera where the ring/marker themselves are tiny. */}
+        <mesh ref={beamRef} position={[0, MARKER_BASE_Y * 0.42, 0]}>
+          <cylinderGeometry args={[PIECE_BASE_RADIUS * 0.05, PIECE_BASE_RADIUS * 0.16, MARKER_BASE_Y * 0.8, 10]} />
+          <meshBasicMaterial color={GLOW_COLOR} transparent opacity={BEAM_BASE_OPACITY} depthWrite={false} />
+        </mesh>
         {/* Floating gem marker above the piece's head - the clearer, more game-familiar "this is
             yours, act on it" cue (bob + spin), on top of the base ring rather than instead of it. */}
         <group ref={markerRef} position={[0, MARKER_BASE_Y, 0]}>
           <mesh>
+            <octahedronGeometry args={[MARKER_SIZE * 1.2, 0]} />
+            <meshBasicMaterial color={OUTLINE_COLOR} />
+          </mesh>
+          <mesh>
             <octahedronGeometry args={[MARKER_SIZE, 0]} />
-            <meshBasicMaterial color="#ffcc00" transparent opacity={0.9} />
+            <meshBasicMaterial color="#ffcc00" transparent opacity={0.95} />
           </mesh>
         </group>
       </group>
