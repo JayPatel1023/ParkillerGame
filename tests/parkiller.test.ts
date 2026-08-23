@@ -135,6 +135,37 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     expect(red.pieces[0].trackPosition).toBe(16)
   })
 
+  // Reported directly, with a screenshot: 3 pieces (a Parkiller + a 2-pawn barrier) all shown
+  // sitting on the same square at once. Root-caused to resolveParkillerCollisions gating its whole
+  // elimination check on the square being unprotected - correct for a *lone* pawn (PK4/PK5: they
+  // simply form a barrier, see the test above/below), but wrong for an already-formed 2-pawn
+  // barrier the Parkiller then lands on top of, which PK5/PK10 describe as always resolving to one
+  // elimination with no protected-square exception (verified against the reference
+  // implementation's own ingresaFicha(), whose very first check is unconditional on the square's
+  // own protected flag).
+  it('landing on a barrier (2 pawns) on a protected square still eliminates one, not a 3-way coexistence', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.parkiller.corridorPosition = red.parkiller.corridorLength
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 15 // a safe square, reachable with blackDie=4 from Red's start (19)
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 15 // barrier: Red's own pawn + Blue's, both on the safe square
+
+    const dice = new ScriptedDice([1, 1, 4])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    manager.requestRoll()
+
+    expect(blue.pieces[0].state).toBe('InYard')
+    // Red's own pawn is protected by sharing the Parkiller's color - stays right where it was.
+    expect(red.pieces[0].state).toBe('OnTrack')
+    expect(red.pieces[0].trackPosition).toBe(15)
+    // Exactly 2 occupants remain on the square (Red's pawn + the arriving Parkiller), never 3.
+    expect(red.parkiller.trackPosition).toBe(15)
+  })
+
   it('does not capture a pawn sitting on a protected square', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)

@@ -386,17 +386,29 @@ export class TurnManager {
     after: number,
   ): { capturedPawn: Piece | null; capturedParkillerColor: PieceColor | null } {
     let capturedPawn: Piece | null = null
-    if (!this.board.safeTrackIndices.has(after)) {
+    {
       const piecesThere: Piece[] = []
       for (const p of this.players) {
         for (const piece of p.pieces) {
           if (piece.state === 'OnTrack' && piece.trackPosition === after) piecesThere.push(piece)
         }
       }
+      // PK4/PK5: a protected square only shields a *lone* pawn from the Parkiller - it lands and
+      // the two simply form a barrier instead of a capture (PK5's own "except in protected zones,
+      // where it would form a barrier with that pawn"). It does NOT shield an existing full 2-pawn
+      // barrier the Parkiller then lands on top of - PK5/PK10 both describe that landing as always
+      // eliminating exactly one, with no protected-square exception carved out for it (verified
+      // directly against the reference implementation's own ingresaFicha(), whose very first check
+      // is `isParkiller && ds_list_size(fichasActualmente) >= 2` - unconditional on the square's own
+      // protected flag). Gating the whole block on safeTrackIndices, as an earlier version of this
+      // did, let a Parkiller land on a protected 2-pawn barrier with no resolution at all, leaving 3
+      // pieces stacked on one square - reported directly with a screenshot.
       const target =
         piecesThere.length >= 2
           ? resolveBarrierElimination(player.color, piecesThere)
-          : (piecesThere.find((p) => p.color !== player.color) ?? null)
+          : this.board.safeTrackIndices.has(after)
+            ? null
+            : (piecesThere.find((p) => p.color !== player.color) ?? null)
       if (target) {
         target.state = 'InYard'
         target.trackPosition = -1
