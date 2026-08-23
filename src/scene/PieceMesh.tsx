@@ -113,15 +113,30 @@ export const BOUNCE_HEIGHT = 0.24 // world units, how high each hop arcs - a mor
 // Reported directly ("말이 이동할때 통통뛰게 해달라" - make the piece bounce springily when it
 // moves): the existing hop was a plain sine arc - smooth up, smooth down, the piece's own shape
 // never changing - which reads as gliding/floating rather than a genuine springy hop. Classic
-// squash-and-stretch (the piece compresses short-and-wide right at each square, the ground contact
-// points where t=0/t=1, then stretches tall-and-thin at the peak of the arc where t=0.5) is what
-// actually reads as "bouncy" - it's driven directly off the same `bounce` height already being
-// computed for position, so it's automatically in sync with the arc with no separate timing to
-// keep aligned.
-const HOP_SQUASH_Y = 0.8 // compressed height at each square (ground contact)
-const HOP_STRETCH_Y = 1.22 // stretched height at the peak of the arc
-const HOP_SQUASH_XZ = 1.14 // widened footprint at each square, complementing the Y squash
-const HOP_STRETCH_XZ = 0.92 // narrowed footprint at the peak, complementing the Y stretch
+// squash-and-stretch is what actually reads as "bouncy".
+//
+// First pass tied both squash and stretch directly to `bounce`/BOUNCE_HEIGHT (height above ground),
+// so the piece was maximally *stretched* exactly at the arc's apex - the one instant it's moving
+// slowest (vertical velocity is zero right at the peak). Reported directly as looking "흐물쩍"
+// (floppy/rubbery) instead of springy: a real bounce stretches while moving fast (just after
+// launch, just before landing) and squashes only in a brief instant at contact, not smoothly
+// ballooning taller for the whole time it hangs near the top. Height-based timing put the biggest
+// deformation exactly where a real object is closest to its resting shape, which reads as slow
+// melting rather than a snap.
+//
+// Rebuilt on elapsed time `t` (0..1 across the hop) instead of height, as two blended pulses: a
+// sharp `contactPulse` that's 1 exactly at t=0/1 (ground contact) and decays to 0 within
+// HOP_SQUASH_WINDOW, giving a brief, snappy squash right at each landing/takeoff; and a gentler
+// `stretchPulse` (plain sin(t*pi), suppressed by (1-contactPulse) so it never fights the squash
+// window) that peaks at t=0.5 - a mild stretch through the fast-moving middle of the arc that's
+// already fading in as the squash window ends, rather than a separate, disconnected bulge only at
+// the very top. Magnitudes also pulled in from the first pass (0.8/1.22 and 1.14/0.92) - still
+// visibly springy but no longer extreme enough to read as the piece's shape breaking down.
+const HOP_SQUASH_WINDOW = 0.22 // fraction of the hop, from each end, where the contact squash dominates
+const HOP_SQUASH_Y = 0.85 // compressed height at each square (ground contact)
+const HOP_STRETCH_Y = 1.1 // stretched height through the arc's fast-moving middle
+const HOP_SQUASH_XZ = 1.1 // widened footprint at each square, complementing the Y squash
+const HOP_STRETCH_XZ = 0.95 // narrowed footprint through the arc's middle, complementing the Y stretch
 
 // Caps how much animation time a single frame can advance. Without this, a slow/dropped frame
 // (e.g. CPU contention from screen-recording software) can push `delta` past HOP_DURATION in one
@@ -398,9 +413,14 @@ export function PieceMesh({
     const bounce = Math.sin(t * Math.PI) * BOUNCE_HEIGHT
     mesh.position.set(x, BASE_HEIGHT + bounce, z)
 
-    const hopPhase = bounce / BOUNCE_HEIGHT // 0 at each square (ground contact), 1 at the arc's peak
-    const squashStretchY = THREE.MathUtils.lerp(HOP_SQUASH_Y, HOP_STRETCH_Y, hopPhase)
-    const squashStretchXZ = THREE.MathUtils.lerp(HOP_SQUASH_XZ, HOP_STRETCH_XZ, hopPhase)
+    // See HOP_SQUASH_WINDOW's own comment: contactPulse is a brief spike at t=0/1 (squash right at
+    // landing/takeoff), stretchPulse is a gentler sin(t*pi) bump through the middle, suppressed
+    // near the edges so the two blend smoothly instead of fighting or jump-cutting between them.
+    const edgeDistance = Math.min(t, 1 - t)
+    const contactPulse = Math.max(0, 1 - edgeDistance / HOP_SQUASH_WINDOW)
+    const stretchPulse = Math.sin(t * Math.PI) * (1 - contactPulse)
+    const squashStretchY = 1 + (HOP_SQUASH_Y - 1) * contactPulse + (HOP_STRETCH_Y - 1) * stretchPulse
+    const squashStretchXZ = 1 + (HOP_SQUASH_XZ - 1) * contactPulse + (HOP_STRETCH_XZ - 1) * stretchPulse
     mesh.scale.set(uniformScale * squashStretchXZ, uniformScale * squashStretchY, uniformScale * squashStretchXZ)
 
     if (t >= 1) {
