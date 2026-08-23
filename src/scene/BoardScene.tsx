@@ -100,18 +100,50 @@ const DEFAULT_POLAR_ANGLE = 0.85 // ~49° off vertical - shallower than before s
 // small" request) proportionally (55 * 41/32 ~= 70.5) - keeps the board's own on-screen size
 // exactly where the previous round just correctly landed it, rather than undoing that by leaving
 // this fixed while the board's own world size grows out from under it.
-const CAMERA_DISTANCE = 70
-// Calibrated (not derived) against BOARD_SIZE=6 at a ~1.6:1 viewport aspect - see FitBoardCamera.
-const REFERENCE_MIN_DIMENSION_FACTOR = 620
+// Reported directly, with a screenshot from a landscape-phone-shaped window ("지나치게 너무 작게
+// 구현하지말라" - don't render it too small): the board rendered tiny in a sea of background on any
+// short-but-wide viewport. Root cause was this constant's old partner, a since-removed
+// REFERENCE_MIN_DIMENSION_FACTOR / Math.min(size.width, size.height) heuristic scaled off the
+// viewport's raw CSS-pixel dimensions. That's wrong on two counts, confirmed by direct A/B
+// screenshots at matching aspect ratios but different resolutions: (1) perspective framing (a fixed
+// FOV camera) only depends on *aspect ratio*, never on absolute pixel counts - the same scene at
+// 500x400 and 1000x800 (same 1.25 aspect, double the resolution) should frame identically, but the
+// old formula computed double the distance for the smaller one, shrinking the board for no optical
+// reason; (2) Math.min(w,h) conflates "narrow width needs pulling back to keep the board's width in
+// frame" (true, portrait) with "short height needs pulling back" (false - vertical fit at a fixed
+// FOV doesn't depend on width/aspect at all, so shrinking a *landscape* window's height should never
+// by itself demand a larger distance). A landscape-phone window (e.g. 844x390) has Math.min =
+// height = 390, so the old code treated it exactly like a narrow 390-wide portrait phone and pulled
+// the camera back just as far, even though the wide aspect already has plenty of horizontal room to
+// spare. Replaced with a pure aspect-ratio comparison against REFERENCE_ASPECT (this project's own
+// long-standing desktop dev-screenshot shape, 1000x800 - reconfirmed as well-framed the same day
+// this fix landed): any viewport *wider* than that reference is already more forgiving than the
+// tuned default, so it gets no extra pull-back at all (distance stays at CAMERA_DISTANCE, unchanged
+// from ordinary desktop windows); anything *narrower* (more portrait) still gets pulled back
+// proportionally so the board's width keeps fitting, same intent the old formula had for portrait,
+// just computed from aspect instead of raw pixels.
+//
+// CAMERA_DISTANCE itself is now the actual world-unit distance used at REFERENCE_ASPECT, not a raw
+// multiplier needing a separate conversion factor the way the old formula's "70" did (70 *
+// 620/800 == 54.25 was the real distance the whole tuning history above was ever actually verified
+// against) - folding that conversion in here keeps every prior round's on-screen framing at this
+// reference aspect bit-for-bit unchanged, so this fix only touches other aspect ratios.
+const CAMERA_DISTANCE = 54.25
+const REFERENCE_ASPECT = 1000 / 800
+
+/** Perspective framing has no single "zoom" knob - distance itself is what fits the board to the
+ * viewport. See CAMERA_DISTANCE's own comment for why this is aspect-ratio-based, not
+ * pixel-dimension-based. Shared by FitBoardCamera and BoundedOrbitControls so the zoom bounds
+ * always track the same default distance the camera itself actually starts at. */
+function computeCameraDistance(width: number, height: number): number {
+  const aspect = width / height
+  const scale = Math.max(1, REFERENCE_ASPECT / aspect)
+  return CAMERA_DISTANCE * scale
+}
 
 function FitBoardCamera() {
   const size = useThree((s) => s.size)
-  // Perspective framing has no single "zoom" knob - distance itself is what fits the board to the
-  // viewport, scaled by the same shorter-viewport-dimension logic the old orthographic zoom used,
-  // so the board still fills the frame consistently across window sizes instead of only at the
-  // exact size this was tuned against.
-  const scale = REFERENCE_MIN_DIMENSION_FACTOR / Math.min(size.width, size.height)
-  const distance = CAMERA_DISTANCE * scale
+  const distance = computeCameraDistance(size.width, size.height)
   const y = distance * Math.cos(DEFAULT_POLAR_ANGLE)
   const z = distance * Math.sin(DEFAULT_POLAR_ANGLE)
   // far was a bare 50 for a long time - harmless while `distance` stayed under that, but every
@@ -862,8 +894,7 @@ const ZOOM_OUT_FACTOR = 1.6
 
 function BoundedOrbitControls() {
   const size = useThree((s) => s.size)
-  const scale = REFERENCE_MIN_DIMENSION_FACTOR / Math.min(size.width, size.height)
-  const defaultDistance = CAMERA_DISTANCE * scale
+  const defaultDistance = computeCameraDistance(size.width, size.height)
   return (
     <OrbitControls
       enablePan={false}
