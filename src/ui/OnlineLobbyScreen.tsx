@@ -27,22 +27,12 @@ import { GameBoardScreen, type GameSession } from './GameBoardScreen'
 // in-game HUD that had both since been restyled - same carved-wood card/button language ported
 // here so the flow doesn't visibly change games partway through.
 
-// Photon Realtime's own standard region codes (https://doc.photonengine.com/realtime/current/reference/regions) -
-// a fixed, curated list rather than the SDK's own "Best Region" ping-and-pick flow: that flow needs
-// an extra connect-to-nameserver round trip and a several-second ping phase before the room UI can
-// even appear, and this app's own two players are typically already in the same room together
-// deciding a region between themselves (a room code has to be shared out of band anyway), so a
-// direct pick is both simpler and faster than auto-detection would be here. 'us' stays the default
-// (unchanged behavior for anyone who never opens the picker) - was the hardcoded-only choice before.
-const REGION_OPTIONS: { code: string; label: string }[] = [
-  { code: 'us', label: 'EE.UU. (Este)' },
-  { code: 'usw', label: 'EE.UU. (Oeste)' },
-  { code: 'sa', label: 'Sudamérica' },
-  { code: 'eu', label: 'Europa' },
-  { code: 'asia', label: 'Asia' },
-  { code: 'jp', label: 'Japón' },
-]
-const REGION_STORAGE_KEY = 'parkiller-photon-region'
+// Fixed Photon Realtime region - not exposed as a picker (see this file's own git history for the
+// removed UI: it wasn't something the client ever asked for, and had no basis in the rulebook
+// either, just an unrequested engineering nicety). The SDK's own "Best Region" ping-and-pick flow
+// needs an extra connect-to-nameserver round trip and a several-second ping phase before the room
+// UI can even appear, so a fixed default stays simpler and faster to reach the actual game.
+const PHOTON_REGION = 'us'
 const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // no 0/O/1/I - easier to read aloud/type
 
 function generateRoomCode(): string {
@@ -78,12 +68,6 @@ type Phase = 'connecting' | 'error' | 'menu' | 'creating' | 'joining' | 'lobby' 
 export default function OnlineLobbyScreen() {
   const [phase, setPhase] = useState<Phase>('connecting')
   const [errorMessage, setErrorMessage] = useState('')
-  // Persisted so a returning player doesn't have to re-pick every visit - read once at mount, not
-  // re-read on every render, since nothing outside this component ever changes localStorage's copy.
-  const [region, setRegion] = useState(() => {
-    const saved = localStorage.getItem(REGION_STORAGE_KEY)
-    return REGION_OPTIONS.some((r) => r.code === saved) ? saved! : 'us'
-  })
   const [roomCodeInput, setRoomCodeInput] = useState('')
   const [playerCount, setPlayerCount] = useState(4)
   const [roomCode, setRoomCode] = useState('')
@@ -113,10 +97,7 @@ export default function OnlineLobbyScreen() {
   // actor-left effect below). A bot has no connected actor at all, so it can never appear here.
   const realSeatsRef = useRef<Record<number, PieceColor>>({})
 
-  // Re-runs whenever `region` changes (see the picker in the 'menu' phase below) - tearing down
-  // the old connection and opening a fresh one against the newly chosen region. Only reachable from
-  // 'menu'/'error' in practice (the picker isn't rendered once a room exists), so this never fires
-  // mid-lobby/mid-game.
+  // Mount-only - connects once against the fixed PHOTON_REGION above.
   useEffect(() => {
     const appId = import.meta.env.VITE_PHOTON_APP_ID
     if (!appId) {
@@ -128,7 +109,7 @@ export default function OnlineLobbyScreen() {
     const connection = new PhotonConnection(appId)
     connectionRef.current = connection
     connection
-      .connect(region)
+      .connect(PHOTON_REGION)
       .then(() => setPhase('menu'))
       .catch((err: unknown) => {
         setErrorMessage(`No se pudo conectar: ${err instanceof Error ? err.message : String(err)}`)
@@ -138,13 +119,7 @@ export default function OnlineLobbyScreen() {
       botControllerRef.current?.dispose()
       connection.disconnect()
     }
-  }, [region])
-
-  function changeRegion(code: string) {
-    if (code === region) return
-    localStorage.setItem(REGION_STORAGE_KEY, code)
-    setRegion(code)
-  }
+  }, [])
 
   useEffect(() => {
     const connection = connectionRef.current
@@ -320,28 +295,6 @@ export default function OnlineLobbyScreen() {
             Jugar online
           </h1>
         </div>
-
-        {/* Only shown before a room exists (menu/error/connecting) - once in a lobby, changing
-            region out from under an already-open room/connection isn't a scenario worth supporting,
-            so the picker simply isn't offered there. */}
-        {(phase === 'menu' || phase === 'error' || phase === 'connecting') && (
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ ...hintStyle, marginBottom: 8 }}>Región</div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {REGION_OPTIONS.map((r) => (
-                <button
-                  key={r.code}
-                  className="chunky-btn"
-                  onClick={() => changeRegion(r.code)}
-                  disabled={phase === 'connecting'}
-                  style={regionButtonStyle(r.code === region)}
-                >
-                  {r.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
         {phase === 'connecting' && <p style={hintStyle}>Conectando a Photon...</p>}
 
@@ -649,23 +602,3 @@ function countButtonStyle(selected: boolean): React.CSSProperties {
   }
 }
 
-// Same selected/unselected recipe as countButtonStyle, just a text-label pill instead of a
-// single-digit circle - region codes/names need real width, not a fixed circular footprint.
-function regionButtonStyle(selected: boolean): React.CSSProperties {
-  return {
-    padding: '7px 12px',
-    fontSize: 13,
-    fontWeight: 700,
-    flexShrink: 0,
-    color: selected ? '#eef4ff' : '#c8d4ec',
-    background: selected
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0) 40%), linear-gradient(180deg, #d4e4ff 0%, #6a94e8 55%, #3868c0 100%)'
-      : 'linear-gradient(180deg, rgba(255,255,255,0.25), rgba(255,255,255,0) 40%), linear-gradient(180deg, #4a6aa0 0%, #345078 55%, #223a5a 100%)',
-    border: `2px solid ${selected ? '#3868c0' : '#1a3468'}`,
-    borderRadius: 999,
-    boxShadow: selected
-      ? '0 3px 0 #24448c, 0 6px 10px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.6)'
-      : '0 3px 0 #14253f, 0 5px 8px rgba(0,0,0,0.35), inset 0 1px 1px rgba(255,255,255,0.25)',
-    cursor: 'pointer',
-  }
-}
