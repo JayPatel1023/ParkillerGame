@@ -724,6 +724,81 @@ describe('TurnManager - mandatory barrier removal on doubles (PK9.1)', () => {
   })
 })
 
+// Reported directly ("장벽 안에 있는 말이 어떤 숫자가 나오든 자동으로 장벽에서 나올 수 있는 규칙은
+// 아닙니다" - a piece in a barrier does NOT automatically come out no matter what number comes up):
+// the client's own corrected rulebook (rules.pdf, "OPENING A BARRIER") states "THERE ARE TWO WAYS
+// TO OPEN A BARRIER" - a double, or an opposing Parki - and that a barrier "blocks the path"
+// outright otherwise. A normal (non-double) roll previously moved a barrier piece exactly like any
+// other piece; per this page, it should have *no* legal move for either barrier piece at all.
+describe('TurnManager - a normal roll cannot move a piece out of its own barrier', () => {
+  it('offers no moves for either barrier piece on a non-double roll, only for a free third piece', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 5 // own barrier at 5, pieces[0] + pieces[1] - locked in place
+    red.pieces[2].state = 'OnTrack'
+    red.pieces[2].trackPosition = 0 // free to move normally - not part of the barrier
+
+    const dice = new ScriptedDice([3, 4, 1]) // not a double
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let offered: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((moves) => (offered = moves))
+
+    manager.requestRoll()
+
+    expect(offered.some((m) => m.piece === red.pieces[0])).toBe(false)
+    expect(offered.some((m) => m.piece === red.pieces[1])).toBe(false)
+    expect(offered.some((m) => m.piece === red.pieces[2])).toBe(true)
+  })
+
+  it('loses the roll outright when the only pieces in play are locked in a barrier', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 5 // own barrier - the only two pieces in play, both locked
+
+    const dice = new ScriptedDice([3, 4, 1]) // not a double, and neither is the exit roll
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let notPossible = false
+    manager.moveNotPossible.on(() => (notPossible = true))
+    let offered: import('../src/core/rules/moveOption').MoveOption[] | null = null
+    manager.moveChoicesReady.on((moves) => (offered = moves))
+
+    manager.requestRoll()
+
+    expect(notPossible).toBe(true)
+    expect(offered).toBeNull()
+    expect(red.pieces[0].trackPosition).toBe(5)
+    expect(red.pieces[1].trackPosition).toBe(5)
+  })
+
+  it('still allows every other piece to move normally when no barrier exists', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5 // alone - not a barrier
+
+    const dice = new ScriptedDice([3, 4, 1])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let offered: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((moves) => (offered = moves))
+
+    manager.requestRoll()
+
+    expect(offered.some((m) => m.piece === red.pieces[0])).toBe(true)
+  })
+})
+
 describe('TurnManager - landing on an unprotected opposing Parkiller (PK5)', () => {
   // Reported directly ("el azul cayó encima del parki rojo y se volvió loco...en vez de morir,
   // contó 20" - blue landed on the red Parki and went crazy, instead of dying it counted 20): the
