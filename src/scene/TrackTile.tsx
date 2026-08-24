@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
 import { BASE_HEIGHT } from './boardGeometry'
 import { useRobustTexture } from './useRobustTexture'
@@ -47,6 +47,13 @@ export function TrackTile({ corners, color }: TrackTileProps) {
   const fillTexture = useRobustTexture('/tiles/tile-fill.png')
   const borderTexture = useRobustTexture('/tiles/tile-border.png')
   const geometry = useMemo(() => buildTrapezoidGeometry(corners), [corners])
+  // Defense in depth alongside BoardScene's own memoization of `corners` (see its own comment on
+  // the GPU-memory leak that fix addresses) - three.js never frees a BufferGeometry's GPU buffer
+  // on its own, only on an explicit .dispose() call, so if `corners` ever does legitimately change
+  // (or this component unmounts) the geometry this useMemo is about to discard/orphan needs its
+  // own explicit cleanup rather than relying on JS garbage collection, which has no idea a WebGL
+  // resource is attached.
+  useEffect(() => () => geometry.dispose(), [geometry])
 
   return (
     <group position={[0, BASE_HEIGHT, 0]} rotation={[-Math.PI / 2, 0, 0]}>

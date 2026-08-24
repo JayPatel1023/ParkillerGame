@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
 
 // Reported directly, with screenshots: the actual game screen still had flat black margins around
@@ -64,6 +64,7 @@ function createWoodTexture(): THREE.CanvasTexture {
 
 export function TableSurface() {
   const texture = useMemo(() => createWoodTexture(), [])
+  useEffect(() => () => texture.dispose(), [texture])
   return (
     <mesh position={[0, GROUND_Y, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
       <planeGeometry args={[GROUND_SIZE, GROUND_SIZE]} />
