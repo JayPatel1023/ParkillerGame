@@ -528,7 +528,7 @@ export function BoardScene({
   // move itself actually changes.
   const animatingHopData = useMemo(() => {
     if (!moveAnimation) return null
-    const { piece, before, after } = moveAnimation
+    const { piece, before, after, eliminatedByParkillerAt } = moveAnimation
     const lane = definition.playerLanes.find((l) => l.color === piece.color)
     const beforeWaypoint =
       before.state === 'InYard'
@@ -537,9 +537,24 @@ export function BoardScene({
           ? definition.trackWaypoints[before.trackPosition]
           : lane?.homeCorridorWaypoints[before.corridorPosition]
     if (!beforeWaypoint) return null
+    // PK5, reported directly ("도착하기전에 이미 먹히울걸 타산해서 가기도전에 갑자기 먼저
+    // 사라지는" - it vanishes before even arriving, as if pre-calculated): `after` is already back
+    // to InYard by the time this fires (rules apply instantly - see MoveResult's own doc comment),
+    // so getHopWaypoints(before, after) has no square to walk toward at all. Synthesizes the
+    // "arrived, still on the track" snapshot getHopWaypoints actually needs to walk there first, in
+    // order, then appends the same "flung home" arc a captured opponent's piece already gets
+    // (getCaptureReturnWaypoints) - one continuous hop sequence, walk then bounce, not two separate
+    // animations to coordinate.
+    const hops =
+      eliminatedByParkillerAt !== undefined
+        ? [
+            ...getHopWaypoints(piece.color, before, { state: 'OnTrack', trackPosition: eliminatedByParkillerAt, corridorPosition: -1 }, definition),
+            ...getCaptureReturnWaypoints(piece.color, eliminatedByParkillerAt, piece.pieceIndex, definition),
+          ]
+        : getHopWaypoints(piece.color, before, after, definition)
     return {
       hopFrom: toWorldPosition(beforeWaypoint),
-      hops: getHopWaypoints(piece.color, before, after, definition).map(toWorldPosition),
+      hops: hops.map(toWorldPosition),
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -550,6 +565,7 @@ export function BoardScene({
     moveAnimation?.after.state,
     moveAnimation?.after.trackPosition,
     moveAnimation?.after.corridorPosition,
+    moveAnimation?.eliminatedByParkillerAt,
     definition,
   ])
 
@@ -625,6 +641,23 @@ export function BoardScene({
     const prevMove = prevMoveAnimationRef.current
     if (!moveAnimation && prevMove && (prevMove.capturedPiece || prevMove.capturedParkillerColor)) {
       spawnCaptureEffects(prevMove.after.trackPosition, prevMove.capturedPiece, prevMove.capturedParkillerColor)
+    }
+    // PK5, reported directly - a distinct impact flash at the square the pawn actually walked to,
+    // once its own walk-then-bounce-home hop sequence (see animatingHopData) has finished playing.
+    // No captureFlight entry needed here (unlike a captured opponent's piece above) - this piece is
+    // the one animatingHopData is already driving, its own "flung home" leg is baked into that same
+    // hops array rather than a second, separately-tracked piece. Colored with the eating Parkiller's
+    // own color rather than the mover's, so the flash reads as "that Parkiller got you" - the same
+    // "something happened here" language a capture's own impact already uses, just themed to the
+    // opposite outcome.
+    if (!moveAnimation && prevMove && prevMove.eliminatedByParkillerAt !== undefined && prevMove.eliminatedByParkillerColor) {
+      const fromWaypoint = definition.trackWaypoints[prevMove.eliminatedByParkillerAt]
+      if (fromWaypoint) {
+        setImpacts((prev) => [
+          ...prev,
+          { id: nextImpactIdRef.current++, position: toWorldPosition(fromWaypoint, BASE_HEIGHT), color: getColor(prevMove.eliminatedByParkillerColor!) },
+        ])
+      }
     }
     if (!moveAnimation && prevMove && prevMove.after.state === 'Finished') {
       const lane = definition.playerLanes.find((l) => l.color === prevMove.piece.color)

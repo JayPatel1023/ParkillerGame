@@ -31,6 +31,14 @@ export interface MoveResult {
   /** PK5: set when the *mover itself* landed on an unprotected opposing Parkiller without
    * eliminating it (PK6) - the move still completes, but the arriving pawn is immediately sent
    * back to its own yard instead of staying on the track, with no reward. `movedPiece` reflects
-   * this - by the time the caller sees this result, its state is already back to InYard. */
+   * this - by the time the caller sees this result, its state is already back to InYard.
+   * `eliminatedByParkillerAt`/`eliminatedByParkillerColor` preserve where it landed and whose
+   * Parkiller got it - `movedPiece` alone can't say either, since its own trackPosition is already
+   * -1 by this point. The scene layer needs both to animate the pawn actually walking there before
+   * being sent home, instead of just vanishing (reported directly: "도착하기전에 이미 먹히울걸
+   * 타산해서 가기도전에 갑자기 먼저 사라지는" - it disappears before even arriving, as if the game
+   * calculated the elimination ahead of time instead of resolving it in order). */
   eliminatedByParkiller?: boolean
+  eliminatedByParkillerAt?: number
+  eliminatedByParkillerColor?: PieceColor
 }
