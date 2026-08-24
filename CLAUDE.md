@@ -122,6 +122,15 @@ wherever the rulebook's prose alone was ambiguous.
   exactly like the general per-square cap, forming a real corridor barrier (PK9.1's own doubles
   obligation applies to it too). Only the true final corridor square is uncapped, since a piece
   there is already `Finished`, not still in play.
+- **Opening a barrier** (client's own corrected rulebook, `public/rules.pdf`'s "OPENING A BARRIER"
+  page, linked from the in-game Help modal — supersedes the plainer prose in the original `.docx`
+  where the two differ): a barrier blocks the path outright, including for the two pieces that
+  *are* the barrier — a normal (non-double) roll has no legal move for either of them at all, not
+  even to capture. "THERE ARE TWO WAYS TO OPEN A BARRIER": a double (PK9.1, forces one open), or an
+  opposing Parkiller landing on/jumping the square (PK4/PK5/PK10). Scoped to the player's *own*
+  same-color barrier specifically — the one with a defined release valve (PK9.1's own double
+  obligation) — not a mixed barrier shared with an opponent on a protected square, which has no
+  such mechanism and would otherwise strand both owners' pieces with no way out at all.
 - **PC3/PK8**: capturing is mandatory *per piece*, not across the whole roll — verified directly
   against the reference implementation (`activarFichasMovibles()`/`wouldComer()` in
   `Parkiller_GameMaker-main`): a piece that could capture with one die can't dodge into a
