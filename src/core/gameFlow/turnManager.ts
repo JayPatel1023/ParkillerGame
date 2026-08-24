@@ -61,6 +61,11 @@ export interface MoveAnimationInfo {
   after: PieceSnapshot
   capturedPiece: Piece | null
   capturedParkillerColor: PieceColor | null
+  /** PK5: set when this move landed on an unprotected opposing Parkiller - see MoveResult's own
+   * matching doc comment for why `after` alone (already back to InYard) can't drive the animation
+   * on its own. The scene layer walks the piece here first, in order, before sending it home. */
+  eliminatedByParkillerAt?: number
+  eliminatedByParkillerColor?: PieceColor
 }
 
 export type RewardReason = 'capture' | 'finish'
@@ -664,6 +669,8 @@ export class TurnManager {
       after: snapshotPiece(chosenPiece),
       capturedPiece: result.capturedPiece,
       capturedParkillerColor: result.capturedParkillerColor,
+      eliminatedByParkillerAt: result.eliminatedByParkillerAt,
+      eliminatedByParkillerColor: result.eliminatedByParkillerColor,
     })
 
     if (hasWon(this.currentPlayer)) {

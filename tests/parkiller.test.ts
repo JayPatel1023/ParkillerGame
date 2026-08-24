@@ -299,6 +299,39 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     expect(blue.parkiller.state).toBe('InPlay') // the Parkiller itself is unharmed
   })
 
+  // Reported directly ("도착하기전에 이미 먹히울걸 타산해서 가기도전에 갑자기 먼저 사라지는" - the
+  // piece vanishes before even arriving, as if pre-calculated): the scene layer only ever learns
+  // about a move via moveAnimationReady, not by inspecting MoveResult directly - this is the actual
+  // event BoardScene subscribes to, so the fix needs verifying at *this* level, not just on
+  // applyMove's own return value (parchisRules.test.ts already covers that). Without
+  // eliminatedByParkillerAt/eliminatedByParkillerColor surviving into this event, the scene layer
+  // has no way to know which square to animate the walk toward - `after` alone already reads
+  // InYard by the time this fires.
+  it('surfaces eliminatedByParkillerAt/Color on the moveAnimationReady event the scene layer actually listens to (PK5)', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 2
+    blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+    blue.parkiller.trackPosition = 5 // not a safe square on this test board
+
+    const dice = new ScriptedDice([3, 4, 1]) // dieA=3 walks Red's pawn 2 -> 5, onto the Parkiller
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let animation: import('../src/core/gameFlow/turnManager').MoveAnimationInfo | null = null
+    manager.moveAnimationReady.on((info) => (animation = info))
+
+    manager.requestRoll()
+    manager.submitMove(red.pieces[0], 3)
+
+    expect(animation).not.toBeNull()
+    expect(animation!.before).toEqual({ state: 'OnTrack', trackPosition: 2, corridorPosition: -1 })
+    expect(animation!.after).toEqual({ state: 'InYard', trackPosition: -1, corridorPosition: -1 })
+    expect(animation!.eliminatedByParkillerAt).toBe(5)
+    expect(animation!.eliminatedByParkillerColor).toBe('Blue')
+  })
+
   it('a pawn move landing on an opposing Parkiller without doubles does not eliminate it', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)

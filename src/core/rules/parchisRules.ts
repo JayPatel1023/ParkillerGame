@@ -279,9 +279,11 @@ export function applyMove(
       if (!result.capturedParkillerColor) {
         const dangerColor = unprotectedOpposingParkillerColorAt(board, piece.color, move.resultingTrackPosition, allPlayers)
         if (dangerColor) {
+          result.eliminatedByParkiller = true
+          result.eliminatedByParkillerAt = move.resultingTrackPosition
+          result.eliminatedByParkillerColor = dangerColor
           piece.state = 'InYard'
           piece.trackPosition = -1
-          result.eliminatedByParkiller = true
         }
       }
       break
