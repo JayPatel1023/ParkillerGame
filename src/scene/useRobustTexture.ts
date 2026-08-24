@@ -24,17 +24,46 @@ const RETRY_BASE_DELAY_MS = 800
 const textureCache = new Map<string, THREE.Texture>()
 const loader = new THREE.TextureLoader()
 
-function loadWithRetry(url: string, attempt: number, onSuccess: (texture: THREE.Texture) => void) {
+// Reported again after the fix above shipped, still persistently blank ("그림이 비루스먹은것처럼
+// 없어지고 흰판이다" - the image vanishes like it's got a virus, it's a white board) - this time on
+// the actual in-game board too, not just the decorative start-screen one. Root cause: this hook had
+// no cross-instance request sharing, unlike the useLoader/useTexture it replaced (both share a
+// single in-flight promise per url via R3F's own Suspense cache). TrackTile mounts once per track
+// square - 51 to 72 of them depending on player count (see generated-boards.json) - and every one
+// calls this hook for the SAME 2 shared tile images (tile-fill.png/tile-border.png). With no
+// dedup, that's 100+ simultaneous independent fetch-and-retry chains for 2 files on every board
+// load, easily enough to saturate a slow/mobile connection or a browser's per-origin connection
+// limit and cause the very "images don't load" symptom this hook was meant to fix - likely worse
+// than the original bug for exactly this reason. `inFlight` tracks one real load per url, with every
+// concurrent caller just subscribing to its result instead of starting its own.
+const inFlight = new Map<string, Set<(texture: THREE.Texture) => void>>()
+
+function loadWithRetry(url: string, attempt: number) {
+  // A failed fetch can still be an HTTP 200 (e.g. an SPA history-fallback serving index.html for a
+  // path that doesn't exist, which several static hosts - including this app's own preview/deploy
+  // setup - do instead of a real 404) with `Cache-Control: no-cache`, which permits the browser to
+  // store the response and merely revalidate it later, not skip caching outright. Confirmed
+  // directly: the underlying file becoming available again mid-retry (verified with curl - the
+  // server serves it correctly immediately) did NOT fix a stuck retry loop in the browser, only a
+  // hard reload did - a cache-busting query param on every retry after the first guarantees each
+  // one is a genuinely fresh request, sidestepping the browser's own cache/revalidation behavior
+  // for `Image()`-triggered loads entirely rather than depending on it working correctly.
+  const requestUrl = attempt === 1 ? url : `${url}${url.includes('?') ? '&' : '?'}retry=${attempt}`
   loader.load(
-    url,
+    requestUrl,
     (texture) => {
       textureCache.set(url, texture)
-      onSuccess(texture)
+      const subscribers = inFlight.get(url)
+      inFlight.delete(url)
+      subscribers?.forEach((notify) => notify(texture))
     },
     undefined,
     () => {
-      if (attempt >= MAX_ATTEMPTS) return // gives up silently - caller's own fallback stays showing
-      setTimeout(() => loadWithRetry(url, attempt + 1, onSuccess), RETRY_BASE_DELAY_MS * attempt)
+      if (attempt >= MAX_ATTEMPTS) {
+        inFlight.delete(url) // gives up - every subscriber's own fallback stays showing
+        return
+      }
+      setTimeout(() => loadWithRetry(url, attempt + 1), RETRY_BASE_DELAY_MS * attempt)
     },
   )
 }
@@ -48,13 +77,17 @@ export function useRobustTexture(url: string): THREE.Texture | null {
       setTexture(cached)
       return
     }
-    let cancelled = false
     setTexture(null)
-    loadWithRetry(url, 1, (loaded) => {
-      if (!cancelled) setTexture(loaded)
-    })
+    let subscribers = inFlight.get(url)
+    const isFirstSubscriber = !subscribers
+    if (!subscribers) {
+      subscribers = new Set()
+      inFlight.set(url, subscribers)
+    }
+    subscribers.add(setTexture)
+    if (isFirstSubscriber) loadWithRetry(url, 1)
     return () => {
-      cancelled = true
+      inFlight.get(url)?.delete(setTexture)
     }
   }, [url])
 
