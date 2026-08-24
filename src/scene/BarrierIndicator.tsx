@@ -6,160 +6,178 @@ import type { Group, Mesh } from 'three'
 // Reported directly ("장벽이있다는 효과같은것이 없으니 오락하는사람들이 모를수있다" - there's no
 // effect showing a barrier exists, so players might not notice): two pieces sharing a square
 // already rendered spread apart (see BoardScene's own STACK_OFFSETS), but nothing distinguished
-// "this is a real barrier blocking the path" from "two pieces just happen to be near each other" -
-// the same visual regardless of whether it actually matters to the current player's move. A
-// persistent glowing ward-circle plus rising sparkle motes reads as "something special is
-// happening here" without needing a tooltip or text label - "동화적 효과" (a fairy-tale-like
-// effect), the same request that produced RewardBurst's own spark language, applied here as an
-// ambient/continuous effect instead of a one-shot celebration since a barrier persists across
-// turns, not just an instant.
+// "this is a real barrier blocking the path" from "two pieces just happen to be near each other".
+// A persistent ambient effect reads as "something special is happening here" without a tooltip.
 //
-// First pass (soft single ring + 3 small orbiting motes) read as too subtle once actually checked
-// live at real board scale - reported directly, asking for something that catches the eye, "자그마한
-// 세부도 놓치지말고 꼼꼼하게" (don't miss even the small details, be thorough). Rebuilt with more
-// visual weight throughout: a soft glow disc under the ring (reads at a glance even before the eye
-// resolves the ring itself), a brighter counter-rotating double ring (matching PieceMesh's own
-// "selectable" ring technique, just amber/bronze instead of pure gold so the two don't read as the
-// same cue when a barrier piece is also selectable), and more, bigger sparkles that actually rise
-// and fade like rising magic dust instead of just bobbing in place.
-const RING_OUTER_COLOR = '#e8a33d'
-const RING_INNER_COLOR = '#ffd98a'
+// Rebuilt a third time - reported directly, with a screenshot, as not liking the style at all
+// ("장벽의 스타일이 전혀 맘에들지않는다"), asking specifically for a spiral of star-like lights
+// rising and turning ("별처럼 빛들이 빙빙돌아가면서 우로올라가는 스타일"), clear but not busy
+// ("눈에 알리면서도 번거롭지않는"), and polished ("세련되게" - "이 게임은 잘 만들어야한다").
+// The previous pass's solid amber cone (added purely to stay visible from the game's own shallow
+// camera angle - see the git history on this file) read as a crude spotlight/traffic-cone shape,
+// not a magical effect, and the double counter-rotating ring plus the cone plus the sparkles
+// together were three separate moving elements competing for attention at once - the definition of
+// "번거롭다" (busy/cluttered). This version drops the cone and the second ring entirely: a single
+// quiet glow + ring marks the exact square, and a slow-turning double helix of real five-pointed
+// stars (procedural geometry, not a texture) does the actual "something is here" signaling - its
+// own height, not a separate solid shape, is what stays legible from any camera angle, exactly
+// like the cone was doing but as part of the same effect instead of a bolted-on extra one.
+const RING_COLOR = '#e8a33d'
 const GLOW_COLOR = '#f5b94a'
-const RING_OUTER_SPIN_SPEED = 0.55 // radians/sec - slower than PieceMesh's own selectable ring, a
-const RING_INNER_SPIN_SPEED = -0.8 // calmer, more ambient presence befitting something that sits
-// there for multiple turns, not a "act now" cue - counter-rotating pair still reads as alive.
-const RING_PULSE_SPEED = 1.3
-const RING_BASE_OPACITY = 0.75
-const RING_PULSE_AMPLITUDE = 0.25
-const GLOW_BASE_OPACITY = 0.22
-const GLOW_PULSE_AMPLITUDE = 0.1
+const RING_SPIN_SPEED = 0.35 // slow, ambient - this sits for multiple turns, not "act now"
+const RING_PULSE_SPEED = 1.1
+const RING_BASE_OPACITY = 0.55
+const RING_PULSE_AMPLITUDE = 0.2
+const GLOW_BASE_OPACITY = 0.18
+const GLOW_PULSE_AMPLITUDE = 0.08
 
-const SPARKLE_COUNT = 6
-const SPARKLE_COLOR = '#fff2c9'
-const SPARKLE_ORBIT_SPEED = 0.6
-// Each sparkle rises from the ground and fades near the top of its own rise, then resets - a
-// continuous "magic dust drifting up" cycle rather than a fixed bob in place.
-const SPARKLE_RISE_HEIGHT = 0.32
-const SPARKLE_CYCLE_SECONDS = 2.6
+// Two strands, each STARS_PER_STRAND stars evenly spaced along its own rise so the helix never
+// looks empty partway up, wound STRAND_TURNS times around the square by the top of the rise - "빙빙
+// 돌아가면서" (turning as it goes) needs an actual multi-turn spiral, not just one lazy arc.
+const STRAND_COUNT = 2
+const STARS_PER_STRAND = 5
+const STRAND_TURNS = 1.4
+const STAR_COLOR_WARM = '#ffcf6b'
+const STAR_COLOR_PALE = '#fff2c9'
+const ORBIT_SPEED = 0.5
+// Reported directly, checked live: the first pass's rise (2.4x tileSize, matching the old solid
+// cone's own height) spread only 8 stars thin enough over that column to read as isolated floating
+// points rather than a connected helix. Pulled in - stars don't need a cone's own height to stay
+// individually visible, just to sit close enough together that the eye connects them into one
+// continuous spiral.
+const RISE_HEIGHT_FACTOR = 1.6 // multiplied by tileSize
+const CYCLE_SECONDS = 3.6
+// Individual size/twinkle jitter, keyed off each star's own index so neighbors don't pulse in
+// lockstep - a real starfield never twinkles in unison.
+const TWINKLE_SPEED_BASE = 1.6
+const TWINKLE_SPEED_JITTER = 0.9
 
-// Reported directly, with a screenshot at normal camera height ("현재 방화벽이 아래선에서만 효과가
-// 나타나고있는데 높이를 좀주어 알리게 시작적으로 크게 알리게 해달라" - the barrier effect currently
-// only shows at the bottom/ground line, give it some height so it reads clearly): the ring/glow/
-// sparkles above are all genuinely there, but every one of them sits within a few sparkle-rises of
-// the ground - reads fine looking straight down (this component's own original design target), but
-// nearly flattens away to a thin line from the game's actual default camera angle (well off
-// vertical - see BoardScene's own DEFAULT_POLAR_ANGLE), which is how it's actually seen in normal
-// play. A tall, tapering beacon column fixes that - visible from any reasonable camera angle since
-// its height, not just its footprint, is what carries the "something is here" signal, the same
-// "spotlight on this square" language PieceMesh's own selectable-cue beam uses, just persistent
-// (pulsing, not a one-shot) since a barrier lasts across turns rather than a single moment.
-const BEAM_COLOR = '#ffcf7a'
-const BEAM_BASE_OPACITY = 0.28
-const BEAM_PULSE_AMPLITUDE = 0.14
-const BEAM_PULSE_SPEED = 1.1
-const BEAM_HEIGHT_FACTOR = 2.6 // multiplied by tileSize - towers well above a resting piece
-
-interface SparkleSpec {
-  radius: number
-  angleOffset: number
+interface StarSpec {
+  strandAngle: number
   cyclePhase: number
   size: number
+  color: string
+  twinkleSpeed: number
+  twinklePhase: number
+}
+
+// A real 5-pointed star polygon (alternating outer/inner radius vertices), not a texture or a
+// sprite - built once and shared by every star instance on the board, cheap enough that a handful
+// of simultaneous barriers costs nothing extra.
+function createStarGeometry(): THREE.ShapeGeometry {
+  const shape = new THREE.Shape()
+  const points = 5
+  const outerRadius = 1
+  const innerRadius = 0.42
+  for (let i = 0; i < points * 2; i++) {
+    const r = i % 2 === 0 ? outerRadius : innerRadius
+    const angle = (i * Math.PI) / points - Math.PI / 2
+    const x = Math.cos(angle) * r
+    const y = Math.sin(angle) * r
+    if (i === 0) shape.moveTo(x, y)
+    else shape.lineTo(x, y)
+  }
+  shape.closePath()
+  return new THREE.ShapeGeometry(shape)
 }
 
 export function BarrierIndicator({ position, tileSize }: { position: [number, number, number]; tileSize: number }) {
   const groupRef = useRef<Group>(null)
-  const outerRingRef = useRef<Mesh>(null)
-  const innerRingRef = useRef<Mesh>(null)
+  const ringRef = useRef<Mesh>(null)
   const glowRef = useRef<Mesh>(null)
-  const beamRef = useRef<Mesh>(null)
-  const sparkleRefs = useRef<(Mesh | null)[]>([])
+  const starRefs = useRef<(Mesh | null)[]>([])
   const elapsedRef = useRef(0)
 
-  // Sized as a fraction of this board's own tile size (like STACK_OFFSETS itself), so the ring
-  // reads at a consistent proportion of the tile on every board instead of a fixed world-unit
-  // guess that would over/undersize on a board with much bigger or smaller squares.
-  const ringRadius = tileSize * 0.46
-  const ringWidth = tileSize * 0.06
+  // Sized as a fraction of this board's own tile size, like STACK_OFFSETS itself, so the ring
+  // reads at a consistent proportion of the tile on every board instead of a fixed world-unit guess.
+  const ringRadius = tileSize * 0.44
+  const ringWidth = tileSize * 0.05
+  const starOrbitRadius = tileSize * 0.3
+  const riseHeight = tileSize * RISE_HEIGHT_FACTOR
 
-  const sparkles = useMemo<SparkleSpec[]>(
-    () =>
-      Array.from({ length: SPARKLE_COUNT }, (_, i) => ({
-        radius: ringRadius * (0.55 + (i % 3) * 0.18),
-        angleOffset: (i / SPARKLE_COUNT) * Math.PI * 2,
-        cyclePhase: (i / SPARKLE_COUNT) * SPARKLE_CYCLE_SECONDS,
-        size: tileSize * (0.022 + (i % 3) * 0.006),
-      })),
+  const starGeometry = useMemo(() => createStarGeometry(), [])
+
+  const stars = useMemo<StarSpec[]>(() => {
+    const list: StarSpec[] = []
+    for (let strand = 0; strand < STRAND_COUNT; strand++) {
+      const strandAngle = (strand / STRAND_COUNT) * Math.PI * 2
+      for (let i = 0; i < STARS_PER_STRAND; i++) {
+        const seed = strand * STARS_PER_STRAND + i
+        list.push({
+          strandAngle,
+          cyclePhase: (i / STARS_PER_STRAND) * CYCLE_SECONDS,
+          size: tileSize * (0.045 + (seed % 3) * 0.012),
+          color: seed % 2 === 0 ? STAR_COLOR_WARM : STAR_COLOR_PALE,
+          twinkleSpeed: TWINKLE_SPEED_BASE + (seed % 4) * (TWINKLE_SPEED_JITTER / 4),
+          twinklePhase: (seed / (STRAND_COUNT * STARS_PER_STRAND)) * Math.PI * 2,
+        })
+      }
+    }
+    return list
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ringRadius, tileSize],
-  )
+  }, [tileSize])
 
-  useFrame((_, rawDelta) => {
+  useFrame(({ camera }, rawDelta) => {
     const delta = Math.min(rawDelta, 0.1)
     elapsedRef.current += delta
     const t = elapsedRef.current
     const pulse = Math.sin(t * RING_PULSE_SPEED) * 0.5 + 0.5
 
-    if (outerRingRef.current) {
-      outerRingRef.current.rotation.z += delta * RING_OUTER_SPIN_SPEED
-      ;(outerRingRef.current.material as THREE.MeshBasicMaterial).opacity = RING_BASE_OPACITY + pulse * RING_PULSE_AMPLITUDE
-    }
-    if (innerRingRef.current) {
-      innerRingRef.current.rotation.z += delta * RING_INNER_SPIN_SPEED
-      ;(innerRingRef.current.material as THREE.MeshBasicMaterial).opacity = RING_BASE_OPACITY * 0.7 + pulse * RING_PULSE_AMPLITUDE
+    if (ringRef.current) {
+      ringRef.current.rotation.z += delta * RING_SPIN_SPEED
+      ;(ringRef.current.material as THREE.MeshBasicMaterial).opacity = RING_BASE_OPACITY + pulse * RING_PULSE_AMPLITUDE
     }
     if (glowRef.current) {
       const glowMat = glowRef.current.material as THREE.MeshBasicMaterial
       glowMat.opacity = GLOW_BASE_OPACITY + pulse * GLOW_PULSE_AMPLITUDE
-      const s = 1 + pulse * 0.08
+      const s = 1 + pulse * 0.06
       glowRef.current.scale.set(s, s, 1)
     }
-    if (beamRef.current) {
-      const beamPulse = Math.sin(t * BEAM_PULSE_SPEED) * 0.5 + 0.5
-      ;(beamRef.current.material as THREE.MeshBasicMaterial).opacity = BEAM_BASE_OPACITY + beamPulse * BEAM_PULSE_AMPLITUDE
-    }
 
-    sparkles.forEach((s, i) => {
-      const mesh = sparkleRefs.current[i]
+    stars.forEach((s, i) => {
+      const mesh = starRefs.current[i]
       if (!mesh) return
-      const cycleT = ((t + s.cyclePhase) % SPARKLE_CYCLE_SECONDS) / SPARKLE_CYCLE_SECONDS
-      const angle = t * SPARKLE_ORBIT_SPEED + s.angleOffset
-      const height = cycleT * SPARKLE_RISE_HEIGHT
-      mesh.position.set(Math.cos(angle) * s.radius, height, Math.sin(angle) * s.radius)
+      const cycleT = ((t + s.cyclePhase) % CYCLE_SECONDS) / CYCLE_SECONDS
+      // Winds STRAND_TURNS full turns around the square over the course of one rise - the actual
+      // "spinning while climbing" spiral, not just an orbit with height tacked on separately.
+      const angle = s.strandAngle + cycleT * Math.PI * 2 * STRAND_TURNS + t * ORBIT_SPEED
+      const height = cycleT * riseHeight
+      mesh.position.set(Math.cos(angle) * starOrbitRadius, height, Math.sin(angle) * starOrbitRadius)
+      // Always faces the camera (a manual billboard) - a flat star polygon lying at an arbitrary
+      // spiral angle would foreshorten into a sliver from the game's own angled default view
+      // otherwise, exactly the shrink-to-a-thin-line problem the old solid cone had to work around.
+      mesh.quaternion.copy(camera.quaternion)
+
+      const twinkle = Math.sin(t * s.twinkleSpeed + s.twinklePhase) * 0.5 + 0.5
+      const scale = s.size * (0.75 + twinkle * 0.45)
+      mesh.scale.setScalar(scale)
+
       // Fades in quickly at the base, holds bright through the middle of the rise, fades out near
-      // the top - reads as drifting into and back out of existence, not a hard pop/vanish.
-      const fade = cycleT < 0.15 ? cycleT / 0.15 : cycleT > 0.75 ? (1 - cycleT) / 0.25 : 1
+      // the top - drifting into and back out of existence rather than a hard pop/vanish.
+      const fade = cycleT < 0.12 ? cycleT / 0.12 : cycleT > 0.8 ? (1 - cycleT) / 0.2 : 1
       const mat = mesh.material as THREE.MeshBasicMaterial
-      mat.opacity = Math.max(0, fade) * 0.9
+      mat.opacity = Math.max(0, fade) * (0.65 + twinkle * 0.35)
     })
   })
 
   return (
     <group ref={groupRef} position={position}>
-      {/* Soft glow disc under everything else - reads at a glance even before the eye resolves
-          the ring's own thin geometry, especially important at a shallow top-down camera angle. */}
+      {/* Soft glow disc under everything else - reads at a glance even before the eye resolves the
+          ring's own thin geometry, especially from a shallow top-down camera angle. */}
       <mesh ref={glowRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.004, 0]}>
-        <circleGeometry args={[ringRadius * 1.35, 32]} />
+        <circleGeometry args={[ringRadius * 1.3, 32]} />
         <meshBasicMaterial color={GLOW_COLOR} transparent opacity={GLOW_BASE_OPACITY} depthWrite={false} />
       </mesh>
-      <mesh ref={outerRingRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.006, 0]}>
+      {/* Single quiet ring marks the exact square - a second counter-rotating ring read as one
+          moving element too many once the star helix itself carries the "something is here"
+          signal, reported directly as feeling busy rather than sophisticated. */}
+      <mesh ref={ringRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.006, 0]}>
         <ringGeometry args={[ringRadius - ringWidth, ringRadius, 48]} />
-        <meshBasicMaterial color={RING_OUTER_COLOR} transparent opacity={RING_BASE_OPACITY} side={THREE.DoubleSide} depthWrite={false} />
+        <meshBasicMaterial color={RING_COLOR} transparent opacity={RING_BASE_OPACITY} side={THREE.DoubleSide} depthWrite={false} />
       </mesh>
-      <mesh ref={innerRingRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.007, 0]}>
-        <ringGeometry args={[ringRadius - ringWidth * 2.2, ringRadius - ringWidth * 1.5, 48]} />
-        <meshBasicMaterial color={RING_INNER_COLOR} transparent opacity={RING_BASE_OPACITY * 0.7} side={THREE.DoubleSide} depthWrite={false} />
-      </mesh>
-      {/* Tapering beacon column - see BEAM_HEIGHT_FACTOR's own comment for why this exists: the
-          ring/glow/sparkles above all read fine looking straight down but nearly flatten away at
-          the game's actual default camera angle, while a tall column stays legible from any angle. */}
-      <mesh ref={beamRef} position={[0, (tileSize * BEAM_HEIGHT_FACTOR) / 2, 0]}>
-        <coneGeometry args={[ringRadius * 0.85, tileSize * BEAM_HEIGHT_FACTOR, 24, 1, true]} />
-        <meshBasicMaterial color={BEAM_COLOR} transparent opacity={BEAM_BASE_OPACITY} side={THREE.DoubleSide} depthWrite={false} />
-      </mesh>
-      {sparkles.map((s, i) => (
-        <mesh key={i} ref={(el) => (sparkleRefs.current[i] = el)} position={[s.radius, 0, 0]}>
-          <sphereGeometry args={[s.size, 8, 8]} />
-          <meshBasicMaterial color={SPARKLE_COLOR} transparent opacity={0} depthWrite={false} />
+      {stars.map((s, i) => (
+        <mesh key={i} ref={(el) => (starRefs.current[i] = el)} geometry={starGeometry}>
+          <meshBasicMaterial color={s.color} transparent opacity={0} depthWrite={false} side={THREE.DoubleSide} />
         </mesh>
       ))}
     </group>
