@@ -213,6 +213,9 @@ export function DiceMesh({
 
   // Six canvas-drawn pip textures, generated once and reused across rolls.
   const faceTextures = useMemo(() => [1, 2, 3, 4, 5, 6].map((n) => createDiceFaceTexture(n, bodyColors, pipColor)), [black])
+  useEffect(() => {
+    return () => faceTextures.forEach((tex) => tex.dispose())
+  }, [faceTextures])
 
   // Box face order is [+x, -x, +y (top), -y (bottom), +z, -z]. The current value always sits on
   // top with its real-die complement (sums to 7) on the bottom; the sides just take whatever's
@@ -235,6 +238,16 @@ export function DiceMesh({
         }),
     )
   }, [value, faceTextures])
+  // Reported directly - the game gets progressively slower to render the longer a session runs.
+  // This rebuilds 6 brand new MeshPhysicalMaterial instances on every roll (value changes every
+  // turn, for the whole game), and three.js never frees a material's GPU-side program/uniform
+  // state on its own - only an explicit .dispose() call does, same as the geometry leak fixed in
+  // BoardScene/TrackTile. Disposing the outgoing set whenever a fresh one replaces it (or this die
+  // unmounts) keeps that from accumulating over a long game instead of relying on whether
+  // <primitive>'s own object-swap happens to dispose it automatically.
+  useEffect(() => {
+    return () => materials.forEach((mat) => mat.dispose())
+  }, [materials])
 
   // Small per-die offset (from its own table position) so all three don't bounce/rock in exact
   // lockstep during a nudge - reads as more alive, less like one rigid block moving together.

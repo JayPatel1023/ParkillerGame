@@ -182,6 +182,7 @@ function createContactShadowTexture(): THREE.CanvasTexture {
 
 function ContactShadow() {
   const texture = useMemo(() => createContactShadowTexture(), [])
+  useEffect(() => () => texture.dispose(), [texture])
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -BOARD_THICKNESS - 0.004, 0]}>
       <planeGeometry args={[BOARD_SIZE * 1.35, BOARD_SIZE * 1.35]} />
@@ -515,6 +516,32 @@ export function BoardScene({
   const sampleColor = useBoardColorSampler(definition.boardImage)
   const tileSize = estimateSquareSize(definition.trackWaypoints)
 
+  // Reported directly - the game gets progressively slower to render the longer a session runs.
+  // Root cause: this list used to be rebuilt inline in the render below (computeTileCorners called
+  // fresh, per tile, on every single BoardScene re-render - which happens constantly during active
+  // play: every piece hop frame, dice roll, hover state). A fresh `corners` array every render gave
+  // TrackTile's own `useMemo(() => buildTrapezoidGeometry(corners), [corners])` a new reference
+  // every time too, so it rebuilt a brand new THREE.BufferGeometry on every render for all 51-72
+  // tiles a board has - and the *previous* geometry was simply discarded, never `.dispose()`d,
+  // leaking its GPU-side buffer permanently. Three.js only frees that VRAM on an explicit dispose
+  // call, not via JS garbage collection, so this accumulated without bound for as long as a game
+  // session stayed open - exactly the "gets slower the longer you play" symptom. Memoizing this
+  // list keyed on the board/sampler (both stable for the lifetime of one game) means the same
+  // `corners` array reference survives every other re-render, so TrackTile's own geometry memo
+  // only ever recomputes when the board itself actually changes.
+  const trackTiles = useMemo(() => {
+    if (!sampleColor) return []
+    const worldPoints: [number, number][] = definition.trackWaypoints.map((wp) => {
+      const w = toWorldPosition(wp)
+      return [w[0], w[2]]
+    })
+    return definition.trackWaypoints.map((wp, i) => ({
+      key: `tile-${i}`,
+      corners: computeTileCorners(worldPoints, i, tileSize / 2),
+      color: sampleColor(wp[0], wp[1]),
+    }))
+  }, [definition, sampleColor, tileSize])
+
   // Recomputing hops/hopFrom inline in the render below (as this used to) builds a brand new
   // array every time BoardScene re-renders, even though `moveAnimation` itself hasn't changed -
   // and PieceMesh's own `useEffect(() => {...}, [hops])` resets its hop progress back to the
@@ -749,20 +776,9 @@ export function BoardScene({
           doc comment) - they never suspend, so no Suspense boundary is needed here any more; a
           failed/slow load just falls back to a plain color instead of leaving these permanently
           stuck on a Suspense fallback. */}
-      {sampleColor &&
-        (() => {
-          const worldPoints: [number, number][] = definition.trackWaypoints.map((wp) => {
-            const w = toWorldPosition(wp)
-            return [w[0], w[2]]
-          })
-          return definition.trackWaypoints.map((wp, i) => (
-            <TrackTile
-              key={`tile-${i}`}
-              corners={computeTileCorners(worldPoints, i, tileSize / 2)}
-              color={sampleColor(wp[0], wp[1])}
-            />
-          ))
-        })()}
+      {trackTiles.map((tile) => (
+        <TrackTile key={tile.key} corners={tile.corners} color={tile.color} />
+      ))}
 
       {/* Ground-level ward effect on every square with an actual barrier (PC2.4) - see
           BarrierIndicator's own comment. Rendered above the tiles but below the pieces themselves
