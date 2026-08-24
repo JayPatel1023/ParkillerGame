@@ -326,6 +326,12 @@ describe('parchisRules', () => {
       const result = applyMove(board, move, [red, blue], settings, false) // no doubles window open
 
       expect(result.eliminatedByParkiller).toBe(true)
+      // Reported directly ("도착하기전에 이미 먹히울걸 타산해서... 사라지는" - it vanishes before
+      // even arriving): the scene layer needs both of these to animate the pawn actually walking
+      // to square 5 before being sent home, since `movedPiece`'s own trackPosition is already -1
+      // by this point (see MoveResult's own doc comment).
+      expect(result.eliminatedByParkillerAt).toBe(5)
+      expect(result.eliminatedByParkillerColor).toBe('Blue')
       expect(result.capturedParkillerColor).toBeNull()
       expect(red.pieces[0].state).toBe('InYard')
       expect(red.pieces[0].trackPosition).toBe(-1)
