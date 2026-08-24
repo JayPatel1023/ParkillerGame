@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { extend, useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { Group } from 'three'
@@ -71,6 +71,7 @@ function SingleMarker({
 }) {
   const groupRef = useRef<Group>(null)
   const faceTexture = useMemo(() => createNumberFaceTexture(String(amount)), [amount])
+  useEffect(() => () => faceTexture.dispose(), [faceTexture])
   // Six *distinct* material instances, even though four are visually identical - reusing the same
   // object across more than one <primitive attach="material-N"> (as an earlier version of this did)
   // throws inside three's own render path ("Cannot read properties of undefined (reading 'side')"),
@@ -82,6 +83,12 @@ function SingleMarker({
     const face = () => new THREE.MeshPhysicalMaterial({ map: faceTexture, roughness: 0.25, clearcoat: 0.7, clearcoatRoughness: 0.2 })
     return [side(), side(), face(), side(), side(), side()]
   }, [faceTexture])
+  // Same manual-dispose need as DiceMesh's own material array (see its comment) - imperatively
+  // created and swapped in via <primitive object>, so three.js won't free their GPU state on its
+  // own without this.
+  useEffect(() => {
+    return () => materials.forEach((mat) => mat.dispose())
+  }, [materials])
 
   useFrame((state) => {
     const group = groupRef.current

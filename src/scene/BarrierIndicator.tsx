@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { Group, Mesh } from 'three'
@@ -96,6 +96,11 @@ export function BarrierIndicator({ position, tileSize }: { position: [number, nu
   const riseHeight = tileSize * RISE_HEIGHT_FACTOR
 
   const starGeometry = useMemo(() => createStarGeometry(), [])
+  // A barrier indicator mounts/unmounts every time a barrier forms/breaks over a game - same
+  // manual-dispose need as TrackTile's own geometry (see BoardScene's comment on that leak): passed
+  // via the `geometry` prop rather than declared as JSX, so three.js won't free its GPU buffer
+  // without an explicit .dispose() call here.
+  useEffect(() => () => starGeometry.dispose(), [starGeometry])
 
   const stars = useMemo<StarSpec[]>(() => {
     const list: StarSpec[] = []
