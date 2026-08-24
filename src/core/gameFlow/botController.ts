@@ -23,7 +23,15 @@ import type { PlayerState } from './playerState'
 // again, more assertively this time, to a pace that reads as "an opponent genuinely looking at the
 // board and deciding" rather than merely "not instant" - still short of dragging, per that same
 // report's own "don't make it too slow either" caveat.
-const BOT_THINK_DELAY_MS = 1800
+//
+// Reported a THIRD time, still too fast ("여전히너무빨리 움직이고잇따"), even after the 1100->1800
+// bump above shipped. Verified this class's own scheduling math by hand: every discrete bot action
+// (roll, each move) already waits at least the full think-delay from when it becomes available, not
+// merely from when the previous action was *submitted* - so two consecutive timid bumps clearly
+// weren't landing as "clearly deliberate" to an actual human watching. Breaking that cycle with one
+// decisive jump instead of another small increment - long enough that a turn unmistakably reads as
+// "someone is taking their turn," not iterating a smaller number again.
+const BOT_THINK_DELAY_MS = 3000
 
 // Reported directly: a bot's pieces sometimes hopped at a normal, readable pace and sometimes
 // moved "at light speed" - hard to tell a bug from a feature. Root cause: this class used to wait
