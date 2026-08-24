@@ -131,7 +131,22 @@ export class BotController {
     if (moves.length === 0) return
     const color = this.session.currentPlayer.color
     if (!this.botColors.has(color)) return
-    const chosen = moves[0]
+    // Reported directly, client visibly frustrated: a color could get stuck for many consecutive
+    // turns after a bot carelessly walked itself into forming its own barrier with no strategic
+    // reason to. Once formed, a barrier's own two pieces are locked in place until a double breaks
+    // it open (rules.pdf's own "OPENING A BARRIER" page, PK9.1) - correct and already verified
+    // against the client's own rulebook, but a naive "always pick moves[0]" bot has no notion of
+    // *avoiding* that self-inflicted wait when an equally legal alternative exists. Reproduced
+    // directly: a stress test found streaks of up to 16 consecutive wasted turns for a single
+    // color once it got stuck this way. The rule itself doesn't need to change; a bot that steers
+    // away from an avoidable barrier fixes the actual experience instead. Only steers away from
+    // *forming* a new one - every move in `moves` already satisfies every other obligation
+    // (mandatory capture, exit lock, an existing barrier's own break requirement) before this ever
+    // runs, so picking a different entry from this same list can't dodge anything mandatory - and
+    // this still falls back to the plain first option if avoiding a barrier isn't actually possible
+    // this roll.
+    const nonBarrierMoves = moves.filter((m) => !this.wouldFormOwnBarrier(m))
+    const chosen = nonBarrierMoves[0] ?? moves[0]
     this.scheduleRespectingBusy(this.thinkDelayMs, () => {
       if (this.session.currentPlayer.color !== color) return
       this.session.submitMoveForBot(chosen.piece, chosen.amount)
@@ -139,6 +154,20 @@ export class BotController {
       // MoveOption), same duration-per-square PieceMesh itself uses.
       this.markBusy(chosen.amount * this.hopDurationMs)
     })
+  }
+
+  // True when landing here would sit this piece exactly on top of one of this same bot's *other*
+  // pieces, own-color-barrier position (PC2.4) - the specific, avoidable outcome that later strands
+  // the bot for however long it takes to roll a double (see onMoveChoicesReady's own comment). Not
+  // scoped to any one MoveKind - a fresh barrier can form on the shared track or inside the home
+  // corridor alike, matching the lock itself.
+  private wouldFormOwnBarrier(move: MoveOption): boolean {
+    for (const piece of this.session.currentPlayer.pieces) {
+      if (piece === move.piece) continue
+      if (move.resultingTrackPosition !== -1 && piece.state === 'OnTrack' && piece.trackPosition === move.resultingTrackPosition) return true
+      if (move.resultingCorridorPosition !== -1 && piece.state === 'InHomeCorridor' && piece.corridorPosition === move.resultingCorridorPosition) return true
+    }
+    return false
   }
 
   private markBusy(durationMs: number): void {

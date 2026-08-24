@@ -136,6 +136,43 @@ describe('BotController', () => {
     bots.dispose()
   })
 
+  // Reported directly, client visibly frustrated: a color could get stuck for many consecutive
+  // turns after a bot carelessly walked itself into forming its own barrier with no strategic
+  // reason to - once formed, a barrier's own two pieces are locked in place until a double breaks
+  // it open, and a naive "always pick moves[0]" bot has no notion of avoiding that self-inflicted
+  // wait. Reproduced directly with a stress test: streaks of up to 16 consecutive wasted turns for
+  // a single color once stuck this way.
+  it('avoids forming a new own-color barrier when a non-barrier move is also available', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 7 // dieA moves piece0 exactly onto piece1 - a barrier, if picked
+    // dieA=2: piece0 (5->7, barrier with piece1) is offered first (getValidMoves walks pieces in
+    // index order, and dieA is combined into the move list before dieB) - moves[0] under the old
+    // "always pick the first option" behavior. dieB=4 (and every other combination) offers plenty
+    // of alternatives that don't coincide with piece1's own square at all.
+    const dice = new RecordingDice(new ScriptedDice([2, 4, 1]))
+    const inner = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+    const network = new FakeRoomNetwork(MASTER_ACTOR)
+    const transport = network.createTransport(MASTER_ACTOR)
+    const host = new HostTurnManagerBridge(inner, dice, [red, blue], transport, new Map<number, PieceColor>())
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2)
+
+    host.start()
+    vi.advanceTimersByTime(10) // the roll fires
+    vi.advanceTimersByTime(10) // the first move fires
+
+    // Whichever move actually got picked, it must not have landed piece0 on piece1's own square -
+    // the one avoidable, self-inflicted barrier this roll could have formed.
+    const onSameSquare = red.pieces[0].state === 'OnTrack' && red.pieces[0].trackPosition === red.pieces[1].trackPosition
+    expect(onSameSquare).toBe(false)
+
+    bots.dispose()
+  })
+
   it('a color not in botColors never receives an automatic roll', () => {
     const board = buildTestBoard()
     const players = [createPlayerState('Red', board), createPlayerState('Blue', board)]
