@@ -51,7 +51,11 @@ export function TrackTile({ corners, color }: TrackTileProps) {
   return (
     <group position={[0, BASE_HEIGHT, 0]} rotation={[-Math.PI / 2, 0, 0]}>
       <mesh geometry={geometry} position={[0, 0, -0.006]} receiveShadow>
-        <meshStandardMaterial map={fillTexture ?? undefined} color={color} />
+        {/* Keyed on load state for the same reason as BoardMesh's own material-2 - a material that
+            first mounts with map=undefined doesn't reliably pick up texture sampling once map is
+            reassigned later, so the tile can stay a flat tinted color forever even after the real
+            fetch succeeds. Forcing a fresh material once fillTexture is ready avoids that. */}
+        <meshStandardMaterial key={fillTexture ? 'loaded' : 'loading'} map={fillTexture ?? undefined} color={color} />
       </mesh>
       {borderTexture && (
         <mesh geometry={geometry} position={[0, 0, -0.004]}>

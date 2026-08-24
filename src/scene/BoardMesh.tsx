@@ -41,7 +41,19 @@ export function BoardMesh({ imageUrl }: { imageUrl: string }) {
           matching the board art's own cream border. */}
       <meshStandardMaterial attach="material-0" color="#dccdaa" roughness={0.7} metalness={0.05} />
       <meshStandardMaterial attach="material-1" color="#dccdaa" roughness={0.7} metalness={0.05} />
-      <meshStandardMaterial attach="material-2" map={texture ?? undefined} color={texture ? '#ffffff' : '#dccdaa'} />
+      {/* Reported directly, with a screenshot, persisting even after useRobustTexture's own retry
+          fix shipped: the network fetch was confirmed succeeding (verified via console
+          instrumentation - the hook's own React state genuinely held a loaded THREE.Texture with
+          the right image src) yet the board stayed permanently flat/plain. Root cause: this
+          material first mounts with map=undefined (texture hasn't loaded yet), and three.js
+          compiles its GPU shader program for that state; simply reassigning `.map` to a real
+          texture later doesn't reliably trigger every driver/three.js version to recompile the
+          program to actually sample it, so the mesh keeps rendering as if map were still absent -
+          the classic "texture loads but never appears" gotcha of swapping a Suspense-based loader
+          for an async one that starts textureless. Keying on whether texture is loaded forces React
+          to discard that stale material and mount a brand new one once the real map is available,
+          so the very first compile of the "loaded" material already has USE_MAP baked in. */}
+      <meshStandardMaterial key={texture ? 'loaded' : 'loading'} attach="material-2" map={texture ?? undefined} color={texture ? '#ffffff' : '#dccdaa'} />
       <meshStandardMaterial attach="material-3" color="#dccdaa" roughness={0.7} metalness={0.05} />
       <meshStandardMaterial attach="material-4" color="#dccdaa" roughness={0.7} metalness={0.05} />
       <meshStandardMaterial attach="material-5" color="#dccdaa" roughness={0.7} metalness={0.05} />
