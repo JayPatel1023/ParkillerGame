@@ -420,7 +420,6 @@ export function ParkillerMesh({
       return
     }
 
-    elapsedRef.current += delta
     // The client's own explicit instruction, most recently ("중앙홀에서부터 한칸한칸 시작하게
     // 만들어달" - make it move one square at a time from the center hall): every hop here, including
     // the ones walking the center-to-loop connecting corridor on the Parkiller's first-ever move
@@ -428,21 +427,34 @@ export function ParkillerMesh({
     // every other hop in the game - no special glide or sped-up segment. A single continuous glide
     // was tried here directly and reported back as "그냥 뛰여넘어서 가게" (just skipping/jumping over
     // it) - not the discrete, countable walk asked for.
-    const t = Math.min(1, elapsedRef.current / HOP_DURATION)
-    const from = hopIndexRef.current === 0 ? hopFrom : hops[hopIndexRef.current - 1]
-    const to = hops[hopIndexRef.current]
+    //
+    // See PieceMesh's own matching comment: uses the real, unclamped rawDelta and loops through as
+    // many hop segments as that much real time actually covers, instead of clamping elapsed time
+    // down to MAX_FRAME_DELTA - a slow/dropped real frame used to freeze the Parkiller mid-air for
+    // that stretch (only ever advancing by the clamp's own small amount) rather than catching up to
+    // wherever it truly should be.
+    let remainingDelta = rawDelta
+    while (remainingDelta > 0 && hopIndexRef.current < hops.length) {
+      elapsedRef.current += remainingDelta
+      const t = Math.min(1, elapsedRef.current / HOP_DURATION)
+      const from = hopIndexRef.current === 0 ? hopFrom : hops[hopIndexRef.current - 1]
+      const to = hops[hopIndexRef.current]
 
-    const hopYaw = yawTowards(from, to)
-    if (hopYaw !== null) mesh.rotation.y = hopYaw
+      const hopYaw = yawTowards(from, to)
+      if (hopYaw !== null) mesh.rotation.y = hopYaw
 
-    const x = THREE.MathUtils.lerp(from[0], to[0], t)
-    const z = THREE.MathUtils.lerp(from[2], to[2], t)
-    const bounce = Math.sin(t * Math.PI) * BOUNCE_HEIGHT
-    mesh.position.set(x, BASE_HEIGHT + bounce, z)
+      const x = THREE.MathUtils.lerp(from[0], to[0], t)
+      const z = THREE.MathUtils.lerp(from[2], to[2], t)
+      const bounce = Math.sin(t * Math.PI) * BOUNCE_HEIGHT
+      mesh.position.set(x, BASE_HEIGHT + bounce, z)
 
-    if (t >= 1) {
-      hopIndexRef.current += 1
-      elapsedRef.current = 0
+      if (t >= 1) {
+        remainingDelta = elapsedRef.current - HOP_DURATION
+        hopIndexRef.current += 1
+        elapsedRef.current = 0
+      } else {
+        remainingDelta = 0
+      }
     }
   })
 
