@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
-import { useLoader } from '@react-three/fiber'
 import * as THREE from 'three'
 import { BASE_HEIGHT } from './boardGeometry'
+import { useRobustTexture } from './useRobustTexture'
 
 // Cropped directly from a real, clean square on the delivered board art (see
 // public/tiles/tile-source.png for the original crop), rather than an approximated gradient - two
@@ -39,18 +39,25 @@ function buildTrapezoidGeometry(corners: [number, number][]): THREE.BufferGeomet
 // curved path actually is (wider on the outside of the curve, narrower on the inside) so
 // neighboring tiles share an exact edge instead of leaving gaps or overlapping.
 export function TrackTile({ corners, color }: TrackTileProps) {
-  const fillTexture = useLoader(THREE.TextureLoader, '/tiles/tile-fill.png')
-  const borderTexture = useLoader(THREE.TextureLoader, '/tiles/tile-border.png')
+  // useRobustTexture (see its own doc comment) never suspends and retries on failure instead of
+  // getting stuck forever - each returns null while loading/retrying. The fill mesh still renders
+  // with its own per-square tint even without the map (just a flat color instead of the real
+  // bevel/shading); the border mesh is transparent everywhere but the gold border itself, so with
+  // no texture yet it's skipped outright rather than rendering as an opaque blank square on top.
+  const fillTexture = useRobustTexture('/tiles/tile-fill.png')
+  const borderTexture = useRobustTexture('/tiles/tile-border.png')
   const geometry = useMemo(() => buildTrapezoidGeometry(corners), [corners])
 
   return (
     <group position={[0, BASE_HEIGHT, 0]} rotation={[-Math.PI / 2, 0, 0]}>
       <mesh geometry={geometry} position={[0, 0, -0.006]} receiveShadow>
-        <meshStandardMaterial map={fillTexture} color={color} />
+        <meshStandardMaterial map={fillTexture ?? undefined} color={color} />
       </mesh>
-      <mesh geometry={geometry} position={[0, 0, -0.004]}>
-        <meshStandardMaterial map={borderTexture} transparent />
-      </mesh>
+      {borderTexture && (
+        <mesh geometry={geometry} position={[0, 0, -0.004]}>
+          <meshStandardMaterial map={borderTexture} transparent />
+        </mesh>
+      )}
     </group>
   )
 }

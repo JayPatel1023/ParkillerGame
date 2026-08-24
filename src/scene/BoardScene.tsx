@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
 import { Line, OrbitControls, PerspectiveCamera, Text } from '@react-three/drei'
 import * as THREE from 'three'
@@ -738,31 +738,31 @@ export function BoardScene({
           ellipse texture (ContactShadow below) gives the same "resting on the table" cue directly,
           with no dependency on the WebGL shadow map at all. */}
       <ContactShadow />
-      <Suspense fallback={null}>
-        <BoardMesh imageUrl={definition.boardImage} />
-      </Suspense>
+      <BoardMesh imageUrl={definition.boardImage} />
 
       {/* Prototype: each track square rendered as its own repeatable tile, cropped directly from a
           real square on the delivered board art (see public/tiles/), positioned/rotated from the
           real measured waypoints, and tinted per-square by sampling that exact spot's real pixel
           color from the board art - rather than relying on the flat background image to show the
-          squares. Overlaid on top of BoardMesh for comparison. */}
-      <Suspense fallback={null}>
-        {sampleColor &&
-          (() => {
-            const worldPoints: [number, number][] = definition.trackWaypoints.map((wp) => {
-              const w = toWorldPosition(wp)
-              return [w[0], w[2]]
-            })
-            return definition.trackWaypoints.map((wp, i) => (
-              <TrackTile
-                key={`tile-${i}`}
-                corners={computeTileCorners(worldPoints, i, tileSize / 2)}
-                color={sampleColor(wp[0], wp[1])}
-              />
-            ))
-          })()}
-      </Suspense>
+          squares. Overlaid on top of BoardMesh for comparison.
+          BoardMesh/TrackTile both load their own textures via useRobustTexture now (see its own
+          doc comment) - they never suspend, so no Suspense boundary is needed here any more; a
+          failed/slow load just falls back to a plain color instead of leaving these permanently
+          stuck on a Suspense fallback. */}
+      {sampleColor &&
+        (() => {
+          const worldPoints: [number, number][] = definition.trackWaypoints.map((wp) => {
+            const w = toWorldPosition(wp)
+            return [w[0], w[2]]
+          })
+          return definition.trackWaypoints.map((wp, i) => (
+            <TrackTile
+              key={`tile-${i}`}
+              corners={computeTileCorners(worldPoints, i, tileSize / 2)}
+              color={sampleColor(wp[0], wp[1])}
+            />
+          ))
+        })()}
 
       {/* Ground-level ward effect on every square with an actual barrier (PC2.4) - see
           BarrierIndicator's own comment. Rendered above the tiles but below the pieces themselves

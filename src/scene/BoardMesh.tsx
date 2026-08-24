@@ -1,7 +1,7 @@
-import { useTexture } from '@react-three/drei'
 import { extend } from '@react-three/fiber'
 import { RoundedBoxGeometry } from 'three-stdlib'
 import { BOARD_SIZE } from './boardGeometry'
+import { useRobustTexture } from './useRobustTexture'
 
 // Registration only - the `roundedBoxGeometry` JSX element type itself is already declared
 // globally by DiceMesh.tsx (same class), which always mounts alongside this in BoardScene's
@@ -28,7 +28,11 @@ extend({ RoundedBoxGeometry })
 export const BOARD_THICKNESS = 0.14 * (BOARD_SIZE / 6)
 
 export function BoardMesh({ imageUrl }: { imageUrl: string }) {
-  const texture = useTexture(imageUrl)
+  // useRobustTexture (see its own doc comment) never suspends and never gets stuck on a rejected
+  // promise - it returns null while loading/retrying instead, so material-2 falls back to the same
+  // plain cream tone as the board's edge/underside until the real art is ready, rather than
+  // rendering nothing at all.
+  const texture = useRobustTexture(imageUrl)
   return (
     <mesh position={[0, -BOARD_THICKNESS / 2, 0]} receiveShadow castShadow>
       <roundedBoxGeometry args={[BOARD_SIZE, BOARD_THICKNESS, BOARD_SIZE, 3, BOARD_THICKNESS * 0.35]} />
@@ -37,7 +41,7 @@ export function BoardMesh({ imageUrl }: { imageUrl: string }) {
           matching the board art's own cream border. */}
       <meshStandardMaterial attach="material-0" color="#dccdaa" roughness={0.7} metalness={0.05} />
       <meshStandardMaterial attach="material-1" color="#dccdaa" roughness={0.7} metalness={0.05} />
-      <meshStandardMaterial attach="material-2" map={texture} />
+      <meshStandardMaterial attach="material-2" map={texture ?? undefined} color={texture ? '#ffffff' : '#dccdaa'} />
       <meshStandardMaterial attach="material-3" color="#dccdaa" roughness={0.7} metalness={0.05} />
       <meshStandardMaterial attach="material-4" color="#dccdaa" roughness={0.7} metalness={0.05} />
       <meshStandardMaterial attach="material-5" color="#dccdaa" roughness={0.7} metalness={0.05} />
