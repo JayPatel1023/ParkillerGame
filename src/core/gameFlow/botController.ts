@@ -11,9 +11,19 @@ import type { PlayerState } from './playerState'
 // slow either): 700ms (originally just mirroring the human roll-spin delay in useTurnManager's
 // rollDice(), a different animation with its own separate timing) wasn't long enough to read as an
 // opponent actually deciding - a roll lands and the next action fires again almost immediately,
-// which also made it hard to visually confirm each step was legitimate rather than skipped.
-// Bumped to a still-brisk but clearly deliberate pause, short of dragging.
-const BOT_THINK_DELAY_MS = 1100
+// which also made it hard to visually confirm each step was legitimate rather than skipped. First
+// bump was to 1100ms.
+//
+// Reported directly again, this time from the client and visibly frustrated ("no da tiempo a ver
+// qué se ha movido" - it doesn't give time to see what moved; "사람이 게임하는 속도와 동일하게" -
+// make it the same as a human's own playing pace): 1100ms still wasn't enough to actually register
+// what a bot's own move just did before the next one started. A real human turn - physically
+// rolling two dice, reading the result, deciding which piece to move - realistically takes several
+// seconds, not ~1 second; the previous bump was too timid relative to that actual target. Bumped
+// again, more assertively this time, to a pace that reads as "an opponent genuinely looking at the
+// board and deciding" rather than merely "not instant" - still short of dragging, per that same
+// report's own "don't make it too slow either" caveat.
+const BOT_THINK_DELAY_MS = 1800
 
 // Reported directly: a bot's pieces sometimes hopped at a normal, readable pace and sometimes
 // moved "at light speed" - hard to tell a bug from a feature. Root cause: this class used to wait
