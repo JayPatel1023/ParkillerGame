@@ -130,13 +130,21 @@ export const BOUNCE_HEIGHT = 0.24 // world units, how high each hop arcs - a mor
 // `stretchPulse` (plain sin(t*pi), suppressed by (1-contactPulse) so it never fights the squash
 // window) that peaks at t=0.5 - a mild stretch through the fast-moving middle of the arc that's
 // already fading in as the squash window ends, rather than a separate, disconnected bulge only at
-// the very top. Magnitudes also pulled in from the first pass (0.8/1.22 and 1.14/0.92) - still
-// visibly springy but no longer extreme enough to read as the piece's shape breaking down.
-const HOP_SQUASH_WINDOW = 0.22 // fraction of the hop, from each end, where the contact squash dominates
-const HOP_SQUASH_Y = 0.85 // compressed height at each square (ground contact)
-const HOP_STRETCH_Y = 1.1 // stretched height through the arc's fast-moving middle
-const HOP_SQUASH_XZ = 1.1 // widened footprint at each square, complementing the Y squash
-const HOP_STRETCH_XZ = 0.95 // narrowed footprint through the arc's middle, complementing the Y stretch
+// the very top.
+//
+// Magnitudes pulled in on the first pass here (to 0.85/1.1/1.1/0.95, down from an even earlier
+// 0.8/1.22/1.14/0.92) alongside that timing fix - reported directly afterward as reading "딱딱하고
+// 굳은것처럼" (stiff/rigid) instead of springy. The floppy complaint that motivated the timing
+// rewrite was about *when* the deformation happened (stretching at the apex, the one instant a
+// real object is moving slowest), not really about how big it was - now that squash is genuinely
+// confined to the brief contact window and stretch to the fast-moving middle, a bigger swing reads
+// as a energetic bounce rather than a melt, so pushed back out again, slightly past the original
+// pre-timing-fix numbers this time given the explicit "still too stiff" feedback.
+const HOP_SQUASH_WINDOW = 0.2 // fraction of the hop, from each end, where the contact squash dominates - narrowed slightly so the squash itself reads as a snap, not a lingering squat
+const HOP_SQUASH_Y = 0.76 // compressed height at each square (ground contact)
+const HOP_STRETCH_Y = 1.24 // stretched height through the arc's fast-moving middle
+const HOP_SQUASH_XZ = 1.18 // widened footprint at each square, complementing the Y squash
+const HOP_STRETCH_XZ = 0.88 // narrowed footprint through the arc's middle, complementing the Y stretch
 
 // Caps how much animation time a single frame can advance. Without this, a slow/dropped frame
 // (e.g. CPU contention from screen-recording software) can push `delta` past HOP_DURATION in one
@@ -403,29 +411,47 @@ export function PieceMesh({
       return
     }
 
-    elapsedRef.current += delta
-    const t = Math.min(1, elapsedRef.current / HOP_DURATION)
-    const from = hopIndexRef.current === 0 ? hopFrom : hops[hopIndexRef.current - 1]
-    const to = hops[hopIndexRef.current]
+    // Reported directly ("이따금 비루스먹은것처럼 섯다움직이는" - occasionally stutters/freezes like
+    // something's glitching): a slow/dropped real frame (a GC pause, tab throttling, background
+    // contention) used to have its own elapsed time clamped down to MAX_FRAME_DELTA before
+    // advancing the hop's own clock - so a frame that actually took, say, 300ms only advanced the
+    // hop's animated time by 33ms, and the piece visibly sat almost still for that stretch (a real
+    // freeze), then resumed at the normal rate afterward, playing out slower in total than
+    // HOP_DURATION actually calls for. Uses the real, unclamped rawDelta here instead, looping
+    // through as many hop segments as that much real time actually covers - a long stall spanning
+    // more than one hop's worth of real time still catches up to exactly where the piece truly
+    // should be, never frozen mid-air. The clamped `delta` above stays for the purely cosmetic
+    // pulse/spin timers elsewhere in this file, where losing a few ms during a rare stall is
+    // genuinely unnoticeable, unlike a hop's own position.
+    let remainingDelta = rawDelta
+    while (remainingDelta > 0 && hopIndexRef.current < hops.length) {
+      elapsedRef.current += remainingDelta
+      const t = Math.min(1, elapsedRef.current / HOP_DURATION)
+      const from = hopIndexRef.current === 0 ? hopFrom : hops[hopIndexRef.current - 1]
+      const to = hops[hopIndexRef.current]
 
-    const x = THREE.MathUtils.lerp(from[0], to[0], t)
-    const z = THREE.MathUtils.lerp(from[2], to[2], t)
-    const bounce = Math.sin(t * Math.PI) * BOUNCE_HEIGHT
-    mesh.position.set(x, BASE_HEIGHT + bounce, z)
+      const x = THREE.MathUtils.lerp(from[0], to[0], t)
+      const z = THREE.MathUtils.lerp(from[2], to[2], t)
+      const bounce = Math.sin(t * Math.PI) * BOUNCE_HEIGHT
+      mesh.position.set(x, BASE_HEIGHT + bounce, z)
 
-    // See HOP_SQUASH_WINDOW's own comment: contactPulse is a brief spike at t=0/1 (squash right at
-    // landing/takeoff), stretchPulse is a gentler sin(t*pi) bump through the middle, suppressed
-    // near the edges so the two blend smoothly instead of fighting or jump-cutting between them.
-    const edgeDistance = Math.min(t, 1 - t)
-    const contactPulse = Math.max(0, 1 - edgeDistance / HOP_SQUASH_WINDOW)
-    const stretchPulse = Math.sin(t * Math.PI) * (1 - contactPulse)
-    const squashStretchY = 1 + (HOP_SQUASH_Y - 1) * contactPulse + (HOP_STRETCH_Y - 1) * stretchPulse
-    const squashStretchXZ = 1 + (HOP_SQUASH_XZ - 1) * contactPulse + (HOP_STRETCH_XZ - 1) * stretchPulse
-    mesh.scale.set(uniformScale * squashStretchXZ, uniformScale * squashStretchY, uniformScale * squashStretchXZ)
+      // See HOP_SQUASH_WINDOW's own comment: contactPulse is a brief spike at t=0/1 (squash right
+      // at landing/takeoff), stretchPulse is a gentler sin(t*pi) bump through the middle,
+      // suppressed near the edges so the two blend smoothly instead of fighting or jump-cutting.
+      const edgeDistance = Math.min(t, 1 - t)
+      const contactPulse = Math.max(0, 1 - edgeDistance / HOP_SQUASH_WINDOW)
+      const stretchPulse = Math.sin(t * Math.PI) * (1 - contactPulse)
+      const squashStretchY = 1 + (HOP_SQUASH_Y - 1) * contactPulse + (HOP_STRETCH_Y - 1) * stretchPulse
+      const squashStretchXZ = 1 + (HOP_SQUASH_XZ - 1) * contactPulse + (HOP_STRETCH_XZ - 1) * stretchPulse
+      mesh.scale.set(uniformScale * squashStretchXZ, uniformScale * squashStretchY, uniformScale * squashStretchXZ)
 
-    if (t >= 1) {
-      hopIndexRef.current += 1
-      elapsedRef.current = 0
+      if (t >= 1) {
+        remainingDelta = elapsedRef.current - HOP_DURATION
+        hopIndexRef.current += 1
+        elapsedRef.current = 0
+      } else {
+        remainingDelta = 0
+      }
     }
   })
 
