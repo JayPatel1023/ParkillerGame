@@ -433,17 +433,34 @@ export class TurnManager {
     const state = this.diceState
     if (!state) return
 
+    // Client's own corrected rulebook (rules.pdf, "OPENING A BARRIER" - "THERE ARE TWO WAYS TO
+    // OPEN A BARRIER"): a barrier blocks the path outright, including for the two pieces that
+    // *are* the barrier - a normal (non-double) roll simply has no legal move for either of them,
+    // full stop, not even a capture escape hatch. The only two ways out are a double (forces one
+    // open, below) or an opposing Parki interacting with the square (landing on it eliminates one,
+    // per resolveParkillerCollisions - already unaffected by this, since the Parki's own black die
+    // is never subject to offerMoves() at all). Computed unconditionally (not gated on
+    // dieA===dieB) since both this lock and the double-forces-open branch below need the same
+    // "is there currently an own barrier" answer.
+    const ownBarrierTrack = ownBarrierTrackPosition(this.currentPlayer)
+    const ownBarrierCorridor = ownBarrierTrack === null ? ownCorridorBarrierPosition(this.currentPlayer) : null
+    const pieceIsInOwnBarrier = (piece: Piece): boolean =>
+      (ownBarrierTrack !== null && piece.state === 'OnTrack' && piece.trackPosition === ownBarrierTrack) ||
+      (ownBarrierCorridor !== null && piece.state === 'InHomeCorridor' && piece.corridorPosition === ownBarrierCorridor)
+    const excludeLockedBarrierPieces = (moves: MoveOption[]) =>
+      state.dieA === state.dieB ? moves : moves.filter((m) => !pieceIsInOwnBarrier(m.piece))
+
     const dieAMoves = !state.dieAUsed
-      ? getValidMoves(this.board, this.currentPlayer, this.players, state.dieA, this.settings, 'dieA')
+      ? excludeLockedBarrierPieces(getValidMoves(this.board, this.currentPlayer, this.players, state.dieA, this.settings, 'dieA'))
       : null
     const dieBMoves = !state.dieBUsed
-      ? getValidMoves(this.board, this.currentPlayer, this.players, state.dieB, this.settings, 'dieB')
+      ? excludeLockedBarrierPieces(getValidMoves(this.board, this.currentPlayer, this.players, state.dieB, this.settings, 'dieB'))
       : null
     // Only ever a candidate move source before either die is individually spent - same precondition
     // the sum-move computation further down already required.
     const sumMoves =
       !state.dieAUsed && !state.dieBUsed
-        ? getValidMoves(this.board, this.currentPlayer, this.players, state.dieA + state.dieB, this.settings, 'sum')
+        ? excludeLockedBarrierPieces(getValidMoves(this.board, this.currentPlayer, this.players, state.dieA + state.dieB, this.settings, 'sum'))
         : null
 
     // PC2.1: "A pawn must move to the starting square" whenever a die's own value is the exit
@@ -482,10 +499,14 @@ export class TurnManager {
     // (the player would need two separate own-pairs stacked in two different places at once) that
     // this picks the track one first, matching this obligation's own pre-corridor-barrier
     // precedent, rather than adding a rule the client's own text never actually addresses.
-    const trackBarrier = state.dieA === state.dieB ? ownBarrierTrackPosition(this.currentPlayer) : null
-    const corridorBarrier = state.dieA === state.dieB && trackBarrier === null ? ownCorridorBarrierPosition(this.currentPlayer) : null
     const barrierLocation: BarrierLocation | null =
-      trackBarrier !== null ? { kind: 'track', position: trackBarrier } : corridorBarrier !== null ? { kind: 'corridor', position: corridorBarrier } : null
+      state.dieA !== state.dieB
+        ? null
+        : ownBarrierTrack !== null
+          ? { kind: 'track', position: ownBarrierTrack }
+          : ownBarrierCorridor !== null
+            ? { kind: 'corridor', position: ownBarrierCorridor }
+            : null
     this.lastOfferedBarrierPosition = barrierLocation
     const pieceIsAtBarrier = (piece: Piece): boolean =>
       barrierLocation !== null &&
