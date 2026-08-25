@@ -48,6 +48,11 @@ function colorButtonStyle(color: string): React.CSSProperties {
   }
 }
 
+// Reported directly (Carlos's own "life journey" philosophy - camaraderie over competition):
+// this screen's own structural shadow/heading accent used to be a cold navy blue (#1a3468) with
+// no connection to anything else here - swapped for the same warm bronze (#7a5f26, THEME.goldDeep)
+// StartScreen's own gold trim already uses, so the whole pre-game flow reads as one warm, inviting
+// object instead of switching palettes screen to screen.
 const hotseatButtonStyle: React.CSSProperties = {
   padding: '12px 22px',
   fontSize: 15,
@@ -56,7 +61,7 @@ const hotseatButtonStyle: React.CSSProperties = {
   background: 'linear-gradient(165deg, rgba(255,255,255,0.1), rgba(255,255,255,0) 60%), rgba(58, 46, 30, 0.6)',
   border: '3px solid #c9a24b',
   borderRadius: 999,
-  boxShadow: '0 5px 0 #1a3468, 0 8px 12px rgba(0,0,0,0.35), inset 0 1px 1px rgba(255,255,255,0.2)',
+  boxShadow: '0 5px 0 #7a5f26, 0 8px 12px rgba(0,0,0,0.35), inset 0 1px 1px rgba(255,255,255,0.2)',
   cursor: 'pointer',
 }
 
@@ -100,8 +105,8 @@ export function ColorSelector({
             fontWeight: 800,
             margin: 0,
             letterSpacing: 1,
-            color: '#dce8ff',
-            textShadow: '0 2px 0 #1a3468, 0 5px 12px rgba(0,0,0,0.55)',
+            color: '#e8cf8a',
+            textShadow: '0 2px 0 #7a5f26, 0 5px 12px rgba(0,0,0,0.55)',
             textAlign: 'center',
             padding: '0 12px',
           }}

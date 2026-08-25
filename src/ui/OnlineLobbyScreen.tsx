@@ -297,7 +297,7 @@ export default function OnlineLobbyScreen() {
             alt="Parkiller"
             style={{ width: 'clamp(42px, 12vw, 56px)', height: 'clamp(42px, 12vw, 56px)', filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.5))', flexShrink: 0 }}
           />
-          <h1 style={{ margin: 0, fontSize: 'clamp(21px, 6vw, 28px)', fontWeight: 800, color: '#dce8ff', textShadow: '0 2px 0 #1a3468, 0 4px 10px rgba(0,0,0,0.5)' }}>
+          <h1 style={{ margin: 0, fontSize: 'clamp(21px, 6vw, 28px)', fontWeight: 800, color: '#e8cf8a', textShadow: '0 2px 0 #7a5f26, 0 4px 10px rgba(0,0,0,0.5)' }}>
             Jugar online
           </h1>
         </div>
@@ -361,7 +361,7 @@ export default function OnlineLobbyScreen() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, width: '100%' }}>
             <div style={sectionStyle}>
               <div style={hintStyle}>Código de sala</div>
-              <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: 3, color: '#dce8ff', textShadow: '0 2px 0 #1a3468' }}>{roomCode}</div>
+              <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: 3, color: '#e8cf8a', textShadow: '0 2px 0 #7a5f26' }}>{roomCode}</div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {(() => {
@@ -478,7 +478,7 @@ const cardStyle: React.CSSProperties = {
   padding: 'clamp(20px, 5vh, 36px) clamp(20px, 6vw, 44px)',
   borderRadius: 28,
   background: 'linear-gradient(180deg, rgba(255,255,255,0.05), transparent 25%), linear-gradient(165deg, rgba(58, 46, 30, 0.85), rgba(30, 23, 14, 0.85))',
-  border: '2px solid #1a3468',
+  border: '2px solid #7a5f26',
   boxShadow: '0 10px 30px rgba(0,0,0,0.5), inset 0 0 0 3px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)',
   width: 'min(400px, 92vw)',
   boxSizing: 'border-box',
@@ -488,14 +488,14 @@ const sectionStyle: React.CSSProperties = {
   padding: '16px 18px',
   borderRadius: 14,
   background: 'rgba(0,0,0,0.2)',
-  border: '1px solid rgba(74,120,216,0.4)',
+  border: '1px solid rgba(201,162,75,0.35)',
 }
 
 const sectionTitleStyle: React.CSSProperties = {
   margin: '0 0 12px 0',
   fontSize: 16,
   fontWeight: 700,
-  color: '#dce8ff',
+  color: '#e8cf8a',
 }
 
 const hintStyle: React.CSSProperties = {
@@ -510,7 +510,7 @@ const seatRowStyle: React.CSSProperties = {
   padding: '8px 12px',
   borderRadius: 10,
   background: 'rgba(0,0,0,0.2)',
-  border: '1px solid rgba(74,120,216,0.25)',
+  border: '1px solid rgba(201,162,75,0.22)',
 }
 
 const seatDotStyle: React.CSSProperties = {
@@ -529,9 +529,9 @@ const inputStyle: React.CSSProperties = {
   fontWeight: 700,
   letterSpacing: 2,
   textTransform: 'uppercase',
-  color: '#dce8ff',
+  color: '#e8cf8a',
   background: 'rgba(0,0,0,0.35)',
-  border: '2px solid #1a3468',
+  border: '2px solid #7a5f26',
   borderRadius: 10,
   boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.4)',
 }
@@ -560,12 +560,17 @@ const secondaryButtonStyle: React.CSSProperties = {
   background: 'linear-gradient(165deg, rgba(255,255,255,0.1), rgba(255,255,255,0) 60%), rgba(58, 46, 30, 0.6)',
   border: '3px solid #c9a24b',
   borderRadius: 999,
-  boxShadow: '0 5px 0 #1a3468, 0 8px 12px rgba(0,0,0,0.35), inset 0 1px 1px rgba(255,255,255,0.2)',
+  boxShadow: '0 5px 0 #7a5f26, 0 8px 12px rgba(0,0,0,0.35), inset 0 1px 1px rgba(255,255,255,0.2)',
   cursor: 'pointer',
 }
 
 // Same chunky carved-wood recipe used across StartScreen/PlayerCountSelector/GameBoardScreen: a
 // solid (non-blurred) offset bottom edge reads as physical depth, not just a bigger shadow.
+// Reported directly (Carlos's own "life journey" philosophy - camaraderie over competition): this
+// whole screen was still the one place in the app fully in the old cold-blue chrome (buttons,
+// panel borders, headings) - never got the warm-gold pass the pre-game flow and in-game HUD both
+// already had. Primary actions here (create/join/start) now use the same warm gold "this is
+// active" language as everywhere else instead of a leftover corporate blue.
 function chunkyButtonStyle(enabled: boolean): React.CSSProperties {
   return {
     width: '100%',
@@ -574,20 +579,22 @@ function chunkyButtonStyle(enabled: boolean): React.CSSProperties {
     fontSize: 17,
     fontWeight: 800,
     letterSpacing: 0.3,
-    color: enabled ? '#eef4ff' : '#8a8a80',
+    color: enabled ? '#fff6e0' : '#8a8a80',
     background: enabled
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0) 40%), linear-gradient(180deg, #dcebff 0%, #3d76e6 48%, #16409c 100%)'
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0) 40%), linear-gradient(180deg, #f5e2ae 0%, #c9a24b 48%, #7a5f26 100%)'
       : 'linear-gradient(180deg, #8a8a80, #6a6a60)',
-    border: `3px solid ${enabled ? '#1a3468' : '#4a4a44'}`,
+    border: `3px solid ${enabled ? '#7a5f26' : '#4a4a44'}`,
     borderRadius: 16,
     boxShadow: enabled
-      ? '0 5px 0 #1a3468, 0 9px 16px rgba(0,0,0,0.4), inset 0 2px 1px rgba(255,255,255,0.55)'
+      ? '0 5px 0 #7a5f26, 0 9px 16px rgba(0,0,0,0.4), inset 0 2px 1px rgba(255,255,255,0.55)'
       : '0 5px 0 #3a3a34, 0 8px 12px rgba(0,0,0,0.3)',
-    textShadow: enabled ? '0 1px 2px rgba(8,16,40,0.5)' : 'none',
+    textShadow: enabled ? '0 1px 2px rgba(40,24,8,0.5)' : 'none',
     cursor: enabled ? 'pointer' : 'default',
   }
 }
 
+// Same warm-gold-for-"selected" language countButtonStyle in PlayerCountSelector.tsx already
+// uses, for the same reason (was a full cold-blue gradient, the last of it on this screen).
 function countButtonStyle(selected: boolean): React.CSSProperties {
   return {
     width: 'clamp(36px, 10vw, 44px)',
@@ -595,15 +602,15 @@ function countButtonStyle(selected: boolean): React.CSSProperties {
     fontSize: 'clamp(14px, 4vw, 17px)',
     flexShrink: 0,
     fontWeight: 800,
-    color: selected ? '#eef4ff' : '#c8d4ec',
+    color: selected ? '#fff6e0' : '#e2d4b8',
     background: selected
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0) 40%), linear-gradient(180deg, #d4e4ff 0%, #6a94e8 55%, #3868c0 100%)'
-      : 'linear-gradient(180deg, rgba(255,255,255,0.25), rgba(255,255,255,0) 40%), linear-gradient(180deg, #4a6aa0 0%, #345078 55%, #223a5a 100%)',
-    border: `2px solid ${selected ? '#3868c0' : '#1a3468'}`,
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0) 40%), linear-gradient(180deg, #f5e2ae 0%, #c9a24b 55%, #7a5f26 100%)'
+      : 'linear-gradient(180deg, rgba(255,255,255,0.25), rgba(255,255,255,0) 40%), linear-gradient(180deg, #8a7550 0%, #6b5636 55%, #4a3a22 100%)',
+    border: `2px solid ${selected ? '#c9a24b' : '#7a5f26'}`,
     borderRadius: '50%',
     boxShadow: selected
-      ? '0 3px 0 #24448c, 0 6px 10px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.6)'
-      : '0 3px 0 #14253f, 0 5px 8px rgba(0,0,0,0.35), inset 0 1px 1px rgba(255,255,255,0.25)',
+      ? '0 3px 0 #7a5f26, 0 6px 10px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.6)'
+      : '0 3px 0 #3a2e1e, 0 5px 8px rgba(0,0,0,0.35), inset 0 1px 1px rgba(255,255,255,0.25)',
     cursor: 'pointer',
   }
 }

@@ -488,22 +488,27 @@ const hintTextStyle: React.CSSProperties = {
 // restyled first and this one still used the earlier blurred-shadow pass, which read as a
 // different, plainer button style right where the game's most-pressed button lives - reported
 // directly as wanting one consistent button language across every screen, not per-screen styles.
+// Reported directly (Carlos's own "life journey" philosophy - camaraderie over competition): this
+// was a cold corporate blue, unrelated to anything else this button could mean (it's a generic
+// confirm - "Sí, salir", "Volver al inicio" - not tied to "online" the way StartScreen's own blue
+// used to be). Warm burgundy instead (matches StartScreen's own TINTS.burgundy exactly), so a
+// confirm action reads as warm and deliberate rather than a leftover cool accent.
 function rollButtonStyle(enabled: boolean): React.CSSProperties {
   return {
     padding: '12px 24px',
     fontSize: 16,
     fontWeight: 800,
     letterSpacing: 0.3,
-    color: enabled ? '#eef4ff' : '#9a9a90',
+    color: enabled ? '#fbeef0' : '#9a9a90',
     background: enabled
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0) 40%), linear-gradient(180deg, #dcebff 0%, #3d76e6 48%, #16409c 100%)'
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0) 40%), linear-gradient(180deg, #c98a94 0%, #6e2430 55%, #2e0e12 100%)'
       : 'linear-gradient(165deg, #6b6b62, #4a4a44)',
-    border: `3px solid ${enabled ? '#1a3468' : '#3a3a34'}`,
+    border: `3px solid ${enabled ? '#3a1219' : '#3a3a34'}`,
     borderRadius: 999,
     boxShadow: enabled
-      ? '0 5px 0 #1a3468, 0 9px 14px rgba(0,0,0,0.4), inset 0 2px 1px rgba(255,255,255,0.55)'
+      ? '0 5px 0 #3a1219, 0 9px 14px rgba(0,0,0,0.4), inset 0 2px 1px rgba(255,255,255,0.55)'
       : '0 5px 0 #3a3a34, inset 0 1px 2px rgba(0,0,0,0.3)',
-    textShadow: enabled ? '0 1px 2px rgba(8,16,40,0.5)' : 'none',
+    textShadow: enabled ? '0 1px 2px rgba(40,10,14,0.5)' : 'none',
     cursor: enabled ? 'pointer' : 'default',
   }
 }
@@ -542,7 +547,7 @@ const secondaryButtonStyle: React.CSSProperties = {
   background: 'linear-gradient(165deg, rgba(255,255,255,0.1), rgba(255,255,255,0) 60%), rgba(58, 46, 30, 0.6)',
   border: `3px solid ${BRAND_GOLD}`,
   borderRadius: 999,
-  boxShadow: '0 5px 0 #1a3468, 0 8px 12px rgba(0,0,0,0.35), inset 0 1px 1px rgba(255,255,255,0.2)',
+  boxShadow: '0 5px 0 #7a5f26, 0 8px 12px rgba(0,0,0,0.35), inset 0 1px 1px rgba(255,255,255,0.2)',
   cursor: 'pointer',
 }
 
@@ -565,7 +570,7 @@ const exitButtonStyle: React.CSSProperties = {
     'linear-gradient(180deg, rgba(255,255,255,0.22), transparent 45%), linear-gradient(165deg, rgba(64, 50, 32, 0.95), rgba(36, 28, 18, 0.95))',
   border: `3px solid ${BRAND_GOLD}`,
   borderRadius: '50%',
-  boxShadow: '0 5px 0 #1a3468, 0 9px 14px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.15)',
+  boxShadow: '0 5px 0 #7a5f26, 0 9px 14px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.15)',
   color: '#f2ede0',
   cursor: 'pointer',
   fontFamily: 'system-ui, sans-serif',
