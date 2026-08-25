@@ -144,12 +144,35 @@ export function getValidMoves(
 
       // PC2.4: a barrier blocks passage, not just landing - walk every square this move crosses
       // (not the final one, checked separately below with its own landing rules).
+      //
+      // Reported directly, via a systematic rules audit Carlos himself requested: this loop used
+      // to always treat every intermediate step as a *shared-track* square
+      // ((piece.trackPosition + step) % board.trackLength), even once step had actually carried the
+      // piece past the home entrance into its own private home-corridor coordinate space - a
+      // completely separate index range, not a continuation of the track loop. Two confirmed bugs
+      // from that one mistake: (1) a real barrier sitting inside the corridor could be silently
+      // walked straight through, since ownPiecesInCorridor (the function that actually checks a
+      // corridor square) was never consulted for any square except the final landing one; (2) the
+      // wrapped-around track index a corridor-crossing step computed could accidentally *alias* a
+      // real but entirely unrelated barrier elsewhere on the shared track (a different player's
+      // own barrier, nowhere near this piece's real path), falsely blocking an otherwise-legal move
+      // that never actually touches that square. Splitting the check by whether a given step is
+      // still on the shared track (<=distanceToHomeEntrance) or has already crossed into the
+      // corridor (the same split the landing-square logic just below already makes) fixes both.
       let blockedInTransit = false
       for (let step = 1; step < amount; step++) {
-        const intermediatePos = (piece.trackPosition + step) % board.trackLength
-        if (piecesOnTrackSquare(allPlayers, intermediatePos) >= 2) {
-          blockedInTransit = true
-          break
+        if (step <= distanceToHomeEntrance) {
+          const intermediatePos = (piece.trackPosition + step) % board.trackLength
+          if (piecesOnTrackSquare(allPlayers, intermediatePos) >= 2) {
+            blockedInTransit = true
+            break
+          }
+        } else {
+          const intermediateCorridorIndex = step - distanceToHomeEntrance - 1
+          if (ownPiecesInCorridor(allPlayers, player.color, intermediateCorridorIndex) >= 2) {
+            blockedInTransit = true
+            break
+          }
         }
       }
       if (blockedInTransit) continue
@@ -178,6 +201,18 @@ export function getValidMoves(
     if (piece.state === 'InHomeCorridor') {
       const newCorridorPos = piece.corridorPosition + amount
       if (newCorridorPos > lane.corridorLength - 1) continue // overshoot - exact count required
+
+      // Same transit gap as the OnTrack case above, purely within the corridor this time - a move
+      // that starts already inside the corridor had no transit check at all before, only ever
+      // checking the final landing square below.
+      let blockedInCorridorTransit = false
+      for (let step = piece.corridorPosition + 1; step < newCorridorPos; step++) {
+        if (ownPiecesInCorridor(allPlayers, player.color, step) >= 2) {
+          blockedInCorridorTransit = true
+          break
+        }
+      }
+      if (blockedInCorridorTransit) continue
 
       const isFinal = newCorridorPos === lane.corridorLength - 1
       if (!isFinal && ownPiecesInCorridor(allPlayers, player.color, newCorridorPos) >= 2) continue
