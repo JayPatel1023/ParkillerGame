@@ -838,6 +838,44 @@ describe('TurnManager - a normal roll cannot move a piece out of its own barrier
 
     expect(offered.some((m) => m.piece === red.pieces[0])).toBe(true)
   })
+
+  // Reported directly, from a real play session: dieA=4 landed a red pawn exactly on an opposing
+  // Parkiller sitting on a protected square, which PK4 says just coexist as a barrier rather than
+  // sending the pawn home (PK5) - then the player used the *other*, non-double die (6) to move that
+  // same pawn on again, and the client asked whether that should really have been allowed. It
+  // should: per this describe block's own rulebook page, "OPENING A BARRIER" names only two ways to
+  // free a *same-color* barrier (a double, or an opposing Parki) precisely because that one has a
+  // defined release valve - a mixed pawn+Parkiller pairing has no such mechanism (the Parkiller
+  // isn't the mover's own piece, and doubles don't move it at all), so treating it as a lock would
+  // strand it with no way out for either side. ownBarrierTrackPosition only ever counts a player's
+  // own 4 pieces (see its own doc comment) - the opposing Parkiller was never a candidate to begin
+  // with, so this pawn was never "in a barrier" for this obligation's own purposes at all.
+  it('a pawn sharing a protected square with an opposing Parkiller is not locked - the other die still moves it', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 6
+    blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+    blue.parkiller.trackPosition = 10 // a safe square on this test board - PK4 applies, not PK5
+
+    const dice = new ScriptedDice([4, 6, 1]) // not a double
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    manager.requestRoll()
+    const firstMove = manager.submitMove(red.pieces[0]) // 6 -> 10, lands on blue's protected Parkiller
+
+    // PK4: coexists, no elimination either way - the pawn is still right there, on the same square.
+    expect(firstMove?.eliminatedByParkiller).toBeFalsy()
+    expect(red.pieces[0].state).toBe('OnTrack')
+    expect(red.pieces[0].trackPosition).toBe(10)
+    expect(blue.parkiller.state).toBe('InPlay')
+
+    // The remaining die (6, not a double) still moves this same pawn on - it was never locked.
+    const secondMove = manager.submitMove(red.pieces[0]) // 10 -> 16
+    expect(secondMove).not.toBeNull()
+    expect(red.pieces[0].trackPosition).toBe(16)
+  })
 })
 
 describe('TurnManager - landing on an unprotected opposing Parkiller (PK5)', () => {
