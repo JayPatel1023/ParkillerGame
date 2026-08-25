@@ -442,9 +442,20 @@ export class TurnManager {
   // resolveParkillerCollisions - already unaffected by this, since the Parki's own black die is
   // never subject to offerMoves()/offerReward() at all). Computed fresh on every call, not cached,
   // since a barrier can form or break mid-roll.
+  // Reported directly, via a systematic rules audit Carlos himself requested: `ownBarrierCorridor`
+  // used to only ever get computed `ownBarrierTrack === null ? ... : null` - the instant a player
+  // also had a barrier on the shared track, their own separate corridor barrier (a fully legitimate
+  // simultaneous state, using all 4 of a color's own pieces - 2 in each) went completely invisible
+  // to this check, silently unlocking it on a non-double roll. Verified directly: a Red with a
+  // track barrier at position 5 AND a corridor barrier at corridor index 1 offered real, legal
+  // CorridorMove options for the corridor-barrier pieces on a plain [3, 2] roll. Both barrier kinds
+  // are independent detectors (ownBarrierTrackPosition/ownCorridorBarrierPosition each only ever
+  // scan this same player's own 4 pieces) and can coexist - computing both unconditionally fixes
+  // this for both callers of this method (offerMoves' own excludeLockedBarrierPieces below, and
+  // offerReward's own excludeBarrierAndSpentPiece, which share this exact helper).
   private pieceIsInOwnBarrier(piece: Piece): boolean {
     const ownBarrierTrack = ownBarrierTrackPosition(this.currentPlayer)
-    const ownBarrierCorridor = ownBarrierTrack === null ? ownCorridorBarrierPosition(this.currentPlayer) : null
+    const ownBarrierCorridor = ownCorridorBarrierPosition(this.currentPlayer)
     return (
       (ownBarrierTrack !== null && piece.state === 'OnTrack' && piece.trackPosition === ownBarrierTrack) ||
       (ownBarrierCorridor !== null && piece.state === 'InHomeCorridor' && piece.corridorPosition === ownBarrierCorridor)
