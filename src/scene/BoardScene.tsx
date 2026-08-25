@@ -480,6 +480,10 @@ interface BoardSceneProps {
    * small clickable markers above the piece itself instead of a flat 2D dialog. */
   pieceChoice: { piece: Piece; amounts: number[] } | null
   onChoosePieceAmount: (amount: number) => void
+  /** See GameSession's own botPieceHighlighted doc comment - the one piece a bot has just decided
+   * to move, run through the same indicator a human's own choosable piece gets (PieceMesh's own
+   * `highlighted` prop), null otherwise. */
+  botHighlightedPiece: Piece | null
 }
 
 export function BoardScene({
@@ -498,6 +502,7 @@ export function BoardScene({
   onParkillerAnimationComplete,
   pieceChoice,
   onChoosePieceAmount,
+  botHighlightedPiece,
 }: BoardSceneProps) {
   // While a move is still animating, its `hops` reconstruction runs against the piece's already-
   // fully-updated logical state (game rules apply moves instantly; only the visual hop-by-hop
@@ -856,6 +861,7 @@ export function BoardScene({
             selectable={selectablePieces.has(piece)}
             onSelect={onSelectPiece}
             isCurrentTurn={piece.color === currentPlayerColor}
+            highlighted={piece === botHighlightedPiece}
             crowdedScale={crowded ? CROWDED_SCALE : 1}
           />
         )

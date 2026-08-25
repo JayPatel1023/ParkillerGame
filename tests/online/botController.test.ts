@@ -4,6 +4,7 @@ import type { DiceLike } from '../../src/core/dice'
 import { createPlayerState } from '../../src/core/gameFlow/playerState'
 import { TurnManager } from '../../src/core/gameFlow/turnManager'
 import type { PieceColor } from '../../src/core/pieceColor'
+import type { Piece } from '../../src/core/pieces/piece'
 import { defaultRuleSettings } from '../../src/core/rules/ruleSettings'
 import { BotController } from '../../src/core/gameFlow/botController'
 import { RecordingDice } from '../../src/online/dice'
@@ -35,6 +36,21 @@ function buildTestBoard(): BoardData {
       Blue: { color: 'Blue', entryTrackIndex: 10, homeEntranceTrackIndex: 9, corridorLength: 6 },
     },
     safeTrackIndices: new Set([0, 10]),
+  }
+}
+
+// Same shape as tests/turnManager.test.ts's own buildBigTestBoard - a capture's own 20-square
+// reward needs real track room ahead so it never nears home, unlike buildTestBoard's own
+// deliberately tight 20-length track.
+function buildBigTestBoard(): BoardData {
+  return {
+    playerCount: 2,
+    trackLength: 40,
+    lanes: {
+      Red: { color: 'Red', entryTrackIndex: 0, homeEntranceTrackIndex: 39, corridorLength: 6 },
+      Blue: { color: 'Blue', entryTrackIndex: 20, homeEntranceTrackIndex: 19, corridorLength: 6 },
+    },
+    safeTrackIndices: new Set([0, 20]),
   }
 }
 
@@ -138,6 +154,88 @@ describe('BotController', () => {
     // *that* finishes either.
     vi.advanceTimersByTime(200) // t=400
     expect(redMoveCount).toBe(2)
+
+    bots.dispose()
+  })
+
+  // Reported directly ("봇이게임할때 말을 이동할차례가되여서 이동시킬때에도 자기 차례를 알리는 효과를
+  // 넣어달라" - add the same turn-announcing effect for bot moves too): a human's own choosable
+  // piece gets a whole ring/glow/beam indicator; a bot's move used to have no equivalent cue at
+  // all. pieceHighlighted should announce the chosen piece as soon as it's decided (not only right
+  // before it submits, so the highlight has time to actually read) and clear back to null once the
+  // move is actually submitted, handing off to the piece's own hop animation.
+  it('announces the piece it has decided to move via pieceHighlighted, then clears it on submit', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5
+    const dice = new RecordingDice(new ScriptedDice([2, 4, 1]))
+    const inner = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+    const network = new FakeRoomNetwork(MASTER_ACTOR)
+    const transport = network.createTransport(MASTER_ACTOR)
+    const host = new HostTurnManagerBridge(inner, dice, [red, blue], transport, new Map<number, PieceColor>())
+    const thinkDelayMs = 50
+    const hopDurationMs = 100
+    const diceSpinMs = 50
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), thinkDelayMs, hopDurationMs, diceSpinMs)
+
+    const seen: (Piece | null)[] = []
+    bots.pieceHighlighted.on((piece) => seen.push(piece))
+
+    host.start()
+    vi.advanceTimersByTime(thinkDelayMs) // the roll fires - the Parkiller hop's own busy window starts
+    // The bot has already decided which piece to move, well before it actually submits.
+    expect(seen).toEqual([red.pieces[0]])
+
+    // Past the Parkiller hop's own budget - the first move now fires and submits, clearing the
+    // highlight. (Only one piece is on the track here, so a second die may re-offer the same piece
+    // at its new position for a further move right after - this test only cares about the first
+    // decide-then-clear cycle, hence checking a prefix rather than the full emission list.)
+    vi.advanceTimersByTime(150)
+    expect(seen.slice(0, 2)).toEqual([red.pieces[0], null])
+
+    bots.dispose()
+  })
+
+  // Reported directly, with the client's own rulebook page ("PAWN ELIMINATES PAWN... BONUS -
+  // Choose one: Move one Pawn 20 spaces. / Move one Pawn 10 spaces and another pawn 10 spaces"):
+  // both options were already fully implemented and offered (verified directly - turnManager.ts's
+  // own offerReward genuinely offers both amounts) but a naive "always pick moves[0]" bot never
+  // explored the split, since offerReward lists the full-amount option before the split one - a
+  // human watching only bot play would see nothing but "one pawn takes the whole 20," every single
+  // time, indistinguishable from the split simply not existing.
+  it('prefers the split path over the full amount when a capture grants a reward', () => {
+    const board = buildBigTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 3 // dieA(3) lands it on blue.pieces[0] at 6 - a capture
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 0 // in play too, so the split has a genuine second pawn to use
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 6
+    const dice = new RecordingDice(new ScriptedDice([3, 4, 1]))
+    const inner = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+    const network = new FakeRoomNetwork(MASTER_ACTOR)
+    const transport = network.createTransport(MASTER_ACTOR)
+    const host = new HostTurnManagerBridge(inner, dice, [red, blue], transport, new Map<number, PieceColor>())
+    const thinkDelayMs = 10
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), thinkDelayMs, 2, 2)
+
+    host.start()
+    vi.advanceTimersByTime(thinkDelayMs) // the roll fires
+    vi.advanceTimersByTime(thinkDelayMs) // the capturing move (piece0, dieA=3: 3 -> 6) submits,
+    // which queues and immediately offers the capture's own 20-square reward
+    expect(red.pieces[0].trackPosition).toBe(6)
+    expect(blue.pieces[0].state).toBe('InYard') // confirms the capture actually happened
+
+    vi.advanceTimersByTime(thinkDelayMs) // the reward move fires
+    // pieces[0] (the capturing piece itself, still eligible for the reward like any other piece in
+    // play) moved by 10 more - 6 -> 16 - not the full 20 from its own position (6 -> 26). Confirms
+    // the split path was picked over the lump sum, not just that *some* move happened.
+    expect(red.pieces[0].trackPosition).toBe(16)
+    expect(red.pieces[1].trackPosition).toBe(0) // untouched by this first half of the split
 
     bots.dispose()
   })

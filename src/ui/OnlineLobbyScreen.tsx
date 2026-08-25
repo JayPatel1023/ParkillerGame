@@ -264,7 +264,11 @@ export default function OnlineLobbyScreen() {
     // effect above for why the broadcast alone isn't enough.
     connection.setRoomProperties({ started: true, startedColors: colors, startedSeats: realSeatsRef.current })
     connection.broadcast({ type: 'gameStarted', colors, seats: realSeatsRef.current })
-    setSession({ turnManager: bridge, players })
+    // botPieceHighlighted only ever comes from *this* client's own BotController - bots are only
+    // ever driven by the Master (see this file's own doc comment on that), so a non-Master client
+    // has no local BotController and its board simply never shows this specific extra cue, same as
+    // every other host-only aspect of driving the bots themselves.
+    setSession({ turnManager: bridge, players, botPieceHighlighted: botControllerRef.current?.pieceHighlighted })
     setPhase('game')
   }
 
