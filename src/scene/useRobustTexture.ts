@@ -68,6 +68,25 @@ function loadWithRetry(url: string, attempt: number) {
   )
 }
 
+// Reported directly, with a video: even a healthy fetch still takes some non-zero real time, so
+// the very first time a board's texture is actually needed - right as the game screen itself
+// mounts - there's an inherent gap before it's cached, during which BoardMesh/TrackTile render
+// their plain fallback color ("로딩속도가뜬것으로 하여 오락판이 현시될때 먼저 흰판이 되였다가 오락판이
+// 생긴다" - because of the loading speed, the board first becomes a white board before the real
+// board appears). Confirmed directly against the live deployed site: this flash is real, brief
+// (~150ms), and happens every time a board is shown for the first time in a session. The fix isn't
+// another retry/fallback improvement (the fetch already succeeds fine) - it's not needing to fetch
+// at that moment at all. Call this once, as early as possible (App.tsx, on mount), for every image
+// this session could plausibly need - by the time a player has clicked through player-count and
+// color selection (multiple real seconds of human interaction), the fetch has almost always long
+// since finished and populated the same `textureCache` useRobustTexture itself reads from, so the
+// eventual real mount hits the cache-first path and renders immediately, no flash at all.
+export function preloadTexture(url: string): void {
+  if (textureCache.has(url) || inFlight.has(url)) return
+  inFlight.set(url, new Set())
+  loadWithRetry(url, 1)
+}
+
 export function useRobustTexture(url: string): THREE.Texture | null {
   const [texture, setTexture] = useState<THREE.Texture | null>(() => textureCache.get(url) ?? null)
 
