@@ -257,8 +257,24 @@ const RING_BASE_OPACITY = 0.95
 const RING_PULSE_AMPLITUDE = 0.15
 const GLOW_BASE_OPACITY = 0.35
 const GLOW_PULSE_AMPLITUDE = 0.15
-const BEAM_BASE_OPACITY = 0.4
-const BEAM_PULSE_AMPLITUDE = 0.2
+
+// Reported directly, again ("말이 자기차례가 되여 이동할수있을때의 애니머션효과를 다시 새롭게
+// 만들어달라 멋지게" - redo the movable-piece effect from scratch, make it flashier): the previous
+// version (a second static ring + a static light beam) was legible but inert - once you'd seen it
+// once, nothing about it kept moving in a new way. Three genuinely new, continuously-animated
+// elements added below instead of another static layer: a dashed ring that reads as a scanning
+// mechanism rather than a second plain circle (DASH_COUNT), a radar-style ring that repeatedly
+// expands and fades outward like a pulse/heartbeat (PING_*), and a stream of sparkle motes that
+// spiral inward while rising from the base up past the marker (SPARKLE_*, further below) -
+// replacing the old static beam, which stopped reading as "energy" the moment you noticed it
+// wasn't actually moving.
+const DASH_COUNT = 10
+const DASH_GAP_RATIO = 0.55 // fraction of each dash's own slot left as a gap - >0.5 reads as dashed rather than nearly-solid
+
+const PING_CYCLE = 1.3 // seconds per pulse
+const PING_MIN_SCALE = 0.85
+const PING_MAX_SCALE = 2.35
+const PING_MAX_OPACITY = 0.55
 
 const MARKER_BOB_SPEED = 2.2
 const MARKER_BOB_AMPLITUDE = 0.05
@@ -267,6 +283,15 @@ const MARKER_SPIN_SPEED = 2.0
 // real margin, scaling correctly with piece size instead of a fixed guess.
 const MARKER_BASE_Y = PAWN_TOTAL_HEIGHT * 1.3
 const MARKER_SIZE = PIECE_BASE_RADIUS * 0.55
+
+const SPARKLE_COUNT = 6
+const SPARKLE_CYCLE = 1.8 // seconds for one particle's full rise, staggered per-particle below
+const SPARKLE_SPIN_SPEED = 1.1 // radians/sec, slow twist as the whole stream spirals upward
+const SPARKLE_START_RADIUS = PIECE_BASE_RADIUS * 1.6
+const SPARKLE_END_RADIUS = PIECE_BASE_RADIUS * 0.25
+const SPARKLE_MAX_HEIGHT = MARKER_BASE_Y * 0.85
+const SPARKLE_MAX_OPACITY = 0.9
+const SPARKLE_SIZE = PIECE_BASE_RADIUS * 0.12
 
 const IDLE_SCALE = 1
 const SELECTABLE_SCALE = 1.3
@@ -304,10 +329,12 @@ export function PieceMesh({
   const introRef = useRef({ done: false, elapsed: 0 })
   const indicatorGroupRef = useRef<Group>(null)
   const ringOuterRef = useRef<Mesh>(null)
-  const ringInnerRef = useRef<Mesh>(null)
+  const dashRingRef = useRef<Group>(null)
   const glowRef = useRef<Mesh>(null)
-  const beamRef = useRef<Mesh>(null)
+  const pingRef = useRef<Mesh>(null)
+  const sparkleRefs = useRef<(Group | null)[]>([])
   const markerRef = useRef<Group>(null)
+  const markerHaloRef = useRef<Mesh>(null)
   const indicatorElapsedRef = useRef(0)
   const bodyMaterialRef = useRef<THREE.MeshPhysicalMaterial>(null)
   const prevSelectableRef = useRef(false)
@@ -359,7 +386,6 @@ export function PieceMesh({
         const t = indicatorElapsedRef.current
 
         if (ringOuterRef.current) ringOuterRef.current.rotation.z += delta * RING_OUTER_SPIN_SPEED
-        if (ringInnerRef.current) ringInnerRef.current.rotation.z += delta * RING_INNER_SPIN_SPEED
         // Smoothed 0..1..0 rather than a raw sine, so the breathing lingers softly at each extreme
         // instead of moving fastest exactly where it's most visible (a plain sine's own shape).
         const raw = Math.sin(t * RING_PULSE_SPEED) * 0.5 + 0.5
@@ -370,9 +396,16 @@ export function PieceMesh({
           ;(ringOuterRef.current.material as THREE.MeshBasicMaterial).opacity = ringOpacity
           ringOuterRef.current.scale.setScalar(ringScale)
         }
-        if (ringInnerRef.current) {
-          ;(ringInnerRef.current.material as THREE.MeshBasicMaterial).opacity = ringOpacity
-          ringInnerRef.current.scale.setScalar(ringScale)
+        // Dashed tech ring - DASH_COUNT separate gapped arcs (not one continuous circle) spinning
+        // opposite the smooth outer ring, reading as a scanning mechanism rather than a second
+        // identical ring.
+        if (dashRingRef.current) {
+          dashRingRef.current.rotation.z += delta * RING_INNER_SPIN_SPEED
+          dashRingRef.current.scale.setScalar(ringScale)
+          for (const child of dashRingRef.current.children) {
+            const mat = (child as Mesh).material as THREE.MeshBasicMaterial
+            mat.opacity = ringOpacity
+          }
         }
         if (glowRef.current) {
           const glowMat = glowRef.current.material as THREE.MeshBasicMaterial
@@ -380,14 +413,36 @@ export function PieceMesh({
           const glowScale = 1 + flashFade * FLASH_RING_SCALE_BOOST
           glowRef.current.scale.set(glowScale, glowScale, 1)
         }
-        if (beamRef.current) {
-          ;(beamRef.current.material as THREE.MeshBasicMaterial).opacity = BEAM_BASE_OPACITY + pulse * BEAM_PULSE_AMPLITUDE
+        // Radar-style expanding ping - grows and fades on its own short loop (PING_CYCLE),
+        // radiating outward like a heartbeat/pulse instead of sitting at a fixed size like the
+        // rings above it.
+        if (pingRef.current) {
+          const pingT = (t % PING_CYCLE) / PING_CYCLE
+          pingRef.current.scale.setScalar(THREE.MathUtils.lerp(PING_MIN_SCALE, PING_MAX_SCALE, easeOutCubic(pingT)))
+          ;(pingRef.current.material as THREE.MeshBasicMaterial).opacity = (1 - pingT) * PING_MAX_OPACITY
+        }
+        // Rising sparkle motes - spiral inward while climbing from the base toward the marker,
+        // staggered per-particle (each offset by its own index within SPARKLE_CYCLE) so they read
+        // as a continuous stream rather than one particle repeating in sync.
+        for (let i = 0; i < sparkleRefs.current.length; i++) {
+          const sparkle = sparkleRefs.current[i]
+          if (!sparkle) continue
+          const u = (((t / SPARKLE_CYCLE + i / SPARKLE_COUNT) % 1) + 1) % 1
+          const angle = sparkleAngles[i] + t * SPARKLE_SPIN_SPEED
+          const radius = THREE.MathUtils.lerp(SPARKLE_START_RADIUS, SPARKLE_END_RADIUS, u)
+          sparkle.position.set(Math.cos(angle) * radius, THREE.MathUtils.lerp(0, SPARKLE_MAX_HEIGHT, u), Math.sin(angle) * radius)
+          const fadeIn = Math.min(1, u / 0.15)
+          const fadeOut = Math.min(1, (1 - u) / 0.3)
+          sparkle.scale.setScalar(THREE.MathUtils.lerp(1, 0.35, u))
+          const sparkleMesh = sparkle.children[0] as Mesh
+          ;(sparkleMesh.material as THREE.MeshBasicMaterial).opacity = Math.min(fadeIn, fadeOut) * SPARKLE_MAX_OPACITY
         }
 
         if (markerRef.current) {
           markerRef.current.position.y = MARKER_BASE_Y + Math.sin(t * MARKER_BOB_SPEED) * MARKER_BOB_AMPLITUDE
           markerRef.current.rotation.y += delta * MARKER_SPIN_SPEED
         }
+        if (markerHaloRef.current) markerHaloRef.current.rotation.z -= delta * MARKER_SPIN_SPEED * 0.6
       } else {
         indicatorGroupRef.current.visible = false
         indicatorElapsedRef.current = 0
@@ -483,6 +538,8 @@ export function PieceMesh({
     () => PIECE_PROFILE_RAW.map(([r, y]) => new THREE.Vector2(r * PROFILE_SCALE, y * PROFILE_SCALE * PIECE_HEIGHT_SCALE)),
     [],
   )
+  const dashThetas = useMemo(() => Array.from({ length: DASH_COUNT }, (_, i) => (i / DASH_COUNT) * Math.PI * 2), [])
+  const sparkleAngles = useMemo(() => Array.from({ length: SPARKLE_COUNT }, (_, i) => (i / SPARKLE_COUNT) * Math.PI * 2), [])
 
   return (
     <group
@@ -515,11 +572,11 @@ export function PieceMesh({
       {/* Movable cue: visible only on the piece(s) with an actual legal move this roll - not on
           every piece belonging to the current player for the whole turn. */}
       <group ref={indicatorGroupRef} visible={false}>
-        {/* Counter-rotating double ring at the base - flat (rotated onto the board plane) and
-            unlit (MeshBasicMaterial) so it reads as a glow rather than a lit disc, just outside
-            the piece's own footprint so it doesn't hide the base. The outer group applies the
-            "lay flat" rotation once; each ring's own rotation.z then spins it within that already-
-            flattened plane, independent of the other ring. */}
+        {/* Base ring cluster - flat (rotated onto the board plane) and unlit (MeshBasicMaterial) so
+            it reads as a glow rather than a lit disc, just outside the piece's own footprint so it
+            doesn't hide the base. The outer group applies the "lay flat" rotation once; each ring's
+            own rotation.z then spins it within that already-flattened plane, independent of the
+            others. */}
         <group position={[0, 0.004, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           {/* Soft glow disc under everything else - reads at a glance from across the board, before
               the eye even resolves the ring's own thin geometry (same trick BarrierIndicator uses). */}
@@ -538,23 +595,52 @@ export function PieceMesh({
             <ringGeometry args={[PIECE_BASE_RADIUS * 1.55, PIECE_BASE_RADIUS * 1.8, 40]} />
             <meshBasicMaterial color="#ffcc00" transparent opacity={RING_BASE_OPACITY} side={THREE.DoubleSide} depthWrite={false} />
           </mesh>
-          <mesh ref={ringInnerRef}>
-            {/* Low segment count on purpose - reads as a faceted/angular ring, distinct from the
-                smooth outer one, rather than two identical circles just spinning oppositely. */}
-            <ringGeometry args={[PIECE_BASE_RADIUS * 2.0, PIECE_BASE_RADIUS * 2.2, 6]} />
-            <meshBasicMaterial color="#fff4c2" transparent opacity={RING_BASE_OPACITY} side={THREE.DoubleSide} depthWrite={false} />
+          {/* Dashed tech ring - DASH_COUNT separate gapped arcs (not one continuous circle),
+              spinning opposite the smooth outer ring, so it reads as a scanning mechanism rather
+              than a second identical ring. */}
+          <group ref={dashRingRef}>
+            {dashThetas.map((theta, i) => (
+              <mesh key={i}>
+                <ringGeometry
+                  args={[PIECE_BASE_RADIUS * 2.0, PIECE_BASE_RADIUS * 2.2, 4, 1, theta, ((Math.PI * 2) / DASH_COUNT) * (1 - DASH_GAP_RATIO)]}
+                />
+                <meshBasicMaterial color="#fff4c2" transparent opacity={RING_BASE_OPACITY} side={THREE.DoubleSide} depthWrite={false} />
+              </mesh>
+            ))}
+          </group>
+          {/* Radar-style expanding ping - continuously grows and fades on its own short loop
+              (PING_CYCLE), radiating outward like a heartbeat/pulse instead of sitting at a fixed
+              size like the rings above it. */}
+          <mesh ref={pingRef} position={[0, 0, -0.0005]}>
+            <ringGeometry args={[PIECE_BASE_RADIUS * 1.35, PIECE_BASE_RADIUS * 1.55, 40]} />
+            <meshBasicMaterial color={GLOW_COLOR} transparent opacity={0} side={THREE.DoubleSide} depthWrite={false} />
           </mesh>
         </group>
-        {/* Thin vertical light beam from the ring up to just under the marker - a "spotlight on this
-            exact piece" language nothing else on the board uses, so the cue reads as a directed
-            effect even from a wide, zoomed-out camera where the ring/marker themselves are tiny. */}
-        <mesh ref={beamRef} position={[0, MARKER_BASE_Y * 0.42, 0]}>
-          <cylinderGeometry args={[PIECE_BASE_RADIUS * 0.05, PIECE_BASE_RADIUS * 0.16, MARKER_BASE_Y * 0.8, 10]} />
-          <meshBasicMaterial color={GLOW_COLOR} transparent opacity={BEAM_BASE_OPACITY} depthWrite={false} />
-        </mesh>
+        {/* Rising sparkle motes - spiral inward while climbing from the base up past the marker,
+            staggered per-particle so they read as a continuous stream. Replaces the old static
+            light beam, which stopped reading as "energy" the moment you noticed it wasn't moving. */}
+        {sparkleAngles.map((_, i) => (
+          <group
+            key={i}
+            ref={(el) => {
+              sparkleRefs.current[i] = el
+            }}
+          >
+            <mesh>
+              <octahedronGeometry args={[SPARKLE_SIZE, 0]} />
+              <meshBasicMaterial color="#fff9e6" transparent opacity={0} depthWrite={false} />
+            </mesh>
+          </group>
+        ))}
         {/* Floating gem marker above the piece's head - the clearer, more game-familiar "this is
-            yours, act on it" cue (bob + spin), on top of the base ring rather than instead of it. */}
+            yours, act on it" cue (bob + spin), on top of the base ring rather than instead of it.
+            The halo ring around it counter-spins independently of the gem's own y-rotation, so the
+            marker reads as a small self-contained mechanism rather than a single spinning shape. */}
         <group ref={markerRef} position={[0, MARKER_BASE_Y, 0]}>
+          <mesh ref={markerHaloRef} rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[MARKER_SIZE * 1.6, MARKER_SIZE * 1.85, 24]} />
+            <meshBasicMaterial color="#ffcc00" transparent opacity={0.5} side={THREE.DoubleSide} depthWrite={false} />
+          </mesh>
           <mesh>
             <octahedronGeometry args={[MARKER_SIZE * 1.2, 0]} />
             <meshBasicMaterial color={OUTLINE_COLOR} />
