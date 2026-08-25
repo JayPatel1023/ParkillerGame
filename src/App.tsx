@@ -11,12 +11,27 @@ import WaypointEditor from './tools/WaypointEditor'
 import ComponentPreview from './tools/ComponentPreview'
 import ParkillerEditor from './tools/ParkillerEditor'
 import OnlineLobbyScreen from './ui/OnlineLobbyScreen'
+import { preloadTexture } from './scene/useRobustTexture'
 
 type Screen = 'start' | 'selectCount' | 'selectColor' | 'game'
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('start')
   const [playerCount, setPlayerCount] = useState(4)
+  // Reported directly, with a video: the board still flashes plain/white for a brief moment the
+  // very first time it's shown in a session, even after useRobustTexture's own retry/fallback fix -
+  // a healthy fetch still takes real time, and that first moment was always right as the game
+  // screen itself mounted, the earliest point anything actually asked for that image. Kicking off
+  // every board (all 5 player counts, not just whichever one gets picked - cheap, small JPGs, and
+  // there's no way to know the choice in advance) plus the 2 shared tile images as early as
+  // possible instead - by the time a player has clicked through player-count and color selection,
+  // this has almost always long finished, so the real mount hits useRobustTexture's own cache-first
+  // path and renders immediately instead of showing its plain fallback color at all.
+  useEffect(() => {
+    Object.values(BOARD_DEFINITIONS).forEach((def) => preloadTexture(def.boardImage))
+    preloadTexture('/tiles/tile-fill.png')
+    preloadTexture('/tiles/tile-border.png')
+  }, [])
   // null means classic hotseat (every color passed around one device) - see ColorSelector's own
   // "Jugar todos los colores" option. Non-null means vs-bots: the human plays only this color,
   // every other color in this count's own TURN_ORDER_BY_COUNT is bot-driven.
