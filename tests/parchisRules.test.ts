@@ -224,6 +224,80 @@ describe('parchisRules', () => {
       const move = moves.find((m) => m.piece === red.pieces[1])
       expect(move?.kind).toBe('FinishMove')
     })
+
+    // Reported directly, via a systematic rules audit Carlos himself requested: a move that starts
+    // on the shared track and finishes inside the home corridor used to only ever check *shared
+    // track* squares for a blocking barrier along the way ((trackPosition + step) % trackLength),
+    // even for steps that had already actually carried the piece past the home entrance into its
+    // own private corridor coordinate space. A real corridor barrier sitting in the path could be
+    // silently walked straight through - this is the pass-through half of that bug.
+    it('a barrier inside the home corridor blocks a track-to-corridor move that would cross it', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+
+      red.pieces[0].state = 'OnTrack'
+      red.pieces[0].trackPosition = 17 // distanceToHomeEntrance = 2
+      red.pieces[1].state = 'InHomeCorridor'
+      red.pieces[1].corridorPosition = 0
+      red.pieces[2].state = 'InHomeCorridor'
+      red.pieces[2].corridorPosition = 0 // own corridor barrier at index 0
+
+      const settings = defaultRuleSettings()
+      // 17 -> track 18 -> track 19 (entrance) -> corridor 0 (the barrier) -> corridor 1 (destination).
+      const moves = getValidMoves(board, red, [red], 4, settings)
+      expect(moves.find((m) => m.piece === red.pieces[0])).toBeUndefined()
+    })
+
+    // The other half of the same bug: the wrapped-around shared-track index a corridor-crossing
+    // step used to compute could accidentally *alias* a real but entirely unrelated barrier
+    // elsewhere on the shared track (a different player's own barrier this piece's real path never
+    // touches at all), falsely blocking an otherwise-legal move.
+    it('an unrelated barrier elsewhere on the shared track does not falsely block a track-to-corridor move', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+
+      red.pieces[0].state = 'OnTrack'
+      red.pieces[0].trackPosition = 18 // distanceToHomeEntrance = 1
+
+      blue.pieces[0].state = 'OnTrack'
+      blue.pieces[0].trackPosition = 0
+      blue.pieces[1].state = 'OnTrack'
+      blue.pieces[1].trackPosition = 0 // Blue's own barrier at track 0 - nowhere on Red's real path
+
+      const settings = defaultRuleSettings()
+      // 18 -> track 19 (entrance) -> corridor 0 -> corridor 1 (destination). Never touches track 0 -
+      // the old code's own (18+2)%20=0 aliasing would have wrongly blocked this.
+      const moves = getValidMoves(board, red, [red, blue], 3, settings)
+      const move = moves.find((m) => m.piece === red.pieces[0])
+      expect(move).toEqual({
+        piece: red.pieces[0],
+        kind: 'CorridorMove',
+        resultingTrackPosition: -1,
+        resultingCorridorPosition: 1,
+        amount: 3,
+        diceSource: 'sum',
+      })
+    })
+
+    // Same transit gap, purely within the corridor - a move that starts already InHomeCorridor had
+    // no transit check at all before, only ever checking the final landing square.
+    it('a barrier inside the home corridor blocks a corridor-to-corridor move that would cross it', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+
+      red.pieces[0].state = 'InHomeCorridor'
+      red.pieces[0].corridorPosition = 0
+      red.pieces[1].state = 'InHomeCorridor'
+      red.pieces[1].corridorPosition = 1
+      red.pieces[2].state = 'InHomeCorridor'
+      red.pieces[2].corridorPosition = 1 // own corridor barrier at index 1
+
+      const settings = defaultRuleSettings()
+      // 0 -> 1 (the barrier) -> 2 (destination, not the final square at 3).
+      const moves = getValidMoves(board, red, [red], 2, settings)
+      expect(moves.find((m) => m.piece === red.pieces[0])).toBeUndefined()
+    })
   })
 
   describe('departure / entry square (PC2.1)', () => {

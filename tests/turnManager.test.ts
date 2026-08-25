@@ -839,6 +839,43 @@ describe('TurnManager - a normal roll cannot move a piece out of its own barrier
     expect(offered.some((m) => m.piece === red.pieces[0])).toBe(true)
   })
 
+  // Reported directly, via a systematic rules audit Carlos himself requested: pieceIsInOwnBarrier
+  // used to only ever compute a corridor barrier when there was *no* track barrier at all
+  // (`ownBarrierTrack === null ? ownCorridorBarrierPosition(...) : null`) - the instant a player
+  // also had a barrier on the shared track, their own separate corridor barrier went completely
+  // invisible to this check and silently unlocked, even though a color's own 4 pieces splitting
+  // into a track pair and a separate corridor pair is a fully legitimate, reachable state.
+  it('a corridor barrier stays locked even while the same player also has a track barrier elsewhere', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 5 // track barrier at 5
+    red.pieces[2].state = 'InHomeCorridor'
+    red.pieces[2].corridorPosition = 1
+    red.pieces[3].state = 'InHomeCorridor'
+    red.pieces[3].corridorPosition = 1 // corridor barrier at index 1, at the same time
+
+    const dice = new ScriptedDice([3, 2, 1]) // not a double
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let offered: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((moves) => (offered = moves))
+    let notPossible = false
+    manager.moveNotPossible.on(() => (notPossible = true))
+
+    manager.requestRoll()
+
+    // All 4 pieces are locked - the track barrier and the corridor barrier alike - so this roll has
+    // no legal move at all, same as the already-covered single-barrier case.
+    expect(notPossible).toBe(true)
+    expect(offered).toEqual([])
+    expect(red.pieces[2].corridorPosition).toBe(1)
+    expect(red.pieces[3].corridorPosition).toBe(1)
+  })
+
   // Reported directly, from a real play session: dieA=4 landed a red pawn exactly on an opposing
   // Parkiller sitting on a protected square, which PK4 says just coexist as a barrier rather than
   // sending the pawn home (PK5) - then the player used the *other*, non-double die (6) to move that
