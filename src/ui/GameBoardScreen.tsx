@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { BoardDefinition } from '../core/board/boardDefinition'
 import type { PlayerState } from '../core/gameFlow/playerState'
 import { getColor } from '../core/colorPalette'
-import type { TurnManagerLike } from '../core/gameFlow/turnManagerLike'
+import type { Listenable, TurnManagerLike } from '../core/gameFlow/turnManagerLike'
 import type { Piece } from '../core/pieces/piece'
 import type { MoveOption } from '../core/rules/moveOption'
 import { useTurnManager } from '../hooks/useTurnManager'
@@ -37,6 +37,11 @@ function shade(hex: string, percent: number): string {
 export interface GameSession {
   turnManager: TurnManagerLike
   players: PlayerState[]
+  /** Only set for vs-bots sessions with at least one bot seat (local: localGameSession.ts's own
+   * beginLocalGame; online: OnlineLobbyScreen's own botControllerRef) - the piece a bot has just
+   * decided to move, so it can carry the same selectable-piece indicator a human's own choosable
+   * piece already gets (see BotController's own pieceHighlighted doc comment for why). */
+  botPieceHighlighted?: Listenable<Piece | null>
 }
 
 export function GameBoardScreen({
@@ -72,6 +77,15 @@ export function GameBoardScreen({
     clearMoveAnimation,
     clearParkillerAnimation,
   } = useTurnManager(session.turnManager)
+
+  // See GameSession's own botPieceHighlighted doc comment - undefined for hotseat play and for any
+  // session with no bot seats at all, in which case this just stays null forever, same as if no
+  // piece were ever highlighted.
+  const [botHighlightedPiece, setBotHighlightedPiece] = useState<Piece | null>(null)
+  useEffect(() => {
+    setBotHighlightedPiece(null)
+    return session.botPieceHighlighted?.on((piece) => setBotHighlightedPiece(piece))
+  }, [session.botPieceHighlighted])
 
   // Reported directly, from a real two-player online test: a player could click "roll" (or a
   // board piece) during someone else's turn - the Master correctly rejects the resulting network
@@ -193,6 +207,7 @@ export function GameBoardScreen({
         onParkillerAnimationComplete={clearParkillerAnimation}
         pieceChoice={pieceChoice ? { piece: pieceChoice.piece, amounts: pieceChoice.options.map((o) => o.amount) } : null}
         onChoosePieceAmount={confirmPieceChoice}
+        botHighlightedPiece={botHighlightedPiece}
       />
 
       <div style={frameOverlayStyle} />
