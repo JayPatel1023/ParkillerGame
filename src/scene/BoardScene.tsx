@@ -511,7 +511,16 @@ export function BoardScene({
   // die's distance, instead of visibly hopping both in sequence. Gating selectability on
   // `!moveAnimation` (same guard the roll button already uses) makes that overwrite impossible - a
   // piece can't be picked for its next move until the current one's animation has actually finished.
-  const selectablePieces = new Set(moveAnimation ? [] : pendingMoves.map((m) => m.piece))
+  //
+  // Also gated on `!parkillerAnimation` - reported directly ("parki말이 다움직인다음 일반 pawn이
+  // 움직이게 해달라" - let the Parkiller finish moving, then let the regular pawn move): a roll's
+  // Parkiller hop and its own pendingMoves both arrive from the same synchronous requestRoll() call
+  // (turnManager.ts), so without this a piece could be selected and start its own hop while the
+  // Parkiller's hop is still visibly playing, reading as two things moving on the board at once.
+  // GameBoardScreen's own `visiblePendingMoves` already empties `pendingMoves` for this same reason
+  // before it ever reaches this component - this is the same guarantee made directly here too, so
+  // this component's own selectability is correct on its own terms, not only by the caller's grace.
+  const selectablePieces = new Set(moveAnimation || parkillerAnimation ? [] : pendingMoves.map((m) => m.piece))
   const allPieces = players.flatMap((player) => player.pieces)
   const sampleColor = useBoardColorSampler(definition.boardImage)
   const tileSize = estimateSquareSize(definition.trackWaypoints)
