@@ -434,26 +434,33 @@ export class TurnManager {
     return { capturedPawn, capturedParkillerColor }
   }
 
+  // Client's own corrected rulebook (rules.pdf, "OPENING A BARRIER" - "THERE ARE TWO WAYS TO
+  // OPEN A BARRIER"): a barrier blocks the path outright, including for the two pieces that *are*
+  // the barrier - a normal move simply has no legal option for either of them, full stop, not even
+  // a capture escape hatch. The only two ways out are a double (offerMoves() below, forces one
+  // open) or an opposing Parki interacting with the square (landing on it eliminates one, per
+  // resolveParkillerCollisions - already unaffected by this, since the Parki's own black die is
+  // never subject to offerMoves()/offerReward() at all). Computed fresh on every call, not cached,
+  // since a barrier can form or break mid-roll.
+  private pieceIsInOwnBarrier(piece: Piece): boolean {
+    const ownBarrierTrack = ownBarrierTrackPosition(this.currentPlayer)
+    const ownBarrierCorridor = ownBarrierTrack === null ? ownCorridorBarrierPosition(this.currentPlayer) : null
+    return (
+      (ownBarrierTrack !== null && piece.state === 'OnTrack' && piece.trackPosition === ownBarrierTrack) ||
+      (ownBarrierCorridor !== null && piece.state === 'InHomeCorridor' && piece.corridorPosition === ownBarrierCorridor)
+    )
+  }
+
   private offerMoves() {
     const state = this.diceState
     if (!state) return
 
-    // Client's own corrected rulebook (rules.pdf, "OPENING A BARRIER" - "THERE ARE TWO WAYS TO
-    // OPEN A BARRIER"): a barrier blocks the path outright, including for the two pieces that
-    // *are* the barrier - a normal (non-double) roll simply has no legal move for either of them,
-    // full stop, not even a capture escape hatch. The only two ways out are a double (forces one
-    // open, below) or an opposing Parki interacting with the square (landing on it eliminates one,
-    // per resolveParkillerCollisions - already unaffected by this, since the Parki's own black die
-    // is never subject to offerMoves() at all). Computed unconditionally (not gated on
-    // dieA===dieB) since both this lock and the double-forces-open branch below need the same
-    // "is there currently an own barrier" answer.
-    const ownBarrierTrack = ownBarrierTrackPosition(this.currentPlayer)
-    const ownBarrierCorridor = ownBarrierTrack === null ? ownCorridorBarrierPosition(this.currentPlayer) : null
-    const pieceIsInOwnBarrier = (piece: Piece): boolean =>
-      (ownBarrierTrack !== null && piece.state === 'OnTrack' && piece.trackPosition === ownBarrierTrack) ||
-      (ownBarrierCorridor !== null && piece.state === 'InHomeCorridor' && piece.corridorPosition === ownBarrierCorridor)
+    // See pieceIsInOwnBarrier's own doc comment - unlike offerReward's own unconditional exclusion
+    // below, a double is the one case where a barrier piece *should* stay eligible (that's the
+    // "roll a double" way of opening it, per the rulebook's own two options) - the double-forces-
+    // open branch further down needs exactly this same "is there currently an own barrier" answer.
     const excludeLockedBarrierPieces = (moves: MoveOption[]) =>
-      state.dieA === state.dieB ? moves : moves.filter((m) => !pieceIsInOwnBarrier(m.piece))
+      state.dieA === state.dieB ? moves : moves.filter((m) => !this.pieceIsInOwnBarrier(m.piece))
 
     const dieAMoves = !state.dieAUsed
       ? excludeLockedBarrierPieces(getValidMoves(this.board, this.currentPlayer, this.players, state.dieA, this.settings, 'dieA'))
@@ -504,6 +511,8 @@ export class TurnManager {
     // (the player would need two separate own-pairs stacked in two different places at once) that
     // this picks the track one first, matching this obligation's own pre-corridor-barrier
     // precedent, rather than adding a rule the client's own text never actually addresses.
+    const ownBarrierTrack = ownBarrierTrackPosition(this.currentPlayer)
+    const ownBarrierCorridor = ownBarrierTrack === null ? ownCorridorBarrierPosition(this.currentPlayer) : null
     const barrierLocation: BarrierLocation | null =
       state.dieA !== state.dieB
         ? null
@@ -722,6 +731,19 @@ export class TurnManager {
   // mandatory capture (verified against the reference: reward moves let the player pick freely
   // which piece to advance, capture available or not).
   //
+  // Reported directly ("장벽이 형성되였을때 주사위가 더블이 되지도않앗는데 장벽에서 나오는경황이있었다"
+  // - a piece came out of a barrier even though the dice weren't a double): unlike offerMoves()'s
+  // own dieA/dieB/sum moves, this never excluded a piece sitting in the player's own barrier at
+  // all - a reward can be granted on *any* roll (a regular capturing move, or even a Parkiller-vs-
+  // Parkiller kill resolved before offerMoves() ever runs), completely independent of whether that
+  // roll happened to be a double. Since "roll a double" and "an opposing Parki" are the rulebook's
+  // own *only* two ways to open a barrier (rules.pdf, "OPENING A BARRIER") - a bonus/reward move,
+  // spending accumulated squares rather than a die's own face value, is neither - this always
+  // excludes a barrier piece, with no double-based exception the way offerMoves() has one: even on
+  // a double roll, by the time any reward could be offered the mandatory barrier-break obligation
+  // (PK9.1, handled entirely inside offerMoves() before a capturing move could even be submitted)
+  // has already necessarily run its course.
+  //
   // A splittable grant (a fresh capture's own 20 - see PendingReward's own comment for why this
   // isn't forced down one fixed path) offers *both* amounts together: every piece that can move
   // the full grant amount in one go, and every piece that can move exactly REWARD_UNIT instead -
@@ -732,11 +754,13 @@ export class TurnManager {
   private offerReward(grant: PendingReward) {
     const canSplit = grant.reason === 'capture' && grant.amount > REWARD_UNIT
     const excludePiece = grant.excludePiece
-    const fullMoves = getValidMoves(this.board, this.currentPlayer, this.players, grant.amount, this.settings, 'reward').filter(
-      (m) => m.piece !== excludePiece,
+    const excludeBarrierAndSpentPiece = (moves: MoveOption[]) =>
+      moves.filter((m) => m.piece !== excludePiece && !this.pieceIsInOwnBarrier(m.piece))
+    const fullMoves = excludeBarrierAndSpentPiece(
+      getValidMoves(this.board, this.currentPlayer, this.players, grant.amount, this.settings, 'reward'),
     )
     const splitMoves = canSplit
-      ? getValidMoves(this.board, this.currentPlayer, this.players, REWARD_UNIT, this.settings, 'reward').filter((m) => m.piece !== excludePiece)
+      ? excludeBarrierAndSpentPiece(getValidMoves(this.board, this.currentPlayer, this.players, REWARD_UNIT, this.settings, 'reward'))
       : []
 
     const byPieceAndAmount = new Map<string, MoveOption>()

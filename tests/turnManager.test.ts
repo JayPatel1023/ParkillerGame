@@ -419,6 +419,47 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     expect(grants).toHaveLength(1)
   })
 
+  // Reported directly ("장벽이 형성되였을때 주사위가 더블이 되지도않앗는데 장벽에서 나오는경황이있었다" -
+  // a piece came out of a barrier even though the dice weren't a double): a reward can be granted on
+  // any roll, completely independent of whether that roll was a double - the rulebook's own "OPENING
+  // A BARRIER" page names exactly two ways to open one (a double, or an opposing Parki), and a bonus
+  // move spending accumulated reward squares is neither, so it must never be able to move a piece
+  // sitting in the player's own barrier, on a double roll or not.
+  it('a reward move never offers a piece sitting in the player own barrier, even on a non-double roll', () => {
+    const board = buildBigTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 12
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 12 // pieces[0] and pieces[1] form a barrier at 12
+    red.pieces[2].state = 'OnTrack'
+    red.pieces[2].trackPosition = 5 // the one that actually captures
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 8
+
+    const dice = new ScriptedDice([3, 4, 1]) // not a double - 3 and 4
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let latestMoves: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((m) => (latestMoves = m))
+
+    manager.requestRoll()
+    const result = manager.submitMove(red.pieces[2]) // 5 -> 8 (dieA=3), captures blue.pieces[0]
+    expect(result?.capturedPiece).toBe(blue.pieces[0])
+
+    // The reward is offered, but pieces[0]/pieces[1] - still locked in their own barrier on this
+    // non-double roll - must not appear as candidates for it at all, for either amount.
+    expect(latestMoves.some((m) => m.piece === red.pieces[0])).toBe(false)
+    expect(latestMoves.some((m) => m.piece === red.pieces[1])).toBe(false)
+    // pieces[2] itself (not barrier-locked) still gets offered normally.
+    expect(latestMoves.some((m) => m.piece === red.pieces[2])).toBe(true)
+
+    // The barrier itself really is still there - unaffected, still stacked at 12.
+    expect(red.pieces[0].trackPosition).toBe(12)
+    expect(red.pieces[1].trackPosition).toBe(12)
+  })
+
   it('finishing a piece grants a 10-square reward', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)
