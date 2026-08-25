@@ -27,6 +27,16 @@ export interface DiceRoll {
  * corridorPosition for 'corridor' - the two are separate numeric spaces. */
 type BarrierLocation = { kind: 'track'; position: number } | { kind: 'corridor'; position: number }
 
+/** Why moveNotPossible fired - reported directly (Carlos: "Cuando hay una barrera no se quieren
+ * mover ninguno de los dos peones... no ha manera"): a barrier-forfeited roll used to look
+ * identical to a roll that genuinely had nothing to move, and the turn just silently passed either
+ * way with zero on-screen explanation. 'barrier' means offerMoves() actually found candidate moves
+ * this roll but excludeLockedBarrierPieces filtered every one of them out for sitting in the
+ * player's own barrier - 'none' covers every other reason (nothing in play could use either die at
+ * all). GameBoardScreen uses this to show a specific "barrier locked, need a double" message
+ * instead of the turn just silently advancing. */
+export type MoveNotPossibleReason = 'barrier' | 'none'
+
 export interface ParkillerMoveResult {
   color: PieceColor
   /** trackPosition before/after this roll - only meaningful once beforeCorridorPosition/
@@ -143,7 +153,7 @@ export class TurnManager {
   readonly diceRolled = new EventEmitter<DiceRoll>()
   readonly parkillerMoved = new EventEmitter<ParkillerMoveResult>()
   readonly moveChoicesReady = new EventEmitter<MoveOption[]>()
-  readonly moveNotPossible = new EventEmitter<void>()
+  readonly moveNotPossible = new EventEmitter<MoveNotPossibleReason>()
   readonly moveApplied = new EventEmitter<MoveResult>()
   readonly moveAnimationReady = new EventEmitter<MoveAnimationInfo>()
   readonly pieceEliminatedByDoubles = new EventEmitter<Piece>()
@@ -470,8 +480,17 @@ export class TurnManager {
     // below, a double is the one case where a barrier piece *should* stay eligible (that's the
     // "roll a double" way of opening it, per the rulebook's own two options) - the double-forces-
     // open branch further down needs exactly this same "is there currently an own barrier" answer.
-    const excludeLockedBarrierPieces = (moves: MoveOption[]) =>
-      state.dieA === state.dieB ? moves : moves.filter((m) => !this.pieceIsInOwnBarrier(m.piece))
+    //
+    // barrierExcludedAnyMove (see MoveNotPossibleReason) tracks whether this filter actually threw
+    // out a real candidate this roll, so the moveNotPossible check further down can tell a genuine
+    // barrier-forfeited roll apart from a roll that never had anything to offer in the first place.
+    let barrierExcludedAnyMove = false
+    const excludeLockedBarrierPieces = (moves: MoveOption[]) => {
+      if (state.dieA === state.dieB) return moves
+      const filtered = moves.filter((m) => !this.pieceIsInOwnBarrier(m.piece))
+      if (filtered.length < moves.length) barrierExcludedAnyMove = true
+      return filtered
+    }
 
     const dieAMoves = !state.dieAUsed
       ? excludeLockedBarrierPieces(getValidMoves(this.board, this.currentPlayer, this.players, state.dieA, this.settings, 'dieA'))
@@ -621,7 +640,7 @@ export class TurnManager {
     this.pendingMoves = options
 
     if (this.pendingMoves.length === 0) {
-      this.moveNotPossible.emit()
+      this.moveNotPossible.emit(barrierExcludedAnyMove ? 'barrier' : 'none')
       // Neither remaining die has a legal move - both are lost per the rulebook ("if the move is
       // impossible, the roll is lost"), not retried.
       state.dieAUsed = true

@@ -103,6 +103,28 @@ button {
   }
 }
 
+/* MoveLog's own entries (src/ui/MoveLog.tsx) - a fresh entry pops in with a small rise+fade
+   instead of just appearing, so a new line landing at the top of the stack reads as "something
+   just happened" rather than blending into the ones already there. Only plays once per mounted
+   row (a re-render that just shifts an existing entry's opacity down the stack doesn't remount it,
+   so this never replays on every tick). */
+@keyframes move-log-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .move-log-row {
+    animation: move-log-in 0.35s ease-out;
+  }
+}
+
 /* StartScreen's background photo - firstbag.png (supplied directly): a candlelit wood desk with
    the physical board laid flat and centered, "PARKILLER"/"RULES" books framing it. Unlike the
    earlier start.png/start-mobile.png pair, this one photo's own composition is already centered
