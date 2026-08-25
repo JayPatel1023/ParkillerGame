@@ -108,7 +108,13 @@ const PAWN_TOTAL_HEIGHT = PIECE_PROFILE_RAW[PIECE_PROFILE_RAW.length - 1][1] * P
 // now takes exactly this long - a long reward move simply plays for longer in total, which is a
 // smaller cost than the animation appearing to change speed depending on the roll.
 export const HOP_DURATION = 0.32 // seconds per square hopped - slow enough that each step reads clearly
-export const BOUNCE_HEIGHT = 0.24 // world units, how high each hop arcs - a more emphatic, visible bounce
+// Reported directly ("si saltasen un poco más alto se verían mejor los movimientos guardando el
+// mismo ritmo de juego" - if they jumped a bit higher the movements would read better while
+// keeping the same pace): HOP_DURATION (above) is exactly what sets that pace, and is deliberately
+// untouched here - only the vertical arc itself is taller, not how long a hop takes. ParkillerMesh
+// imports this same constant rather than duplicating its own, so the Parki's own hop grows taller
+// right along with every pawn's.
+export const BOUNCE_HEIGHT = 0.34 // world units, how high each hop arcs - a more emphatic, visible bounce
 
 // Reported directly ("말이 이동할때 통통뛰게 해달라" - make the piece bounce springily when it
 // moves): the existing hop was a plain sine arc - smooth up, smooth down, the piece's own shape
