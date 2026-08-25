@@ -278,7 +278,9 @@ export default function OnlineLobbyScreen() {
 
   return (
     <div style={wrapperStyle}>
-      <div style={{ position: 'absolute', inset: 0 }}>
+      {/* backgroundColor here matches StartScreenBackground's own internal fog color - see
+          PlayerCountSelector's own matching comment (same fix) for why. */}
+      <div style={{ position: 'absolute', inset: 0, backgroundColor: '#05070c' }}>
         <StartScreenBackground />
       </div>
       <div

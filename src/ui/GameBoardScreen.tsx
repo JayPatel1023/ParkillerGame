@@ -376,15 +376,20 @@ function PlayerPill({ player, isCurrentTurn, isLocal }: { player: PlayerState; i
 
 // Reported directly, calling the procedural 3D wood table "한심하다" (pathetic): the game's own
 // ground plane (scene/TableSurface.tsx) is gone entirely now - BoardScene's Canvas is transparent
-// and this real photo (moon.png, supplied directly) is the page's own CSS background behind it
+// and this real photo (moon.jpg, supplied directly) is the page's own CSS background behind it
 // instead, same approach as StartScreen's own background photo. `cover` so it always fills the
 // screen (see StartScreen's own comment history on cover vs. contain trade-offs - same
 // reasoning applies here).
+//
+// Re-encoded from a 2.4MB PNG to a 192KB JPEG (mozjpeg, quality 84) - same reasoning as
+// firstbag.jpg's own comment (src/index.css): a lossless format on a full photograph was pure
+// waste, and large enough to still be mid-download when this screen first paints on a slow
+// connection, which reads as the background "unfolding" into view instead of just appearing.
 const screenWrapperStyle: React.CSSProperties = {
   height: '100%',
   position: 'relative',
   backgroundColor: '#05070c',
-  backgroundImage: 'url(/backgrounds/moon.png)',
+  backgroundImage: 'url(/backgrounds/moon.jpg)',
   backgroundSize: 'cover',
   backgroundPosition: 'center',
   backgroundRepeat: 'no-repeat',

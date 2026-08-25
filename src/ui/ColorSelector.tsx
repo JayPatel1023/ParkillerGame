@@ -69,7 +69,10 @@ export function ColorSelector({
 }) {
   return (
     <div style={{ height: '100%', position: 'relative' }}>
-      <div style={{ position: 'absolute', inset: 0 }}>
+      {/* backgroundColor here matches StartScreenBackground's own internal fog color - see
+          PlayerCountSelector's own matching comment (same fix, reported on this exact screen -
+          screenshot showed no board at all, just this vignette over solid black) for why. */}
+      <div style={{ position: 'absolute', inset: 0, backgroundColor: '#05070c' }}>
         <StartScreenBackground />
       </div>
       <div

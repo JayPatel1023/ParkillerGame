@@ -14,6 +14,17 @@ import { toWorldPosition, FLAT_SURFACE_HEIGHT, BOARD_SIZE } from './boardGeometr
 // static/orbit-controlled one gameplay uses, plus a handful of decorative "pieces" (not full
 // PieceMesh - those need a real Piece/selectable/onSelect wired to actual game state this screen
 // doesn't have) sitting in their yards so the board doesn't read as empty.
+//
+// Reported directly (a screenshot of PlayerCountSelector/ColorSelector with no board at all, just
+// their own vignette over solid black): mounting a real WebGL <Canvas> per screen (this is used
+// from PlayerCountSelector, ColorSelector, and OnlineLobbyScreen, each its own separate mount/
+// unmount as the player navigates between them) means a slow GPU init, or a stale/lost context
+// after repeated navigation, can leave genuinely nothing rendered - `null` isn't a fallback color,
+// it's an absence. Every current caller wraps this in a div with `backgroundColor: '#05070c'`
+// (matching the `fog` color below exactly, so a normal successful load never flashes a different
+// tone first) specifically so that failure mode shows an intentional dark background instead of
+// true emptiness - keep doing that at any future call site, same as BoardMesh's own texture
+// fallback one layer down already does for the identical reason.
 const definition = BOARD_DEFINITIONS[4]
 
 // radius/height tuned by eye against BOARD_SIZE=6 (this screen's own BoardMesh, independent of
