@@ -394,8 +394,14 @@ export function PieceMesh({
       }
     }
 
+    // Same clamped-delta bug as the hop-stepping loop below used to have (see its own comment) -
+    // this timer used the clamped `delta`, so a slow/dropped frame anywhere during the intro
+    // under-counts real elapsed time and delays introRef.current.done becoming true, which gates
+    // onHopsComplete below it - reported directly as a piece never becoming movable with a second
+    // die after an unrelated first move (ParkillerMesh.tsx had the identical bug, confirmed live by
+    // instrumenting its own useFrame). Uses the real, unclamped rawDelta instead, same fix.
     if (!introRef.current.done) {
-      introRef.current.elapsed += delta
+      introRef.current.elapsed += rawDelta
       const localT = introRef.current.elapsed - introDelay
       const fromX = restPosition[0] + INTRO_X_OFFSET
       const fromY = INTRO_Y_START
