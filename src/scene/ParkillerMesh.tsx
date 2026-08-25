@@ -11,7 +11,6 @@ import {
   INTRO_DURATION,
   INTRO_X_OFFSET,
   INTRO_Y_START,
-  MAX_FRAME_DELTA,
   PIECE_HEIGHT_SCALE,
   PIECE_PROFILE_RAW,
   PROFILE_SCALE,
@@ -369,7 +368,6 @@ export function ParkillerMesh({
   useFrame((_, rawDelta) => {
     const mesh = meshRef.current
     if (!mesh) return
-    const delta = Math.min(rawDelta, MAX_FRAME_DELTA)
 
     // Baseline heading toward the next square - covers the intro drop and idle rest below.
     // Overridden with the exact per-hop heading further down while actively hopping, so a turn
@@ -378,8 +376,21 @@ export function ParkillerMesh({
     const restYaw = yawTowards(restPosition, facingTarget)
     if (restYaw !== null) mesh.rotation.y = restYaw
 
+    // Reported directly, from a real play session: a piece exited the yard with one die (5), but
+    // the *other* die (6) never became usable afterward - the exit's own move animation cleared
+    // fine, but the Parkiller's own animationsSettled gate (GameBoardScreen.tsx) never did, so
+    // visiblePendingMoves stayed permanently empty even though the engine had the die-6 move ready
+    // the whole time. Root cause, confirmed directly by instrumenting this exact useFrame: this
+    // intro-drop timer used the *clamped* `delta` (Math.min(rawDelta, MAX_FRAME_DELTA), same as the
+    // hop-stepping loop used to before an earlier fix in this file switched that specific loop to
+    // the real, unclamped rawDelta) - on any frame slower than 30fps, this accumulator under-counts
+    // real elapsed time, so a dropped/slow frame anywhere during the Parkiller's own intro delays
+    // introRef.current.done becoming true, which gates *everything* below it including
+    // onHopsComplete - the fix already applied to hop-stepping was never carried up to this earlier
+    // block. Using rawDelta here the same way fixes it the same way: a slow frame just means this
+    // frame's own step is bigger, not that real time stops accumulating.
     if (!introRef.current.done) {
-      introRef.current.elapsed += delta
+      introRef.current.elapsed += rawDelta
       const localT = introRef.current.elapsed - introDelay
       const fromX = restPosition[0] + INTRO_X_OFFSET
       const fromY = INTRO_Y_START
@@ -411,9 +422,11 @@ export function ParkillerMesh({
 
     // Holds at hopFrom - not yet consuming any hop-elapsed time - for HOP_START_DELAY after a new
     // hop sequence arrives, so the actual walk starts in sync with the dice reveal instead of
-    // before it (see that constant's own comment for the two-sided bug this replaced).
+    // before it (see that constant's own comment for the two-sided bug this replaced). Same
+    // clamped-delta fix as the intro timer above - a slow/dropped frame here used to delay
+    // onHopsComplete far more than HOP_START_DELAY's own nominal 450ms actually calls for.
     if (startWaitRef.current < HOP_START_DELAY) {
-      startWaitRef.current += delta
+      startWaitRef.current += rawDelta
       const waitYaw = yawTowards(hopFrom, hops[0])
       if (waitYaw !== null) mesh.rotation.y = waitYaw
       mesh.position.set(hopFrom[0], BASE_HEIGHT, hopFrom[2])
