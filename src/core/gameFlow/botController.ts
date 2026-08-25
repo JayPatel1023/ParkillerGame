@@ -91,18 +91,6 @@ export class BotController {
   // Real time (Date.now()-based, so it advances correctly under vitest's fake timers too) before
   // which this class won't schedule its *next* action - see this file's own top comment.
   private busyUntilMs = 0
-  // The most recent roll's own black die (1-6) - see onTurnStarted's own use of it below. Reported
-  // directly ("두번째 옮길차례가 되면 한참있다가 움직인다" - the second move waits a long while):
-  // this class used to budget a flat, wildly overcautious 18-square worst case for the Parkiller's
-  // own hop after *every* roll, on the mistaken assumption that a single roll could span its whole
-  // home-corridor length plus more. Verified directly against resolveParkillerMove
-  // (turnManager.ts): a single roll's Parkiller hop is *always* capped at the black die's own value
-  // (1-6, whether crossing corridor, entering the loop, or a mix) - PK1's own "distance always
-  // equals the die" guarantee. Tracking the die's real value here (via diceRolled, which fires
-  // synchronously inside rollForBot() below - see HostTurnManagerBridge's own performRoll()) budgets
-  // the *actual* worst case for that specific roll instead of a fixed, mostly-wrong overestimate.
-  private lastBlackDie = 6
-
   constructor(
     session: BotDrivableSession,
     botColors: Set<PieceColor>,
@@ -117,7 +105,25 @@ export class BotController {
     this.diceSpinMs = diceSpinMs
     this.unsubscribers = [
       session.turnStarted.on((player) => this.onTurnStarted(player.color)),
-      session.diceRolled.on((roll) => (this.lastBlackDie = roll.blackDie)),
+      // Reported directly ("parki말이 다움직인다음 일반 pawn이 움직이게 해달라" - let the Parkiller
+      // finish moving, *then* let the regular pawn move): requestRoll() (turnManager.ts) emits
+      // diceRolled, then resolves+emits parkillerMoved, then emits moveChoicesReady, all
+      // synchronously in that order within one call - but this class used to only extend
+      // busyUntilMs for the Parkiller's own hop *after* rollForBot() returned, back in
+      // onTurnStarted's own callback below. Since moveChoicesReady (and this class's own
+      // onMoveChoicesReady, which schedules the first pawn move) fires *before* rollForBot()
+      // returns, that scheduling always ran against the *previous* action's busy window, not this
+      // roll's own Parkiller-hop budget - so the pawn's own hop could get scheduled before the
+      // Parkiller's own hop had actually finished playing, if the think-delay ever happened to be
+      // shorter than the roll+hop time (currently masked by BOT_THINK_DELAY_MS comfortably
+      // exceeding the worst case, but not a real guarantee - see this file's own top comment on
+      // that constant's history of being retuned). Moving the busy-window extension into this
+      // diceRolled subscriber itself - which fires synchronously, strictly before
+      // moveChoicesReady, every single roll - makes the ordering correct unconditionally, not just
+      // by the current constants' own coincidence.
+      session.diceRolled.on((roll) => {
+        this.markBusy(this.diceSpinMs + roll.blackDie * this.hopDurationMs)
+      }),
       session.moveChoicesReady.on((moves) => this.onMoveChoicesReady(moves)),
     ]
   }
@@ -127,11 +133,6 @@ export class BotController {
     this.scheduleRespectingBusy(this.thinkDelayMs, () => {
       if (this.session.currentPlayer.color !== color) return // stale - state moved on before this fired
       this.session.rollForBot()
-      // A roll always plays the white-dice spin, and may also play the Parkiller's own hop (up to
-      // lastBlackDie squares, just updated by the diceRolled subscription above, synchronously,
-      // before this line runs) - nothing scheduled after this should fire before both have had
-      // time to finish.
-      this.markBusy(this.diceSpinMs + this.lastBlackDie * this.hopDurationMs)
     })
   }
 
@@ -157,10 +158,16 @@ export class BotController {
     const chosen = nonBarrierMoves[0] ?? moves[0]
     this.scheduleRespectingBusy(this.thinkDelayMs, () => {
       if (this.session.currentPlayer.color !== color) return
-      this.session.submitMoveForBot(chosen.piece, chosen.amount)
       // This move's own hop animation - amount is the exact number of squares it covers (see
-      // MoveOption), same duration-per-square PieceMesh itself uses.
+      // MoveOption), same duration-per-square PieceMesh itself uses. Set *before* submitting, not
+      // after - same ordering fix as the diceRolled subscriber above and for the same reason:
+      // submitMoveForBot's own submitMove (turnManager.ts) resolves synchronously and, if a second
+      // die is still unspent, re-emits moveChoicesReady for it *before* this call even returns -
+      // this class's own onMoveChoicesReady for that second die would then compute its own schedule
+      // against whatever busyUntilMs was set *before* this move, not this move's own hop duration,
+      // if that update happened after submitting instead of before.
       this.markBusy(chosen.amount * this.hopDurationMs)
+      this.session.submitMoveForBot(chosen.piece, chosen.amount)
     })
   }
 
