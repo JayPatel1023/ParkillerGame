@@ -13,16 +13,36 @@ import type { PieceColor } from '../core/pieceColor'
 // this count's own TURN_ORDER_BY_COUNT plus an explicit "all human" option that preserves the
 // original hotseat mode exactly - this is additive, not a replacement, since pass-and-play is
 // still a real, intentional mode of its own (not just "vs bots minus picking a color").
+// Reported directly, with a screenshot: these read as flat, cheap-looking discs next to the rest
+// of the app's own carved-wood/gold-and-royal-blue polish ("촌스럽다... 품위잇게 값비싼 오락으로" -
+// tacky, make it dignified, like an expensive game). Root cause of the flatness, on top of the
+// plain styling itself: the previous radial-gradient specified the *same* color at both stops
+// (`${color}, ${color}`) - a no-op that painted a flat fill despite looking like gradient code.
+// Restyled as a real polished gem/marble - a bright off-center specular highlight fading through
+// the true color into a darker rim (matching the glossy clearcoat look this project's own 3D
+// pieces/dice already use for exactly this "expensive lacquered object" read), inside a metallic
+// gold ring rather than a flat navy line, so these match the gold-accented premium language the
+// rest of the app (hotseatButtonStyle just below, StartScreen's own CTA) is already built on.
+function lighten(hex: string, amount: number): string {
+  const n = parseInt(hex.slice(1), 16)
+  const clamp = (c: number) => Math.max(0, Math.min(255, c))
+  const r = clamp(((n >> 16) & 0xff) + Math.round(255 * amount))
+  const g = clamp(((n >> 8) & 0xff) + Math.round(255 * amount))
+  const b = clamp((n & 0xff) + Math.round(255 * amount))
+  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`
+}
+
 function colorButtonStyle(color: string): React.CSSProperties {
+  const highlight = lighten(color, 0.5)
+  const rim = lighten(color, -0.35)
   return {
-    width: 'clamp(46px, 14vw, 64px)',
-    height: 'clamp(46px, 14vw, 64px)',
+    width: 'clamp(52px, 15vw, 72px)',
+    height: 'clamp(52px, 15vw, 72px)',
     fontSize: 0,
-    fontWeight: 800,
-    background: `linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0) 45%), radial-gradient(circle at 35% 30%, ${color}, ${color})`,
-    border: '3px solid #1a3468',
+    background: `radial-gradient(circle at 34% 28%, ${highlight} 0%, ${color} 42%, ${rim} 100%)`,
+    border: '3px solid #e6c876',
     borderRadius: '50%',
-    boxShadow: '0 5px 0 #1a3468, 0 9px 14px rgba(0,0,0,0.4), inset 0 2px 1px rgba(255,255,255,0.55)',
+    boxShadow: `0 5px 0 ${rim}, 0 9px 16px rgba(0,0,0,0.45), inset 0 3px 3px rgba(255,255,255,0.65), inset 0 -5px 7px rgba(0,0,0,0.3)`,
     cursor: 'pointer',
     flexShrink: 0,
   }
