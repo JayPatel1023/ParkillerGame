@@ -91,7 +91,7 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
               disabled={!canPlayOnline}
               title={canPlayOnline ? undefined : 'Falta configurar VITE_PHOTON_APP_ID'}
               onClick={() => (window.location.hash = '#online')}
-              style={buttonStyle(canPlayOnline, 'blue')}
+              style={buttonStyle(canPlayOnline, 'burgundy')}
             >
               <span aria-hidden style={iconBadgeStyle}><GlobeIcon /></span> JUGAR ONLINE
             </button>
@@ -210,11 +210,16 @@ function HelpIcon() {
 
 // Chunky carved-wood button, same physical-press recipe as the rest of the app (a solid, non-
 // blurred offset bottom edge reads as depth, not a bigger blurred shadow) - now recolored per
-// action: green for the local/offline action, blue for the online one, both trimmed in gold
+// action: green for the local/offline action, burgundy for the online one, both trimmed in gold
 // instead of the earlier flat single blue used for both.
+// Reported directly (Carlos's own "life journey" philosophy - camaraderie over competition):
+// online used to be a cold, corporate blue, the one clearly "cool-toned" swatch on an otherwise
+// entirely warm screen. Burgundy (matches THEME.burgundy, #6e2430 - defined but never actually
+// used anywhere until now) keeps the two actions just as visually distinct from each other, but
+// both now read as warm, inviting choices rather than "the friendly one and the corporate one."
 const TINTS = {
   green: ['#4c8c5c', '#256234', '#123d1c'],
-  blue: ['#6a9bd8', '#386b94', '#1c3b56'],
+  burgundy: ['#c98a94', '#6e2430', '#2e0e12'],
 } as const
 
 function buttonStyle(enabled: boolean, tint: keyof typeof TINTS): React.CSSProperties {

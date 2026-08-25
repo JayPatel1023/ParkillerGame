@@ -13,18 +13,23 @@ import { StartScreenBackground } from '../scene/StartScreenBackground'
 // screen has the same class of bug, just horizontal instead of vertical: 5*64 + 4*18 = 392px
 // against a 375px-wide phone viewport). Shrinks smoothly with viewport width instead of a fixed
 // breakpoint.
+// Reported directly (Carlos's own "life journey" philosophy - camaraderie over competition, a
+// friend across the table rather than a HUD): these were a full cold-blue gradient, the single
+// biggest patch of "competitive game chrome" left on this screen. Warm gold instead - the same
+// "this is active/selectable" language the rest of the app already uses (PlayerPill's own gold
+// ring, the movable-piece indicator, etc.) rather than a one-off blue that meant nothing elsewhere.
 function countButtonStyle(): React.CSSProperties {
   return {
     width: 'clamp(46px, 14vw, 64px)',
     height: 'clamp(46px, 14vw, 64px)',
     fontSize: 'clamp(17px, 5vw, 24px)',
     fontWeight: 800,
-    color: '#eef4ff',
-    background: 'linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0) 45%), linear-gradient(180deg, #dcebff 0%, #3d76e6 48%, #16409c 100%)',
-    border: '3px solid #1a3468',
+    color: '#fff6e0',
+    background: 'linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0) 45%), linear-gradient(180deg, #f5e2ae 0%, #c9a24b 48%, #7a5f26 100%)',
+    border: '3px solid #7a5f26',
     borderRadius: '50%',
-    boxShadow: '0 5px 0 #1a3468, 0 9px 14px rgba(0,0,0,0.4), inset 0 2px 1px rgba(255,255,255,0.55)',
-    textShadow: '0 1px 2px rgba(8,16,40,0.5)',
+    boxShadow: '0 5px 0 #7a5f26, 0 9px 14px rgba(0,0,0,0.4), inset 0 2px 1px rgba(255,255,255,0.55)',
+    textShadow: '0 1px 2px rgba(40,24,8,0.5)',
     cursor: 'pointer',
     flexShrink: 0,
   }
@@ -68,8 +73,8 @@ export function PlayerCountSelector({ onConfirm }: { onConfirm: (count: number) 
             fontWeight: 800,
             margin: 0,
             letterSpacing: 1,
-            color: '#dce8ff',
-            textShadow: '0 2px 0 #1a3468, 0 5px 12px rgba(0,0,0,0.55)',
+            color: '#e8cf8a',
+            textShadow: '0 2px 0 #7a5f26, 0 5px 12px rgba(0,0,0,0.55)',
             textAlign: 'center',
             padding: '0 12px',
           }}
