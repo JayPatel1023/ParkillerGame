@@ -60,6 +60,24 @@ const BOT_THINK_DELAY_MS = 2400
 const DICE_SPIN_MS = 450
 const HOP_DURATION_MS = 320
 
+// Same minimal pub-sub as turnManager.ts's own EventEmitter (not exported from there, so
+// duplicated here rather than reaching into a peer module for an implementation detail - see this
+// file's own DICE_SPIN_MS/HOP_DURATION_MS above for the same "small, deliberate duplication over a
+// cross-module dependency" call).
+type Listener<T> = (value: T) => void
+class EventEmitter<T> {
+  private listeners: Listener<T>[] = []
+  on(listener: Listener<T>) {
+    this.listeners.push(listener)
+    return () => {
+      this.listeners = this.listeners.filter((l) => l !== listener)
+    }
+  }
+  emit(value: T) {
+    for (const listener of this.listeners) listener(value)
+  }
+}
+
 /** The narrow surface BotController actually needs to drive a game - satisfied structurally by
  * both HostTurnManagerBridge (online, see its own rollForBot()/submitMoveForBot() doc comments -
  * bots have no connected actor, so they bypass that class's own actor-ownership validation) and
@@ -98,6 +116,18 @@ export class BotController {
   // Real time (Date.now()-based, so it advances correctly under vitest's fake timers too) before
   // which this class won't schedule its *next* action - see this file's own top comment.
   private busyUntilMs = 0
+  // Reported directly ("봇이게임할때 말을 이동할차례가되여서 이동시킬때에도 자기 차례를 알리는 효과를
+  // 넣어달라" - add the same turn-announcing effect for bot moves too): a human's own choosable
+  // piece gets a whole flashy ring/glow/beam indicator (PieceMesh.tsx) the instant it becomes
+  // selectable; a bot's move used to just start hopping with no equivalent cue at all, since that
+  // indicator is driven by pendingMoves, which the UI empties outright during a bot's own turn
+  // (GameBoardScreen's own visiblePendingMoves, gated on isMyTurn). Emits the specific piece this
+  // class has just decided on, for the UI to run that exact same indicator against - fired as soon
+  // as the decision is made (the *start* of this action's own think-delay), so the highlight has
+  // time to actually read before the piece starts moving, not just flash for an instant right
+  // before the hop. Emits null once the move is actually submitted, handing off to the hop
+  // animation itself as the next visual cue.
+  readonly pieceHighlighted = new EventEmitter<Piece | null>()
   constructor(
     session: BotDrivableSession,
     botColors: Set<PieceColor>,
@@ -162,9 +192,31 @@ export class BotController {
     // this still falls back to the plain first option if avoiding a barrier isn't actually possible
     // this roll.
     const nonBarrierMoves = moves.filter((m) => !this.wouldFormOwnBarrier(m))
-    const chosen = nonBarrierMoves[0] ?? moves[0]
+    // Reported directly, with the client's own rulebook page: a capture's 20-square reward is a
+    // genuine choice - "Move one Pawn 20 spaces" OR "Move one Pawn 10 spaces and another pawn 10
+    // spaces" - both are real, already-working options (verified directly: turnManager.ts's own
+    // offerReward offers both amounts together for every eligible piece). But a naive "always pick
+    // the first option" bot never explores the split, since offerReward lists the full-amount
+    // moves before the split ones, so moves[0] during a reward is *always* the full amount in one
+    // piece. A human who only ever watches bot play would see nothing but "one pawn takes the
+    // whole 20" turn after turn - indistinguishable from the split simply not existing, even though
+    // it's fully implemented and available to a human player. Every move in a reward offer shares
+    // the same diceSource ('reward') - not mixed with an ordinary dieA/dieB/sum offer - so
+    // preferring the smaller amount present only ever kicks in for an actual reward decision.
+    const isRewardOffer = nonBarrierMoves[0]?.diceSource === 'reward'
+    const candidates = isRewardOffer
+      ? nonBarrierMoves.filter((m) => m.amount === Math.min(...nonBarrierMoves.map((c) => c.amount)))
+      : nonBarrierMoves
+    const chosen = candidates[0] ?? nonBarrierMoves[0] ?? moves[0]
+    // Fired now, not inside the scheduled callback below - the highlight should cover this whole
+    // think-delay (see this class's own pieceHighlighted doc comment), not just flash right before
+    // the move actually submits.
+    this.pieceHighlighted.emit(chosen.piece)
     this.scheduleRespectingBusy(this.thinkDelayMs, () => {
-      if (this.session.currentPlayer.color !== color) return
+      if (this.session.currentPlayer.color !== color) {
+        this.pieceHighlighted.emit(null) // stale - nothing will submit, so nothing should stay lit
+        return
+      }
       // This move's own hop animation - amount is the exact number of squares it covers (see
       // MoveOption), same duration-per-square PieceMesh itself uses. Set *before* submitting, not
       // after - same ordering fix as the diceRolled subscriber above and for the same reason:
@@ -174,6 +226,7 @@ export class BotController {
       // against whatever busyUntilMs was set *before* this move, not this move's own hop duration,
       // if that update happened after submitting instead of before.
       this.markBusy(chosen.amount * this.hopDurationMs)
+      this.pieceHighlighted.emit(null)
       this.session.submitMoveForBot(chosen.piece, chosen.amount)
     })
   }

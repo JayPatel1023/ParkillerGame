@@ -203,6 +203,14 @@ interface PieceMeshProps {
    * animated ring/marker/flash below. Without `isCurrentTurn` at all, before rolling there was no
    * visual indication of which pieces on the board are even yours this turn. */
   isCurrentTurn: boolean
+  /** Reported directly ("봇이게임할때 말을 이동할차례가되여서 이동시킬때에도 자기 차례를 알리는 효과를
+   * 넣어달라" - add the same turn-announcing effect for bot moves too): `selectable` only ever
+   * lights up for a human's own choosable pieces (see GameBoardScreen's own visiblePendingMoves,
+   * gated on isMyTurn - always empty during a bot's turn), so a bot's move used to just start
+   * hopping with zero anticipatory cue at all, unlike a human's own deliberate click. This carries
+   * the exact same ring/glow/beam/flash indicator below for the one piece a bot has just decided
+   * to move, without making it clickable - `onClick` below stays gated on `selectable` alone. */
+  highlighted?: boolean
   /** BoardScene's own CROWDED_SCALE (< 1) whenever this piece shares its square with another
    * occupant, 1 otherwise - see that constant's own comment for why. Multiplied into the same
    * scale the selectable/idle animation already drives, not a separate transform, so a crowded
@@ -286,6 +294,7 @@ export function PieceMesh({
   selectable,
   onSelect,
   isCurrentTurn,
+  highlighted = false,
   crowdedScale = 1,
 }: PieceMeshProps) {
   const meshRef = useRef<Group>(null)
@@ -320,26 +329,31 @@ export function PieceMesh({
     if (!mesh) return
     const delta = Math.min(rawDelta, MAX_FRAME_DELTA)
 
+    // Drives the same ring/glow/beam/flash indicator for either a human's own choosable piece or a
+    // bot's just-decided one (see `highlighted`'s own doc comment) - `onClick` below stays gated on
+    // `selectable` alone, so a bot's highlighted piece still isn't clickable.
+    const showIndicator = selectable || highlighted
+
     // Detect the false -> true transition to restart the flash from its beginning each time a
-    // piece newly becomes selectable, rather than only once ever.
-    if (selectable && !prevSelectableRef.current) flashElapsedRef.current = 0
-    if (selectable) flashElapsedRef.current += delta
-    prevSelectableRef.current = selectable
+    // piece newly becomes selectable/highlighted, rather than only once ever.
+    if (showIndicator && !prevSelectableRef.current) flashElapsedRef.current = 0
+    if (showIndicator) flashElapsedRef.current += delta
+    prevSelectableRef.current = showIndicator
 
     const flashT = Math.min(1, flashElapsedRef.current / FLASH_DURATION)
     // Eased decay from 1 (the instant it becomes selectable) to 0 (steady state) - drives the
     // brightness/ring-size flash. Scale itself uses easeOutBack directly below for the pop-overshoot.
-    const flashFade = selectable ? 1 - easeOutCubic(flashT) : 0
+    const flashFade = showIndicator ? 1 - easeOutCubic(flashT) : 0
 
-    const uniformScale = crowdedScale * (selectable ? THREE.MathUtils.lerp(IDLE_SCALE, SELECTABLE_SCALE, easeOutBack(flashT)) : IDLE_SCALE)
+    const uniformScale = crowdedScale * (showIndicator ? THREE.MathUtils.lerp(IDLE_SCALE, SELECTABLE_SCALE, easeOutBack(flashT)) : IDLE_SCALE)
     mesh.scale.setScalar(uniformScale)
     if (bodyMaterialRef.current) {
-      const steadyEmissive = selectable ? SELECTABLE_EMISSIVE : isCurrentTurn ? TURN_EMISSIVE : IDLE_EMISSIVE
+      const steadyEmissive = showIndicator ? SELECTABLE_EMISSIVE : isCurrentTurn ? TURN_EMISSIVE : IDLE_EMISSIVE
       bodyMaterialRef.current.emissiveIntensity = steadyEmissive + flashFade * FLASH_EMISSIVE_BOOST
     }
 
     if (indicatorGroupRef.current) {
-      if (selectable) {
+      if (showIndicator) {
         indicatorGroupRef.current.visible = true
         indicatorElapsedRef.current += delta
         const t = indicatorElapsedRef.current

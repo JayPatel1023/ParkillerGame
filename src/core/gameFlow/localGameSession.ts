@@ -8,7 +8,7 @@ import type { Piece } from '../pieces/piece'
 import { BotController, type BotDrivableSession } from './botController'
 import { createPlayerState, type PlayerState } from './playerState'
 import { TurnManager } from './turnManager'
-import type { TurnManagerLike } from './turnManagerLike'
+import type { Listenable, TurnManagerLike } from './turnManagerLike'
 
 /** Wraps a plain local TurnManager so it can also drive bot-controlled colors - see
  * localGameSession's own beginLocalGame() for when this is used vs. a bare TurnManager. Forwards
@@ -82,6 +82,10 @@ export interface LocalGameSession {
    * timeouts, same as OnlineLobbyScreen already does for its own BotController. undefined in plain
    * hotseat mode, where there's nothing to dispose. */
   dispose?: () => void
+  /** Only set in vs-bots mode - forwards BotController's own pieceHighlighted straight through
+   * (see that field's own doc comment) so GameBoardScreen can run the same selectable-piece
+   * indicator for a bot's just-decided move that a human's own choosable piece already gets. */
+  botPieceHighlighted?: Listenable<Piece | null>
 }
 
 // Entry point for milestone 1: same-device play, 2-6 real players, no networking. Two modes:
@@ -119,5 +123,10 @@ export function beginLocalGame(
   const botColors = new Set(participatingColors.filter((color) => color !== humanColor))
   const botController = botColors.size > 0 ? new BotController(session, botColors) : null
   turnManager.start()
-  return { turnManager: session, players, dispose: () => botController?.dispose() }
+  return {
+    turnManager: session,
+    players,
+    dispose: () => botController?.dispose(),
+    botPieceHighlighted: botController?.pieceHighlighted,
+  }
 }
