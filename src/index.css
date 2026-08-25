@@ -125,12 +125,20 @@ button {
   }
 }
 
-/* StartScreen's background photo - firstbag.png (supplied directly): a candlelit wood desk with
+/* StartScreen's background photo - firstbag.jpg (supplied directly): a candlelit wood desk with
    the physical board laid flat and centered, "PARKILLER"/"RULES" books framing it. Unlike the
    earlier start.png/start-mobile.png pair, this one photo's own composition is already centered
    and reads fine cropped by `cover` at both landscape and portrait aspect ratios, so there's no
-   separate mobile crop and no per-breakpoint position tuning needed like the previous photo required. */
+   separate mobile crop and no per-breakpoint position tuning needed like the previous photo required.
+   Reported directly, twice (Carlos: "el juego sigue sin cargarse bien al iniciar"; separately, the
+   background visibly "unfolding" top-to-bottom on a slow connection): the source file was a 2.3MB
+   PNG - lossless compression on a full photograph, the single worst format choice for this kind of
+   asset, and exactly large enough that a slow connection could still be mid-download when this
+   screen first paints, which is what a partially-arrived image progressively revealing top-down
+   actually looks like. Re-encoded as a JPEG (mozjpeg, quality 84) - 264KB, a ~91% reduction, visually
+   indistinguishable at every zoom level actually tested - so the same "sometimes it hasn't finished
+   loading yet" window shrinks by an order of magnitude instead of needing a loading-state redesign. */
 .start-bg-photo {
-  background-image: url(/backgrounds/firstbag.png);
+  background-image: url(/backgrounds/firstbag.jpg);
   background-position: center;
 }

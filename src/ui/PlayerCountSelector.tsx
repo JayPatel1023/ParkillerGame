@@ -33,7 +33,14 @@ function countButtonStyle(): React.CSSProperties {
 export function PlayerCountSelector({ onConfirm }: { onConfirm: (count: number) => void }) {
   return (
     <div style={{ height: '100%', position: 'relative' }}>
-      <div style={{ position: 'absolute', inset: 0 }}>
+      {/* backgroundColor here matches StartScreenBackground's own internal fog color exactly - see
+          that component's own doc comment for why: this screen renders a real WebGL <Canvas>, and
+          a canvas that's slow to initialize (or fails outright - a stale/lost context after
+          repeated screen navigation, in particular) used to leave nothing behind it at all, reading
+          as a plain black screen with no board. Matching the fog tone means a slow-but-successful
+          load is seamless (no color flash once the canvas does paint), and a failed one still shows
+          an intentional dark background instead of true emptiness. */}
+      <div style={{ position: 'absolute', inset: 0, backgroundColor: '#05070c' }}>
         <StartScreenBackground />
       </div>
       <div

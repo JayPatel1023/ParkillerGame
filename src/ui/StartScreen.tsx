@@ -11,7 +11,7 @@ const HELP_URL = 'https://moonlighteditors.com/instructions-parkiller/'
 // plain blue buttons read as a generic web form, not a premium tabletop game. logo-badge.png is a
 // clean circular crop taken directly from the board art's own corner badge (the hooded character +
 // "Parkiller" wordmark it's already drawn with) - reused here rather than commissioning new art.
-// Background: a real photo (public/backgrounds/firstbag.png, supplied directly) - the earlier 3D
+// Background: a real photo (public/backgrounds/firstbag.jpg, supplied directly) - the earlier 3D
 // rotating-board background (StartScreenBackground) was only ever a stand-in built because no such
 // photo existed yet; now that one does, it replaces the 3D scene here rather than the 3D scene
 // trying to recreate it.
@@ -24,7 +24,7 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
   return (
     <div style={{ height: '100%', position: 'relative', backgroundColor: THEME.wood }}>
       {/* `cover` (not `contain`) so the photo fills every viewport edge to edge with zero visible
-          margin - see index.css's own .start-bg-photo comment for why firstbag.png doesn't need
+          margin - see index.css's own .start-bg-photo comment for why firstbag.jpg doesn't need
           the per-breakpoint crop/position tuning an earlier photo here did. */}
       <div className="start-bg-photo" style={{ position: 'absolute', inset: 0, backgroundColor: THEME.wood, backgroundSize: 'cover', backgroundRepeat: 'no-repeat' }} />
       <div
