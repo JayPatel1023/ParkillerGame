@@ -31,7 +31,14 @@ import type { PlayerState } from './playerState'
 // weren't landing as "clearly deliberate" to an actual human watching. Breaking that cycle with one
 // decisive jump instead of another small increment - long enough that a turn unmistakably reads as
 // "someone is taking their turn," not iterating a smaller number again.
-const BOT_THINK_DELAY_MS = 3000
+//
+// Reported a FOURTH time, now the other direction ("너무뜨다... 조금만 대단히 조금만 빠르게해달라" -
+// too slow, make it just a little, just a very little, faster) - right after this file's own
+// Parkiller-hop/first-move sequencing bug fix started actually enforcing waits it had previously
+// been skipping in some cases (see onMoveChoicesReady's own comment), which on top of the already
+// long 3000ms pushed a full turn's pace past "deliberate" into "dragging." Explicitly a *small*
+// trim per that report's own wording, not another swing back to an earlier value.
+const BOT_THINK_DELAY_MS = 2400
 
 // Reported directly: a bot's pieces sometimes hopped at a normal, readable pace and sometimes
 // moved "at light speed" - hard to tell a bug from a feature. Root cause: this class used to wait
