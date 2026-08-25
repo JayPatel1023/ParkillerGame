@@ -9,6 +9,7 @@ import { useTurnManager } from '../hooks/useTurnManager'
 import { BoardScene } from '../scene/BoardScene'
 import { Confetti } from './Confetti'
 import { HelpModal } from './HelpModal'
+import { MoveLog } from './MoveLog'
 import { RewardBurst } from './RewardBurst'
 import { RewardToast } from './RewardToast'
 
@@ -72,6 +73,9 @@ export function GameBoardScreen({
     eliminatedByDoubles,
     pendingReward,
     forfeitedReward,
+    noMoveReason,
+    turnEndingSoon,
+    moveLog,
     rollDice,
     chooseMove,
     clearMoveAnimation,
@@ -107,7 +111,12 @@ export function GameBoardScreen({
   // real choice well before the board has caught up - gating what's actually shown/interactive on
   // both animations having cleared keeps everything landing in the order it visually happened.
   const animationsSettled = !moveAnimation && !parkillerAnimation
-  const canRoll = isMyTurn && pendingMoves.length === 0 && !winner && !rolling && animationsSettled
+  // !turnEndingSoon: while a barrier-locked (or otherwise move-not-possible) roll's own
+  // "explanation, then advance" hold is playing out (see useTurnManager's own NO_MOVE_HOLD_MS),
+  // currentPlayer/pendingMoves haven't visibly changed yet, so canRoll's other conditions alone
+  // would let the roller click again mid-hold - the real TurnManager has already moved on
+  // internally by that point, so a second roll here would land on the wrong player's turn.
+  const canRoll = isMyTurn && pendingMoves.length === 0 && !winner && !rolling && !turnEndingSoon && animationsSettled
 
   // Idle nudge: reported directly - a player who steps away or just spaces out mid-turn leaves
   // everyone else staring at a board that never visibly asks for input. Restarts whenever canRoll
@@ -175,19 +184,31 @@ export function GameBoardScreen({
   // What the turn banner's subtitle says - one place for this instead of scattering the same
   // priority order (doubles warning > not-my-turn > reward > move prompt > roll prompt) across
   // JSX conditionals.
+  // Reported directly (Carlos: "Cuando hay una barrera no se quieren mover ninguno de los dos
+  // peones... no ha manera" - stuck at a barrier with seemingly no way out at all): a roll that
+  // forfeits the turn outright used to fall straight through to the default "Dados: X y Y" line
+  // with zero explanation of why nothing happened, indistinguishable from a silent freeze. Gated
+  // on !rolling so it only appears once the dice themselves have finished revealing (noMoveReason
+  // is set well before that, see useTurnManager's own NO_MOVE_HOLD_MS comment for why) - showing
+  // this text while the dice are still visibly spinning would read as answering a question the
+  // player hasn't even been shown yet.
   const statusLine = eliminatedByDoubles
     ? `Tercer dobles seguido: ${eliminatedByDoubles.color} pierde una ficha`
     : !isMyTurn
       ? `Esperando el turno de ${currentPlayer.color}...`
-      : pieceChoice
-        ? 'Elegí con qué dado moverla'
-        : visiblePendingReward
-          ? 'Elegí una ficha para tu recompensa'
-          : visiblePendingMoves.length > 0
-            ? 'Elegí una ficha para mover'
-            : lastRoll && !rolling
-              ? `Dados: ${lastRoll.dieA} y ${lastRoll.dieB}${isDouble ? ' (dobles)' : ''} · Parkiller: ${lastRoll.blackDie}`
-              : 'Tirá los dados para empezar tu turno'
+      : noMoveReason && !rolling
+        ? noMoveReason === 'barrier'
+          ? 'Barrera bloqueada: hace falta un dobles para abrirla'
+          : 'Ningún movimiento posible con esta tirada'
+        : pieceChoice
+          ? 'Elegí con qué dado moverla'
+          : visiblePendingReward
+            ? 'Elegí una ficha para tu recompensa'
+            : visiblePendingMoves.length > 0
+              ? 'Elegí una ficha para mover'
+              : lastRoll && !rolling
+                ? `Dados: ${lastRoll.dieA} y ${lastRoll.dieB}${isDouble ? ' (dobles)' : ''} · Parkiller: ${lastRoll.blackDie}`
+                : 'Tirá los dados para empezar tu turno'
 
   return (
     <div className="game-screen-in" style={screenWrapperStyle}>
@@ -214,6 +235,7 @@ export function GameBoardScreen({
 
       <RewardBurst pendingReward={visiblePendingReward} />
       <RewardToast pendingReward={visiblePendingReward} forfeitedReward={visibleForfeitedReward} />
+      <MoveLog entries={moveLog} />
 
       <div style={turnCardStyle}>
         <div style={turnCardHeaderStyle}>

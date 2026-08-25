@@ -809,16 +809,41 @@ describe('TurnManager - a normal roll cannot move a piece out of its own barrier
     const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
 
     let notPossible = false
-    manager.moveNotPossible.on(() => (notPossible = true))
+    let reason: string | null = null
+    manager.moveNotPossible.on((r) => {
+      notPossible = true
+      reason = r
+    })
     let offered: import('../src/core/rules/moveOption').MoveOption[] | null = null
     manager.moveChoicesReady.on((moves) => (offered = moves))
 
     manager.requestRoll()
 
     expect(notPossible).toBe(true)
+    // See MoveNotPossibleReason's own doc comment - GameBoardScreen shows a specific "barrier
+    // locked" message only when a real candidate move existed and got excluded for sitting in the
+    // barrier, which is exactly this scenario (both pieces in play have a barrier-eligible move).
+    expect(reason).toBe('barrier')
     expect(offered).toBeNull()
     expect(red.pieces[0].trackPosition).toBe(5)
     expect(red.pieces[1].trackPosition).toBe(5)
+  })
+
+  it('reports "none", not "barrier", when nothing in play could use the roll at all', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    // Every Red piece stays in the yard - createPlayerState's own default state.
+
+    const dice = new ScriptedDice([2, 4, 1]) // neither die, nor their sum, is the exit roll (5)
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let reason: string | null = null
+    manager.moveNotPossible.on((r) => (reason = r))
+
+    manager.requestRoll()
+
+    expect(reason).toBe('none')
   })
 
   it('still allows every other piece to move normally when no barrier exists', () => {
@@ -864,13 +889,18 @@ describe('TurnManager - a normal roll cannot move a piece out of its own barrier
     let offered: import('../src/core/rules/moveOption').MoveOption[] = []
     manager.moveChoicesReady.on((moves) => (offered = moves))
     let notPossible = false
-    manager.moveNotPossible.on(() => (notPossible = true))
+    let reason: string | null = null
+    manager.moveNotPossible.on((r) => {
+      notPossible = true
+      reason = r
+    })
 
     manager.requestRoll()
 
     // All 4 pieces are locked - the track barrier and the corridor barrier alike - so this roll has
     // no legal move at all, same as the already-covered single-barrier case.
     expect(notPossible).toBe(true)
+    expect(reason).toBe('barrier')
     expect(offered).toEqual([])
     expect(red.pieces[2].corridorPosition).toBe(1)
     expect(red.pieces[3].corridorPosition).toBe(1)
