@@ -105,6 +105,11 @@ export function useTurnManager(turnManager: TurnManagerLike) {
   const [turnEndingSoon, setTurnEndingSoon] = useState(false)
   const sawNoMoveRef = useRef(false)
   const deferredTurnTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Stale-closure workaround for the turnStarted handler below (this effect only ever runs once
+  // per turnManager instance, so reading the `currentPlayer` state variable directly inside it
+  // would always see its very first value, never an updated one) - see that handler's own comment
+  // on why it needs to know the *previous* current player, not just the incoming one.
+  const currentPlayerColorRef = useRef(turnManager.currentPlayer.color)
   const [moveLog, setMoveLog] = useState<MoveLogEntry[]>([])
   const moveLogIdRef = useRef(0)
   useEffect(() => {
@@ -115,12 +120,22 @@ export function useTurnManager(turnManager: TurnManagerLike) {
 
     const unsubscribers = [
       turnManager.turnStarted.on((player) => {
-        if (sawNoMoveRef.current) {
+        // Reported directly ("Salió doble 1 y no dejó repetir el lanzamiento de los dados" - a
+        // double came up and it wouldn't let the roll happen again): a double that grants a bonus
+        // turn fires this exact same same-tick moveNotPossible -> turnStarted sequence whenever
+        // that roll's own dice have nothing to move (see finishDiceUsage/endTurn in
+        // turnManager.ts) - but `player` here is the SAME player continuing, not a different one to
+        // hold this reveal for. NO_MOVE_HOLD_MS's own delay only ever made sense for an actual turn
+        // handoff (see its own comment) - applying it here too disabled the roll button for
+        // NO_MOVE_HOLD_MS on a roll the player had already earned back, reading as "the game just
+        // won't let me roll again."
+        if (sawNoMoveRef.current && player.color !== currentPlayerColorRef.current) {
           sawNoMoveRef.current = false
           setTurnEndingSoon(true)
           if (deferredTurnTimeoutRef.current) clearTimeout(deferredTurnTimeoutRef.current)
           deferredTurnTimeoutRef.current = setTimeout(() => {
             deferredTurnTimeoutRef.current = null
+            currentPlayerColorRef.current = player.color
             setCurrentPlayer(player)
             setPendingMoves([])
             setNoMoveReason(null)
@@ -128,6 +143,8 @@ export function useTurnManager(turnManager: TurnManagerLike) {
           }, NO_MOVE_HOLD_MS)
           return
         }
+        sawNoMoveRef.current = false
+        currentPlayerColorRef.current = player.color
         setCurrentPlayer(player)
         setPendingMoves([])
       }),
