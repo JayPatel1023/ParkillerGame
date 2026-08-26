@@ -5,6 +5,7 @@ import type { Group } from 'three'
 import { getColor } from '../core/colorPalette'
 import type { PieceColor } from '../core/pieceColor'
 import { BASE_HEIGHT } from './boardGeometry'
+import { playHopSound } from './hopSound'
 import {
   BOUNCE_HEIGHT,
   HOP_DURATION,
@@ -465,6 +466,7 @@ export function ParkillerMesh({
         remainingDelta = elapsedRef.current - HOP_DURATION
         hopIndexRef.current += 1
         elapsedRef.current = 0
+        playHopSound()
       } else {
         remainingDelta = 0
       }
