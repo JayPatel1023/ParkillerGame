@@ -7,6 +7,16 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Reported directly (a client screenshot of a stale build, still on the old blue button
+      // style days after it shipped - production itself was confirmed fully up to date at the
+      // exact same moment): registerType 'autoUpdate' only makes an *already-detected* update
+      // apply itself without asking - it doesn't make the browser go looking for one. The default
+      // auto-injected registration only checks on this navigation, so a tab left open across many
+      // real testing sessions (exactly how this app tends to get used) can sit on a stale cached
+      // build indefinitely, however many times it's redeployed underneath it. `injectRegister:
+      // false` here hands registration to App.tsx's own useRegisterSW call instead, specifically
+      // so it can also poll `registration.update()` on an interval - see that file's own comment.
+      injectRegister: false,
       includeAssets: ['icons/apple-touch-icon.png'],
       manifest: {
         name: 'Parkiller',

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useRegisterSW } from 'virtual:pwa-register/react'
 import { beginLocalGame } from './core/gameFlow/localGameSession'
 import { TURN_ORDER_BY_COUNT } from './core/turnOrder'
 import type { PieceColor } from './core/pieceColor'
@@ -15,7 +16,28 @@ import { preloadTexture } from './scene/useRobustTexture'
 
 type Screen = 'start' | 'selectCount' | 'selectColor' | 'game'
 
+// Reported directly (a client screenshot still on an old, pre-redesign build days after it
+// shipped - production itself was confirmed serving the current version at that exact moment):
+// registerType 'autoUpdate' (vite.config.ts) only auto-applies an update the browser has already
+// found - it doesn't make the browser go looking. By default that check only happens once, on
+// this navigation; a tab kept open across many real testing sessions (exactly how this app tends
+// to get used) can sit on a stale cached build for as long as it stays open, no matter how many
+// times the real deployment moves on underneath it. Polling registration.update() here forces a
+// fresh check periodically even on a long-lived tab - once a genuinely new service worker is
+// found, 'autoUpdate' mode still takes it from there (installs, activates, reloads) with no
+// further code needed here.
+const SW_UPDATE_CHECK_INTERVAL_MS = 20 * 60 * 1000
+
 export default function App() {
+  useRegisterSW({
+    onRegisteredSW(_swUrl, registration) {
+      if (!registration) return
+      setInterval(() => {
+        registration.update()
+      }, SW_UPDATE_CHECK_INTERVAL_MS)
+    },
+  })
+
   const [screen, setScreen] = useState<Screen>('start')
   const [playerCount, setPlayerCount] = useState(4)
   // Reported directly, with a video: the board still flashes plain/white for a brief moment the
