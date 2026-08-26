@@ -23,9 +23,11 @@ export function isParkillerOnTrack(parkiller: Parkiller): boolean {
 // PC2 ("There can never be more than two pawns per square") / PC2.4 (barriers): verified directly
 // against the client's own reference implementation - a track square with 2 pieces already on it
 // (regardless of color) blocks every other piece from landing there OR passing through it as an
-// intermediate step of a longer move. The Parkiller is exempt from this entirely (PK4: "the
+// intermediate step of a longer move. The Parkiller is exempt from this *as a mover* (PK4: "the
 // Parkiller can jump over barriers") - it never goes through getValidMoves, it's resolved
-// separately in TurnManager.
+// separately in TurnManager. It is NOT exempt as an occupant other pieces' moves need to see -
+// this function only counts pawns, so use occupantsOnTrackSquare (below) wherever a move's
+// legality depends on a square's true total occupancy, not this alone.
 function piecesOnTrackSquare(allPlayers: readonly PlayerState[], trackPosition: number): number {
   let count = 0
   for (const player of allPlayers) {
@@ -34,6 +36,28 @@ function piecesOnTrackSquare(allPlayers: readonly PlayerState[], trackPosition: 
     }
   }
   return count
+}
+
+function parkillersOnTrackSquare(allPlayers: readonly PlayerState[], trackPosition: number): number {
+  let count = 0
+  for (const player of allPlayers) {
+    if (isParkillerOnTrack(player.parkiller) && player.parkiller.trackPosition === trackPosition) count++
+  }
+  return count
+}
+
+// Reported directly, with a screenshot: an opposing Parkiller and a Red pawn were already
+// coexisting on Red's own entry square (correct - PK4, a protected square) when a second Red pawn
+// exited onto that same square with nothing blocking or resolving it, leaving three pieces stacked
+// on one square. Root cause: every occupancy check in this file (piecesOnTrackSquare included) only
+// ever counted pawns - a Parkiller lives in PlayerState.parkiller, not the pieces array, so it was
+// structurally invisible to every "is this square already full" question. Verified directly
+// against the reference implementation (Parkiller_GameMaker-main): a square's own occupancy list
+// (fichasActualmente) holds Parkillers too, filtered out only where that code specifically means
+// pawns-only. Use this, not piecesOnTrackSquare alone, wherever a move's legality actually depends
+// on the square's true total occupancy.
+function occupantsOnTrackSquare(allPlayers: readonly PlayerState[], trackPosition: number): number {
+  return piecesOnTrackSquare(allPlayers, trackPosition) + parkillersOnTrackSquare(allPlayers, trackPosition)
 }
 
 // Home-corridor squares are private to one color (no opponent piece can ever enter another
@@ -117,10 +141,20 @@ export function getValidMoves(
         // blocked - it lands and eliminates whichever of the two arrived later (see applyMove's
         // captureAt, which already handles the "2 opposing pieces" case via
         // resolveBarrierElimination).
-        const ownOnEntry = piecesOfColorOnTrackSquare(allPlayers, player.color, lane.entryTrackIndex)
-        const occupantsAtEntry = piecesAtTrackSquare(allPlayers, lane.entryTrackIndex)
-        const opposingAtEntry = occupantsAtEntry.filter((p) => p.color !== player.color)
-        const foreignBarrier = opposingAtEntry.length >= 2 && opposingAtEntry.every((p) => p.color === opposingAtEntry[0].color)
+        // Own barrier and foreign-barrier detection both need to count a Parkiller sitting on this
+        // square exactly like a pawn (see occupantsOnTrackSquare's own comment - a screenshotted
+        // 3-piece stack traced back to every check here only ever seeing pawns): the player's own
+        // pawn + their own Parkiller already occupying the entry square is just as real an "own
+        // barrier" as two own pawns, and one opposing pawn + that exact opponent's own Parkiller is
+        // just as real a foreign barrier as two opposing pawns of that color.
+        const ownParkillerOnEntry = isParkillerOnTrack(player.parkiller) && player.parkiller.trackPosition === lane.entryTrackIndex
+        const ownOnEntry = piecesOfColorOnTrackSquare(allPlayers, player.color, lane.entryTrackIndex) + (ownParkillerOnEntry ? 1 : 0)
+        const opposingAtEntry = piecesAtTrackSquare(allPlayers, lane.entryTrackIndex).filter((p) => p.color !== player.color)
+        const opposingParkillerColorsAtEntry = allPlayers
+          .filter((p) => p.color !== player.color && isParkillerOnTrack(p.parkiller) && p.parkiller.trackPosition === lane.entryTrackIndex)
+          .map((p) => p.color)
+        const opposingColorsAtEntry = [...opposingAtEntry.map((p) => p.color), ...opposingParkillerColorsAtEntry]
+        const foreignBarrier = opposingColorsAtEntry.length >= 2 && opposingColorsAtEntry.every((c) => c === opposingColorsAtEntry[0])
         const blockedByOccupancy = ownOnEntry >= 2 || foreignBarrier
         if (!blockedByOccupancy) {
           moves.push({
@@ -163,7 +197,9 @@ export function getValidMoves(
       for (let step = 1; step < amount; step++) {
         if (step <= distanceToHomeEntrance) {
           const intermediatePos = (piece.trackPosition + step) % board.trackLength
-          if (piecesOnTrackSquare(allPlayers, intermediatePos) >= 2) {
+          // occupantsOnTrackSquare, not piecesOnTrackSquare alone - a barrier a pawn and an
+          // opposing Parkiller form together (PK4) blocks transit exactly like a 2-pawn one does.
+          if (occupantsOnTrackSquare(allPlayers, intermediatePos) >= 2) {
             blockedInTransit = true
             break
           }
@@ -179,7 +215,13 @@ export function getValidMoves(
 
       if (amount <= distanceToHomeEntrance) {
         const newTrackPos = (piece.trackPosition + amount) % board.trackLength
-        if (piecesOnTrackSquare(allPlayers, newTrackPos) >= 2) continue
+        // Landing (unlike ExitYard, see that branch's own comment) is blocked outright when the
+        // destination is already full, Parkiller included - verified directly against the
+        // reference implementation's own puedeAvanzarDesde(), which rejects a normal move's
+        // destination the same unconditional way. Exiting the yard is the one deliberate exception
+        // (PC2.1's own exit obligation always at least attempts to land, then lets PK5 resolve an
+        // already-full protected square by sending the exiting pawn straight back - see applyMove).
+        if (occupantsOnTrackSquare(allPlayers, newTrackPos) >= 2) continue
         moves.push({
           piece,
           kind: 'TrackMove',
@@ -392,18 +434,38 @@ function captureParkillerAt(mover: Piece, trackPosition: number, allPlayers: rea
 // still in play, on an unprotected square. Safe/protected squares are exempt (PK4: the two simply
 // form a barrier instead), and this only ever matters for the destination square itself, not any
 // square passed through along the way.
+//
+// Reported directly, with a screenshot: an opposing Parkiller and a Red pawn were already
+// coexisting on Red's own (protected) entry square when a second Red pawn exited there too,
+// leaving three pieces stacked on one square. Root cause here specifically: the safe-square
+// exemption below used to be unconditional - it shielded the *arriving* pawn even when the square
+// already held a full 2-occupant barrier (that pawn + the opposing Parkiller) before this piece
+// even arrived, joining as an illegal 3rd. This is the exact mirror of a bug already fixed the
+// other direction in TurnManager.resolveParkillerCollisions (see that function's own comment for
+// the full reasoning) - a protected square's shield only ever covers a landing that still has
+// room, not one that's already full. Called from applyMove after piece.trackPosition has already
+// been set to this same trackPosition (see that function's own comment on occupantsAtDestination),
+// so occupantsOnTrackSquare's own count here includes the mover - subtracted back out below to get
+// what was actually there *before* this arrival, matching the reference implementation's own
+// pre-arrival ds_list_size check.
 function unprotectedOpposingParkillerColorAt(
   board: BoardData,
   color: PieceColor,
   trackPosition: number,
   allPlayers: readonly PlayerState[],
 ): PieceColor | null {
-  if (board.safeTrackIndices.has(trackPosition)) return null
+  let dangerColor: PieceColor | null = null
   for (const opponent of allPlayers) {
     if (opponent.color === color) continue
-    if (isParkillerOnTrack(opponent.parkiller) && opponent.parkiller.trackPosition === trackPosition) return opponent.color
+    if (isParkillerOnTrack(opponent.parkiller) && opponent.parkiller.trackPosition === trackPosition) {
+      dangerColor = opponent.color
+      break
+    }
   }
-  return null
+  if (!dangerColor) return null
+  if (!board.safeTrackIndices.has(trackPosition)) return dangerColor
+  const occupantsBeforeThisArrival = occupantsOnTrackSquare(allPlayers, trackPosition) - 1
+  return occupantsBeforeThisArrival < 2 ? null : dangerColor
 }
 
 // PK5/PK10: a Parkiller landing on a square already held by a barrier (2 pawns, own or mixed)
