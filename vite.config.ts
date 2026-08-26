@@ -35,6 +35,27 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Reported directly, repeatedly, recurring across multiple normal reloads ("그냥 F5을 누르면
+        // 이화면이다" - a plain F5 still shows the old screen; only a hard reload, Ctrl+Shift+R,
+        // shows the current one): registerType 'autoUpdate' only auto-injects skipWaiting/
+        // clientsClaim into the *plugin's own* registration script - see this project's own
+        // node_modules/vite-plugin-pwa/dist/index.js, `if ((injectRegister === 'auto' ||
+        // injectRegister == null) && registerType === 'autoUpdate') { workbox.skipWaiting = true;
+        // workbox.clientsClaim = true }`. injectRegister was set to false above (App.tsx's own
+        // useRegisterSW call registers instead, specifically to add the periodic registration.update()
+        // poll below) - which silently skipped this same injection, since the condition it's guarded
+        // on no longer holds. Confirmed directly in the built dist/sw.js: self.skipWaiting() was only
+        // ever wired to fire on an explicit SKIP_WAITING postMessage, which nothing in "auto" mode's
+        // client code actually sends (it only listens for the SW to reach "activated" on its own) -
+        // so a newly-installed SW just sat in "waiting" forever, never taking over, for as long as
+        // the tab stayed open across any number of reloads. A hard reload "worked" only because
+        // bypassing the browser cache also bypasses the service worker's own fetch interception for
+        // that one load, serving the real current build straight from the network - not because the
+        // SW itself had actually updated. Setting these directly here (not relying on the plugin's
+        // own conditional injection) restores the self-activating behavior 'autoUpdate' is supposed
+        // to mean, while keeping App.tsx's own custom registration/update-poll intact.
+        skipWaiting: true,
+        clientsClaim: true,
         // Board art, tiles, and backgrounds are small (a few MB total) - precache everything so
         // the game (boards included) works fully offline right after the first load, not just
         // the app shell. mp3 added alongside hopSound.ts's own hop.mp3 - same reasoning, a few KB
