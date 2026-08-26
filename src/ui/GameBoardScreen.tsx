@@ -8,6 +8,7 @@ import type { MoveOption } from '../core/rules/moveOption'
 import { useTurnManager } from '../hooks/useTurnManager'
 import { BoardScene } from '../scene/BoardScene'
 import { Confetti } from './Confetti'
+import { EliminationToast } from './EliminationToast'
 import { HelpModal } from './HelpModal'
 import { MoveLog } from './MoveLog'
 import { RewardBurst } from './RewardBurst'
@@ -236,6 +237,7 @@ export function GameBoardScreen({
 
       <RewardBurst pendingReward={visiblePendingReward} />
       <RewardToast pendingReward={visiblePendingReward} forfeitedReward={visibleForfeitedReward} />
+      <EliminationToast eliminatedPiece={eliminatedByDoubles} />
       <MoveLog entries={moveLog} />
 
       <div style={turnCardStyle}>
