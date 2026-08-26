@@ -450,6 +450,98 @@ describe('parchisRules', () => {
     })
   })
 
+  // Reported directly, with a screenshot: an opposing Parkiller and a Red pawn were already
+  // coexisting on Red's own (protected) entry square (correct - PK4) when a second Red pawn exited
+  // onto that same square, leaving three pieces stacked on one square - "ES IMPOSIBLE TRES FICHAS
+  // EN UNA MISMA CASILLA". Root cause: every occupancy check in parchisRules.ts only ever counted
+  // pawns - a Parkiller lives in PlayerState.parkiller, not the pieces array, so it was invisible
+  // to every "is this square already full" question. See occupantsOnTrackSquare's own comment.
+  describe('a Parkiller occupying a square counts toward the 2-piece cap (PC2/PC2.4)', () => {
+    it('the exact reported scenario: exiting onto an entry square already holding an own pawn and an opposing Parkiller sends the exiting pawn straight back, never a 3-stack', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+      red.pieces[0].state = 'OnTrack'
+      red.pieces[0].trackPosition = 0 // Red's own entry square, already holding one Red pawn...
+      blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+      blue.parkiller.trackPosition = 0 // ...and (correctly, PK4) an opposing Parkiller too
+
+      const settings = defaultRuleSettings()
+      const exitMove = getValidMoves(board, red, [red, blue], 5, settings).find((m) => m.kind === 'ExitYard')
+      expect(exitMove).toBeTruthy() // the exit itself is never blocked outright - PC2.1's own obligation
+
+      const result = applyMove(board, exitMove!, [red, blue], settings, true)
+
+      expect(result.eliminatedByParkiller).toBe(true)
+      expect(result.eliminatedByParkillerColor).toBe('Blue')
+      expect(red.pieces[1].state).toBe('InYard') // the newly-exited pawn bounces straight back
+      // Exactly the original two occupants remain - never three.
+      expect(red.pieces[0].state).toBe('OnTrack')
+      expect(red.pieces[0].trackPosition).toBe(0)
+      expect(blue.parkiller.state).toBe('InPlay')
+      expect(blue.parkiller.trackPosition).toBe(0)
+    })
+
+    it('an own pawn plus the player\'s own Parkiller already on the entry square blocks exit as an own barrier', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      red.pieces[0].state = 'OnTrack'
+      red.pieces[0].trackPosition = 0
+      red.parkiller.corridorPosition = red.parkiller.corridorLength
+      red.parkiller.trackPosition = 0
+
+      const settings = defaultRuleSettings()
+      const moves = getValidMoves(board, red, [red], 5, settings)
+      expect(moves.find((m) => m.kind === 'ExitYard')).toBeUndefined()
+    })
+
+    it('an opposing pawn plus that same opponent\'s own Parkiller on the entry square blocks exit as a foreign barrier', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+      blue.pieces[0].state = 'OnTrack'
+      blue.pieces[0].trackPosition = 0
+      blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+      blue.parkiller.trackPosition = 0
+
+      const settings = defaultRuleSettings()
+      const moves = getValidMoves(board, red, [red, blue], 5, settings)
+      expect(moves.find((m) => m.kind === 'ExitYard')).toBeUndefined()
+    })
+
+    it('a normal (non-exit) move cannot land on a square already holding a pawn and an opposing Parkiller', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+      red.pieces[0].state = 'OnTrack'
+      red.pieces[0].trackPosition = 5
+      blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+      blue.parkiller.trackPosition = 5
+      red.pieces[1].state = 'OnTrack'
+      red.pieces[1].trackPosition = 3
+
+      const settings = defaultRuleSettings()
+      const moves = getValidMoves(board, red, [red, blue], 2, settings) // 3 -> 5
+      expect(moves.find((m) => m.piece === red.pieces[1])).toBeUndefined()
+    })
+
+    it('a normal move cannot pass through a square already holding a pawn and an opposing Parkiller', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+      red.pieces[0].state = 'OnTrack'
+      red.pieces[0].trackPosition = 4
+      blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+      blue.parkiller.trackPosition = 4
+      red.pieces[1].state = 'OnTrack'
+      red.pieces[1].trackPosition = 2
+
+      const settings = defaultRuleSettings()
+      const moves = getValidMoves(board, red, [red, blue], 3, settings) // 2 -> 5, crossing square 4
+      expect(moves.find((m) => m.piece === red.pieces[1])).toBeUndefined()
+    })
+  })
+
   describe('resolveBarrierElimination (PK5/PK10 - a Parkiller landing on a barrier)', () => {
     it('when one pawn shares the Parkiller\'s own color, eliminates the other pawn instead (protection)', () => {
       const own = { ...createPiece('Red', 0), arrivedAt: 5 }
