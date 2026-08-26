@@ -131,6 +131,36 @@ button {
   }
 }
 
+/* Candy-button family (PlayerCountSelector.tsx, OnlineLobbyScreen.tsx's own count picker) -
+   reported directly, asking for a fully distinct, playful/children's shape and feel instead of the
+   app's usual premium-tabletop chunky button. A gentle, continuous side-to-side wobble (each button
+   given its own --wobble-delay so a row of them never swings in unison) is the "alive, toy-like"
+   energy nothing else in the app uses - a still object reads as furniture, a slightly wobbling one
+   reads as a toy. Press response is its own separate, bigger bounce (see .candy-btn:active below),
+   not just this idle sway getting faster. */
+@keyframes candy-wobble {
+  0%,
+  100% {
+    transform: rotate(-4deg);
+  }
+  50% {
+    transform: rotate(4deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .candy-btn {
+    animation: candy-wobble 2.6s ease-in-out infinite;
+    animation-delay: var(--wobble-delay, 0s);
+  }
+  /* Overrides chunky-btn's own subtler press transform with a bigger, springier squash - a toy
+     being poked, not a HUD button being clicked. */
+  .candy-btn:active:not(:disabled) {
+    animation-play-state: paused;
+    transform: scale(0.86) rotate(0deg) !important;
+  }
+}
+
 /* StartScreen's background photo - firstbag.jpg (supplied directly): a candlelit wood desk with
    the physical board laid flat and centered, "PARKILLER"/"RULES" books framing it. Unlike the
    earlier start.png/start-mobile.png pair, this one photo's own composition is already centered
