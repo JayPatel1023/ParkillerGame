@@ -156,7 +156,12 @@ wherever the rulebook's prose alone was ambiguous.
   of the double's two dice breaks it, the other is free again with no separate "already broken this
   roll" tracking needed — except for putting the barrier's other original pawn right back onto the
   exact square the first one just broke to, which stays blocked for that one specific (piece,
-  destination) pairing only, the rest of that die's own options untouched.
+  destination) pairing only, the rest of that die's own options untouched. A pawn sharing its square
+  with the player's own Parkiller counts as this same "own barrier" too, not just two own pawns —
+  reported directly with screen recordings ("no hay opción para que avance la que forma barrera con
+  el Parki"): a double that also happened to be the exit roll used to fall through to the plain exit
+  lock instead, forcing every yard pawn out with no way to break the pawn+Parkiller pairing, and a
+  forced exit landing badly could "suicide" the exiting pawn with no way to avoid it.
 - **The Parkiller (PK1-8)**: one extra piece per color, moved by its own black die (rolled once per
   actual turn, skipped on a doubles bonus turn), traveling the shared track loop in the *opposite*
   direction from regular pawns. Landing on an opposing pawn sends it home with no reward; landing

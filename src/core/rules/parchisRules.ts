@@ -492,11 +492,26 @@ export function resolveBarrierElimination(moverColor: PieceColor, piecesAtSquare
 // pawn, one foreign) isn't "the player's own" to have to open, so only a same-color pair counts.
 // Only the player's own 4 pieces need checking, not the whole track. Returns the first one found if
 // somehow more than one exists (a rare-enough double edge case not worth its own tie-break rule).
+// A pawn sharing a square with the player's *own* Parkiller counts as this same "own barrier" too -
+// occupantsOnTrackSquare (above) already treats that pairing as a real 2-occupant barrier for
+// blocking everyone else's passage, so treating it as anything less than a real barrier here (the
+// one place that still only scanned player.pieces) left it structurally invisible to both PK9.1's
+// double-break priority and pieceIsInOwnBarrier's own non-double lockout - reported directly
+// ("no hay opción para que avance la que forma barrera con el Parki"): a double that also happened
+// to be the exit roll forced every yard pawn out instead, and the exit could land the exiting pawn
+// straight into an elimination the player had no way to avoid, since the actually-correct move (the
+// pawn breaking its barrier with the Parkiller) was never offered at all. Only the pawn half of the
+// pairing can ever appear as a candidate move here - the Parkiller itself never moves via these two
+// white dice, only its own black die - so nothing further is needed to keep this scoped correctly.
 export function ownBarrierTrackPosition(player: PlayerState): number | null {
   const counts = new Map<number, number>()
   for (const piece of player.pieces) {
     if (piece.state !== 'OnTrack') continue
     counts.set(piece.trackPosition, (counts.get(piece.trackPosition) ?? 0) + 1)
+  }
+  if (isParkillerOnTrack(player.parkiller)) {
+    const pos = player.parkiller.trackPosition
+    counts.set(pos, (counts.get(pos) ?? 0) + 1)
   }
   for (const [position, count] of counts) {
     if (count >= 2) return position

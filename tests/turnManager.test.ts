@@ -763,6 +763,45 @@ describe('TurnManager - mandatory barrier removal on doubles (PK9.1)', () => {
     expect(offered.map((m) => m.piece)).toEqual(expect.arrayContaining([red.pieces[0], red.pieces[1]]))
     expect(offered.some((m) => m.piece === red.pieces[2])).toBe(false)
   })
+
+  // Reported directly by the client, with screen recordings ("EMPIEZA ASI Y AL FINAL ES ABSURDO QUE
+  // EL PEON SE 'SUICIDE', DEBE MOVER OTRO PEON" / "en esta situación salir es obligatorio y la
+  // ficha que sale es eliminada. No hay opción para que avance la que forma barrera con el Parki"):
+  // a pawn sharing a square with the player's *own* Parkiller is just as real an "own barrier" as
+  // two own pawns (occupantsOnTrackSquare already treats it that way for blocking everyone else's
+  // passage - see parchisRules.ts) but ownBarrierTrackPosition used to only ever scan player.pieces,
+  // so this pairing was structurally invisible to PK9.1's double-break priority. A double that also
+  // happened to equal the exit roll fell through to the plain exit lock instead, forcing every yard
+  // pawn out with no way to move the pawn that should have broken its barrier with the Parkiller -
+  // and if that forced exit then landed somewhere fatal, the player had no way to avoid it at all.
+  it('a double matching the exit roll still prioritizes breaking a pawn+own-Parkiller barrier over forcing a yard exit', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5
+    red.parkiller.corridorPosition = red.parkiller.corridorLength
+    red.parkiller.trackPosition = 6 // the black die (1, below) walks it onto 5, joining pieces[0] -
+    // the black die resolves before offerMoves() each roll, so this is what a same-roll-formed
+    // pawn+Parkiller barrier actually looks like, not a pre-placed one the black die would just
+    // immediately walk back off of.
+    // pieces[1..3] stay InYard - a plain exit-lock (without the fix) would force them all out.
+
+    const settings = { ...defaultRuleSettings(), exitRoll: 5 }
+    const dice = new ScriptedDice([5, 5, 1]) // double and exit roll, blackDie=1 forms the barrier
+    const manager = new TurnManager(board, [red, blue], settings, dice)
+
+    let offered: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((moves) => (offered = moves))
+
+    manager.requestRoll()
+
+    // Only the barrier-break move for pieces[0] is offered - no yard piece gets force-exited while
+    // an own pawn+Parkiller barrier still stands.
+    expect(offered.every((m) => m.piece === red.pieces[0])).toBe(true)
+    expect(offered.some((m) => m.kind === 'ExitYard')).toBe(false)
+    expect(offered.some((m) => m.piece === red.pieces[0] && m.kind === 'TrackMove')).toBe(true)
+  })
 })
 
 // Reported directly ("장벽 안에 있는 말이 어떤 숫자가 나오든 자동으로 장벽에서 나올 수 있는 규칙은
@@ -793,6 +832,33 @@ describe('TurnManager - a normal roll cannot move a piece out of its own barrier
 
     expect(offered.some((m) => m.piece === red.pieces[0])).toBe(false)
     expect(offered.some((m) => m.piece === red.pieces[1])).toBe(false)
+    expect(offered.some((m) => m.piece === red.pieces[2])).toBe(true)
+  })
+
+  // Same lockout, but the barrier is a pawn sharing its square with the player's own Parkiller
+  // instead of a second pawn - see ownBarrierTrackPosition's own doc comment on why this pairing
+  // counts as a real own barrier just like two own pawns do.
+  it('also locks a pawn sharing its square with the player own Parkiller on a non-double roll', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5
+    red.parkiller.corridorPosition = red.parkiller.corridorLength
+    red.parkiller.trackPosition = 6 // this roll's blackDie (1) walks it onto 5, joining pieces[0]
+    red.pieces[2].state = 'OnTrack'
+    red.pieces[2].trackPosition = 0 // free to move normally - not part of the barrier
+
+    const dice = new ScriptedDice([3, 4, 1]) // not a double
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let offered: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((moves) => (offered = moves))
+
+    manager.requestRoll()
+
+    expect(red.parkiller.trackPosition).toBe(5)
+    expect(offered.some((m) => m.piece === red.pieces[0])).toBe(false)
     expect(offered.some((m) => m.piece === red.pieces[2])).toBe(true)
   })
 
