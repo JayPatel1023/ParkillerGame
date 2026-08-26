@@ -131,6 +131,15 @@ wherever the rulebook's prose alone was ambiguous.
   same-color barrier specifically — the one with a defined release valve (PK9.1's own double
   obligation) — not a mixed barrier shared with an opponent on a protected square, which has no
   such mechanism and would otherwise strand both owners' pieces with no way out at all.
+- **How a barrier forms** (client's own "BARRIERS" rules page — the exhaustive list, cross-checked
+  against the code directly): (1) two pawns of the same color — any square. (2) two pawns of
+  different colors — safe square only (elsewhere, the second one to land just captures the first).
+  (3) a Parkiller and a pawn of its own color — any square (this is the "own barrier" pairing PK9.1
+  above also has to break). (4) two opposing Parkillers — safe square only (elsewhere, the landing
+  Parkiller eliminates the other and earns PK6's reward). (5) a Parkiller and a pawn of a different
+  color — safe square only (elsewhere, the *arriving* pawn is the one sent home, per PK5, not the
+  Parkiller captured). The general shape: a same-color pairing can form anywhere; a mixed pairing
+  only ever coexists on a protected square, and resolves as a capture/elimination everywhere else.
 - **PC3/PK8**: capturing is mandatory *per piece*, not across the whole roll — verified directly
   against the reference implementation (`activarFichasMovibles()`/`wouldComer()` in
   `Parkiller_GameMaker-main`): a piece that could capture with one die can't dodge into a
@@ -165,9 +174,14 @@ wherever the rulebook's prose alone was ambiguous.
 - **The Parkiller (PK1-8)**: one extra piece per color, moved by its own black die (rolled once per
   actual turn, skipped on a doubles bonus turn), traveling the shared track loop in the *opposite*
   direction from regular pawns. Landing on an opposing pawn sends it home with no reward; landing
-  on an opposing Parkiller eliminates it and grants the same 20-square choice-based reward as a
-  regular capture, but only via a single die's own value during the roll that just produced doubles
-  (PK6) — never the sum.
+  on an opposing Parkiller on an *unprotected* square eliminates it and grants the same 20-square
+  choice-based reward as a regular capture, but only via a single die's own value during the roll
+  that just produced doubles (PK6) — never the sum. On a *protected/safe* square the two Parkillers
+  simply form a barrier together instead (client's own "BARRIERS" rules page, case 4: "Two Parkis -
+  can only be formed on a safe space") — no elimination, no reward. Reported directly: this
+  safe-square exception used to be missing entirely for this one collision, unlike every other
+  pairing on that same rules page, which unconditionally eliminated the opposing Parkiller even on
+  a protected square.
 - **PK5**: the reverse also holds — a pawn landing on an unprotected opposing Parkiller (without
   eliminating it) is sent straight back to its own yard instead, with no reward, and the move is
   never blocked outright, it always completes first. On a protected/safe square the two simply
