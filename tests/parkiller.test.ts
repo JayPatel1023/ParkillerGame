@@ -191,9 +191,11 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     red.pieces[0].state = 'OnTrack'
     red.pieces[0].trackPosition = 0 // needs a piece already in play to spend the reward on (PC 5)
     blue.parkiller.corridorPosition = blue.parkiller.corridorLength
-    blue.parkiller.trackPosition = 15 // reachable from Red's parkiller start (19) with blackDie=4
+    // 16, not a safe square (board's own safeTrackIndices is {0, 10, 15}) - landing on a *safe*
+    // square instead forms a barrier now (see the sibling test just below), doesn't eliminate.
+    blue.parkiller.trackPosition = 16 // reachable from Red's parkiller start (19) with blackDie=3
 
-    const dice = new ScriptedDice([1, 1, 4])
+    const dice = new ScriptedDice([1, 1, 3])
     const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
 
     const grants: RewardGrant[] = []
@@ -210,6 +212,34 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     expect(latestMoves.every((m) => m.diceSource === 'reward')).toBe(true)
     expect(latestMoves.some((m) => m.amount === 20)).toBe(true)
     expect(latestMoves.some((m) => m.amount === 10)).toBe(true)
+  })
+
+  // Client's own "BARRIERS" rules page, case 4: "Two Parkis - can only be formed on a safe space."
+  // This used to unconditionally eliminate the opposing Parkiller regardless of the square's own
+  // safety, the one pairing on that page missing the safe-square exception every other pairing
+  // (two pawns, a Parki + a same-color pawn, a Parki + a different-color pawn) already gets.
+  it('landing on an opposing Parkiller on a *safe* square forms a barrier instead of eliminating it', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.parkiller.corridorPosition = red.parkiller.corridorLength
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 0
+    blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+    blue.parkiller.trackPosition = 15 // a safe square (board's own safeTrackIndices)
+
+    const dice = new ScriptedDice([1, 1, 4]) // blackDie=4 walks red's own parkiller 19 -> 15
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    const grants: RewardGrant[] = []
+    manager.rewardOffered.on((g) => grants.push(g))
+
+    manager.requestRoll()
+
+    expect(red.parkiller.trackPosition).toBe(15)
+    expect(blue.parkiller.state).toBe('InPlay')
+    expect(blue.parkiller.trackPosition).toBe(15)
+    expect(grants).toEqual([]) // no elimination, no PK7 reward either
   })
 
   it('a pawn move landing on an opposing Parkiller during a doubles roll eliminates it and grants a reward', () => {

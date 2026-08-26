@@ -431,13 +431,24 @@ export class TurnManager {
       }
     }
 
+    // Client's own "BARRIERS" rules page, case 4 ("Two Parkis - can only be formed on a safe
+    // space"): two opposing Parkillers landing together are exactly as real a barrier as any other
+    // pairing on this page, with the same safe-square gate every other mixed pairing above already
+    // gets - this was the one case missing it, unconditionally eliminating the opposing Parkiller
+    // even on a protected square instead of letting the two simply coexist there. Scoped to a lone
+    // opposing Parkiller only (mirrors the pawn block above, which does not extend its own
+    // safe-square exception to an already-full 2-occupant square either) - a third Parkiller
+    // joining two already sharing a safe square is a deeper edge case this page doesn't address,
+    // left unhandled like this file's other explicitly out-of-scope PK10.1/PK10.2 cases.
     let capturedParkillerColor: PieceColor | null = null
-    for (const opponent of this.players) {
-      if (opponent.color === player.color) continue
-      if (isParkillerOnTrack(opponent.parkiller) && opponent.parkiller.trackPosition === after) {
-        opponent.parkiller.state = 'Eliminated'
-        capturedParkillerColor = opponent.color
-        break
+    if (!this.board.safeTrackIndices.has(after)) {
+      for (const opponent of this.players) {
+        if (opponent.color === player.color) continue
+        if (isParkillerOnTrack(opponent.parkiller) && opponent.parkiller.trackPosition === after) {
+          opponent.parkiller.state = 'Eliminated'
+          capturedParkillerColor = opponent.color
+          break
+        }
       }
     }
 
