@@ -314,7 +314,7 @@ export function applyMove(
   arrivalSequence = 0,
 ): MoveResult {
   const piece = move.piece
-  const result: MoveResult = { movedPiece: piece, capturedPiece: null, capturedParkillerColor: null, pieceFinished: false }
+  const result: MoveResult = { movedPiece: piece, amount: move.amount, capturedPiece: null, capturedParkillerColor: null, pieceFinished: false }
 
   switch (move.kind) {
     case 'ExitYard':

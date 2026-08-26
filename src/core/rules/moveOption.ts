@@ -22,6 +22,12 @@ export interface MoveOption {
 
 export interface MoveResult {
   movedPiece: Piece
+  /** Squares this move actually covered - copied straight from the MoveOption that produced it.
+   * Callers with no other way to know how long this move's own hop animation takes (BotController,
+   * specifically - see its own doc comment on why a bot must wait out *any* player's hop, not just
+   * its own) can derive that from this alone, without needing scene-layer waypoint reconstruction
+   * (`src/core/` can't depend on `src/scene/` per CLAUDE.md's own layering). */
+  amount: number
   capturedPiece: Piece | null
   /** Set when this move landed exactly on an opposing color's Parkiller piece (PK6) - eliminating
    * it permanently, same as capturing a regular piece but tracked separately since a Parkiller has

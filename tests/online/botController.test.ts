@@ -277,6 +277,57 @@ describe('BotController', () => {
     bots.dispose()
   })
 
+  // Reported directly ("El bot debe esperar a que terminen de moverse los peones antes de lanzar
+  // los dados del siguiente jugador" - the bot must wait for the pawns to finish moving before
+  // rolling the next player's dice): onMoveChoicesReady's own markBusy call only ever ran for this
+  // bot's *own* move - a human player's move never extended busyUntilMs at all, so the very next
+  // bot's turn could start rolling while a human's own pawn was still visibly mid-hop.
+  it("waits out a human player's own move animation before the next bot's turn starts rolling", () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 0
+    // dieA=3, dieB=4: sum=7 (not 5, no exit obligation in play), spending both dice in one move via
+    // the sum - Red's whole turn (a "human" one - Red is deliberately not in botColors below) ends
+    // in this single submitMove call, same as a real human's own click would. The second triple is
+    // Blue's own bot-triggered roll once its turn starts.
+    const dice = new RecordingDice(new ScriptedDice([3, 4, 1, 2, 2, 1]))
+    const inner = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+    const network = new FakeRoomNetwork(MASTER_ACTOR)
+    const transport = network.createTransport(MASTER_ACTOR)
+    const host = new HostTurnManagerBridge(inner, dice, [red, blue], transport, new Map<number, PieceColor>())
+    const thinkDelayMs = 10
+    const hopDurationMs = 50
+    // Only Blue is a bot - Red's move below is submitted directly against `inner`, the same way a
+    // real human's own click reaches the underlying TurnManager, never through submitMoveForBot.
+    const bots = new BotController(host, new Set<PieceColor>(['Blue']), thinkDelayMs, hopDurationMs, 2)
+
+    let rollCount = 0
+    inner.diceRolled.on(() => rollCount++)
+
+    host.start()
+    inner.requestRoll() // Red's own "human" roll
+    expect(rollCount).toBe(1)
+    inner.submitMove(red.pieces[0], 7) // 0 -> 7, spends the sum, ends Red's turn - Blue's turn starts
+    expect(host.currentPlayer.color).toBe('Blue')
+
+    // Blue is a bot with only a thinkDelayMs of 10ms - without the fix, its roll would already have
+    // fired by now, since nothing extended busyUntilMs for Red's own 7-square move.
+    vi.advanceTimersByTime(thinkDelayMs)
+    expect(rollCount).toBe(1) // still just Red's roll - Blue is correctly still waiting
+
+    // Just short of the full 7*hopDurationMs=350ms Red's own move needs to finish hopping.
+    vi.advanceTimersByTime(300)
+    expect(rollCount).toBe(1)
+
+    // Past it now - Blue's roll should fire.
+    vi.advanceTimersByTime(60)
+    expect(rollCount).toBe(2)
+
+    bots.dispose()
+  })
+
   it('a color not in botColors never receives an automatic roll', () => {
     const board = buildTestBoard()
     const players = [createPlayerState('Red', board), createPlayerState('Blue', board)]

@@ -97,6 +97,11 @@ export interface BotDrivableSession {
   readonly turnStarted: Listenable<PlayerState>
   readonly diceRolled: Listenable<DiceRoll>
   readonly moveChoicesReady: Listenable<MoveOption[]>
+  /** Fires for *every* applied move, this bot's own or any other player's (a real TurnManager's
+   * own moveApplied, forwarded unchanged by both LocalBotSession and HostTurnManagerBridge) - see
+   * this class's own constructor for why a bot needs to see a non-bot player's moves too, not just
+   * its own. */
+  readonly moveApplied: Listenable<MoveResult>
   rollForBot(): void
   submitMoveForBot(piece: Piece, amount?: number): MoveResult | null
 }
@@ -165,6 +170,19 @@ export class BotController {
       // by the current constants' own coincidence.
       session.diceRolled.on((roll) => {
         this.markBusy(this.diceSpinMs + roll.blackDie * this.hopDurationMs)
+      }),
+      // Reported directly ("El bot debe esperar a que terminen de moverse los peones antes de
+      // lanzar los dados del siguiente jugador" - the bot must wait for the pawns to finish moving
+      // before rolling the next player's dice): onMoveChoicesReady's own markBusy call below only
+      // ever runs for *this bot's own* move (gated on botColors, right before submitMoveForBot) -
+      // a human player's move never touched busyUntilMs at all, so the very next bot's turn could
+      // start rolling/deciding while a human's own pawn was still mid-hop on screen. This fires for
+      // every applied move regardless of who made it; skipping a bot's own color here avoids
+      // double-counting against the pre-emptive call already covering it (see that call's own
+      // comment on why it has to run *before* submitMoveForBot, not after).
+      session.moveApplied.on((result) => {
+        if (this.botColors.has(result.movedPiece.color)) return
+        this.markBusy(result.amount * this.hopDurationMs)
       }),
       session.moveChoicesReady.on((moves) => this.onMoveChoicesReady(moves)),
     ]
