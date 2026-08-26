@@ -58,7 +58,12 @@ const BOT_THINK_DELAY_MS = 2400
 // from there and must be kept in sync: DICE_SPIN_MS matches useTurnManager.ts's own constant of
 // the same name, HOP_DURATION_MS matches PieceMesh.tsx's HOP_DURATION (in seconds, *1000 here).
 const DICE_SPIN_MS = 450
-const HOP_DURATION_MS = 320
+// Kept in sync with PieceMesh.tsx's own HOP_DURATION (0.48s, *1000 here) - reported directly
+// ("말속도가 너무빠르므로 느리게 해달라" - the piece speed is too fast, slow it down): a slower hop
+// there with this constant left stale would under-count real animation time, reopening the exact
+// "light speed" bug this file's own busyUntilMs tracking was built to prevent (see this constant's
+// neighboring comment above).
+const HOP_DURATION_MS = 480
 
 // Same minimal pub-sub as turnManager.ts's own EventEmitter (not exported from there, so
 // duplicated here rather than reaching into a peer module for an implementation detail - see this
