@@ -5,6 +5,7 @@ import type { Group, Mesh } from 'three'
 import { getColor } from '../core/colorPalette'
 import type { Piece } from '../core/pieces/piece'
 import { BASE_HEIGHT } from './boardGeometry'
+import { playHopSound } from './hopSound'
 
 // Re-traced from a clean reference photo of classic parchís pawns (reported directly: the
 // previous silhouette read as bulbous/hourglass-shaped, not a proper cone-and-ball pawn) - the
@@ -114,7 +115,11 @@ export const HOP_DURATION = 0.32 // seconds per square hopped - slow enough that
 // untouched here - only the vertical arc itself is taller, not how long a hop takes. ParkillerMesh
 // imports this same constant rather than duplicating its own, so the Parki's own hop grows taller
 // right along with every pawn's.
-export const BOUNCE_HEIGHT = 0.34 // world units, how high each hop arcs - a more emphatic, visible bounce
+//
+// Bumped a second time ("O saltan un poco más" - or they jump a bit more), alongside adding
+// hopSound.ts's own per-hop sound in this same round of feedback - same reasoning as the first
+// bump, still untouched HOP_DURATION, just a bit more arc again.
+export const BOUNCE_HEIGHT = 0.42 // world units, how high each hop arcs - a more emphatic, visible bounce
 
 // Reported directly ("말이 이동할때 통통뛰게 해달라" - make the piece bounce springily when it
 // moves): the existing hop was a plain sine arc - smooth up, smooth down, the piece's own shape
@@ -530,6 +535,7 @@ export function PieceMesh({
         remainingDelta = elapsedRef.current - HOP_DURATION
         hopIndexRef.current += 1
         elapsedRef.current = 0
+        playHopSound()
       } else {
         remainingDelta = 0
       }

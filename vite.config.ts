@@ -37,8 +37,10 @@ export default defineConfig({
       workbox: {
         // Board art, tiles, and backgrounds are small (a few MB total) - precache everything so
         // the game (boards included) works fully offline right after the first load, not just
-        // the app shell.
-        globPatterns: ['**/*.{js,css,html,jpg,png,svg,ico}'],
+        // the app shell. mp3 added alongside hopSound.ts's own hop.mp3 - same reasoning, a few KB
+        // is nothing against the budget below, and a move's own sound shouldn't depend on network
+        // timing any more than the board art it plays alongside does.
+        globPatterns: ['**/*.{js,css,html,jpg,png,svg,ico,mp3}'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         // Reported directly ("직접 문서로 가게 만들라" - make it go directly to the document):
         // clicking the help card's own rulebook PDF link opened the app's start screen instead of
