@@ -222,6 +222,7 @@ export function GameBoardScreen({
         rolling={rolling}
         nudgeDice={nudgeDice}
         onRollDice={() => canRoll && rollDice()}
+        canRollDice={canRoll}
         moveAnimation={moveAnimation}
         onAnimationComplete={clearMoveAnimation}
         parkillerAnimation={parkillerAnimation}

@@ -570,6 +570,12 @@ export function PieceMesh({
         e.stopPropagation()
         onSelect(piece)
       }}
+      onPointerOver={() => {
+        if (selectable) document.body.style.cursor = 'pointer'
+      }}
+      onPointerOut={() => {
+        if (selectable) document.body.style.cursor = 'auto'
+      }}
     >
       <mesh castShadow receiveShadow>
         <latheGeometry args={[profile, 24]} />

@@ -471,6 +471,10 @@ interface BoardSceneProps {
    * GameBoardScreen.tsx's own idle timer. */
   nudgeDice: boolean
   onRollDice: () => void
+  /** Mirrors GameBoardScreen's own canRoll - gates the dice's hover cursor so it only reads as
+   * clickable while a click would actually do something (onRollDice itself stays wired
+   * unconditionally and just no-ops otherwise, so the cursor needs its own signal for this). */
+  canRollDice: boolean
   moveAnimation: MoveAnimationRequest | null
   onAnimationComplete: () => void
   parkillerAnimation: ParkillerMoveResult | null
@@ -496,6 +500,7 @@ export function BoardScene({
   rolling,
   nudgeDice,
   onRollDice,
+  canRollDice,
   moveAnimation,
   onAnimationComplete,
   parkillerAnimation,
@@ -948,9 +953,9 @@ export function BoardScene({
           return <PieceChoiceMarkers anchor={anchor} amounts={pieceChoice.amounts} onChoose={onChoosePieceAmount} />
         })()}
 
-      <DiceMesh value={diceValues[0]} rolling={rolling} nudge={nudgeDice} onClick={onRollDice} column={-0.5} />
-      <DiceMesh value={diceValues[1]} rolling={rolling} nudge={nudgeDice} onClick={onRollDice} column={0.5} />
-      <DiceMesh value={diceValues[2]} rolling={rolling} nudge={nudgeDice} onClick={onRollDice} column={0} row={1} black />
+      <DiceMesh value={diceValues[0]} rolling={rolling} nudge={nudgeDice} onClick={onRollDice} interactive={canRollDice} column={-0.5} />
+      <DiceMesh value={diceValues[1]} rolling={rolling} nudge={nudgeDice} onClick={onRollDice} interactive={canRollDice} column={0.5} />
+      <DiceMesh value={diceValues[2]} rolling={rolling} nudge={nudgeDice} onClick={onRollDice} interactive={canRollDice} column={0} row={1} black />
       {TRACK_DEBUG_PLAYER_COUNTS.has(definition.playerCount) && (
         <TrackDebugPath trackWaypoints={definition.trackWaypoints} safeTrackIndices={definition.safeTrackIndices} />
       )}

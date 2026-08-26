@@ -173,6 +173,7 @@ export function DiceMesh({
   rolling,
   nudge = false,
   onClick,
+  interactive = true,
   column,
   row = 0,
   black = false,
@@ -184,6 +185,12 @@ export function DiceMesh({
    * so it isn't duplicated (and drifting) per die. */
   nudge?: boolean
   onClick: () => void
+  /** Mirrors whether onClick would actually roll right now (GameBoardScreen's own canRoll) - onClick
+   * itself stays wired unconditionally and just no-ops otherwise, so the hover cursor needs this
+   * separate signal to only read as clickable when a click would really do something. Requested
+   * directly ("마우스지시자를 주사위를누를때... cursor-pointer로 만들어달라" - make the mouse cursor a
+   * pointer when hovering the dice). */
+  interactive?: boolean
   /** Horizontal slot among however many dice are laid out together, centered on 0 (e.g. -0.5/0.5
    * for 2 dice) - the caller works out the exact layout since it knows how many dice are on the
    * table at once. */
@@ -305,7 +312,17 @@ export function DiceMesh({
 
   return (
     <group position={[CORNER_X + column * DIE_SPACING, restY, CORNER_Z + row * ROW_SPACING]}>
-      <mesh ref={meshRef} castShadow onClick={onClick}>
+      <mesh
+        ref={meshRef}
+        castShadow
+        onClick={onClick}
+        onPointerOver={() => {
+          if (interactive) document.body.style.cursor = 'pointer'
+        }}
+        onPointerOut={() => {
+          if (interactive) document.body.style.cursor = 'auto'
+        }}
+      >
         {/* Rounded corners/edges (not a sharp cardboard cube) to match the reference die photo -
             RoundedBoxGeometry extends BoxGeometry so it keeps the same 6 face-material groups. */}
         <roundedBoxGeometry args={[size, size, size, 4, size * 0.16]} />
