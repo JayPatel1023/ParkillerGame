@@ -108,7 +108,15 @@ const PAWN_TOTAL_HEIGHT = PIECE_PROFILE_RAW[PIECE_PROFILE_RAW.length - 1][1] * P
 // inconsistent ("sometimes smooth, sometimes zips along erratically"). Every hop, on every move,
 // now takes exactly this long - a long reward move simply plays for longer in total, which is a
 // smaller cost than the animation appearing to change speed depending on the roll.
-export const HOP_DURATION = 0.32 // seconds per square hopped - slow enough that each step reads clearly
+// Reported directly ("말속도가 너무빠르므로 느리게 해달라 몇발자국이동했는지 가려볼수있게" - the
+// piece speed is too fast, slow it down so it's possible to tell how many squares it moved,
+// especially bots): 0.32 was tuned for a *readable* hop, but not necessarily a *countable* one at
+// a glance, particularly for a bot's own moves where nothing else on screen forces the eye to slow
+// down and count along. Bumped by half again - long reward moves (up to 20 squares) already play
+// longer in total on purpose (see this constant's own comment above on why total playback time
+// isn't held fixed), so a bigger per-hop cost here is a deliberate trade favoring "every hop is
+// unambiguously its own beat" over overall turn brevity.
+export const HOP_DURATION = 0.48 // seconds per square hopped - slow enough that each step reads clearly
 // Reported directly ("si saltasen un poco más alto se verían mejor los movimientos guardando el
 // mismo ritmo de juego" - if they jumped a bit higher the movements would read better while
 // keeping the same pace): HOP_DURATION (above) is exactly what sets that pace, and is deliberately
