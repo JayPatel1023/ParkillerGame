@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { StartScreenBackground } from '../scene/StartScreenBackground'
+
+function lighten(hex: string, amount: number): string {
+  const n = parseInt(hex.slice(1), 16)
+  const clamp = (c: number) => Math.max(0, Math.min(255, c))
+  const r = clamp(((n >> 16) & 0xff) + Math.round(255 * amount))
+  const g = clamp(((n >> 8) & 0xff) + Math.round(255 * amount))
+  const b = clamp((n & 0xff) + Math.round(255 * amount))
+  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`
+}
 import { toBoardData } from '../core/board/boardDefinition'
 import { createPlayerState } from '../core/gameFlow/playerState'
 import { TurnManager } from '../core/gameFlow/turnManager'
@@ -322,8 +331,13 @@ export default function OnlineLobbyScreen() {
               <div style={{ marginBottom: 14 }}>
                 <div style={{ ...hintStyle, marginBottom: 8 }}>Jugadores</div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  {[2, 3, 4, 5, 6].map((n) => (
-                    <button key={n} className="chunky-btn" onClick={() => setPlayerCount(n)} style={countButtonStyle(n === playerCount)}>
+                  {[2, 3, 4, 5, 6].map((n, i) => (
+                    <button
+                      key={n}
+                      className="chunky-btn candy-btn"
+                      onClick={() => setPlayerCount(n)}
+                      style={{ ...countButtonStyle(n === playerCount, CANDY_COLORS[i]), ['--wobble-delay' as string]: `${i * 0.15}s` }}
+                    >
                       {n}
                     </button>
                   ))}
@@ -593,24 +607,33 @@ function chunkyButtonStyle(enabled: boolean): React.CSSProperties {
   }
 }
 
-// Same warm-gold-for-"selected" language countButtonStyle in PlayerCountSelector.tsx already
-// uses, for the same reason (was a full cold-blue gradient, the last of it on this screen).
-function countButtonStyle(selected: boolean): React.CSSProperties {
+// Same 5 colors as PlayerCountSelector.tsx's own identical picker, kept in sync by eye (each
+// screen owns its own style objects - see this file's own established pattern elsewhere - so this
+// is a deliberate duplicate, not an import, same as everything else here).
+const CANDY_COLORS = ['#ff6b6b', '#ffa94d', '#ffd43b', '#69db7c', '#4dabf7']
+
+// Same candy-jar redesign PlayerCountSelector.tsx's own identical picker just got - see that
+// file's own comment for why (asked for a fully distinct, playful/children's shape and feel, not
+// another variation on the app's usual premium chrome). One bright rainbow color per position,
+// same as there; the unselected/selected distinction that used to be gold-vs-muted-gold is now
+// full-bright-candy (selected) vs a washed-out pastel of that same hue (unselected) - still a real
+// rainbow across the row either way, just dimmer until picked.
+function countButtonStyle(selected: boolean, colorHex: string): React.CSSProperties {
+  const base = selected ? colorHex : lighten(colorHex, 0.28)
+  const light = lighten(base, 0.35)
+  const dark = lighten(base, -0.3)
   return {
-    width: 'clamp(36px, 10vw, 44px)',
-    height: 'clamp(36px, 10vw, 44px)',
-    fontSize: 'clamp(14px, 4vw, 17px)',
+    width: 'clamp(38px, 11vw, 48px)',
+    height: 'clamp(38px, 11vw, 48px)',
+    fontSize: 'clamp(15px, 4.2vw, 19px)',
     flexShrink: 0,
-    fontWeight: 800,
-    color: selected ? '#fff6e0' : '#e2d4b8',
-    background: selected
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0) 40%), linear-gradient(180deg, #f5e2ae 0%, #c9a24b 55%, #7a5f26 100%)'
-      : 'linear-gradient(180deg, rgba(255,255,255,0.25), rgba(255,255,255,0) 40%), linear-gradient(180deg, #8a7550 0%, #6b5636 55%, #4a3a22 100%)',
-    border: `2px solid ${selected ? '#c9a24b' : '#7a5f26'}`,
-    borderRadius: '50%',
-    boxShadow: selected
-      ? '0 3px 0 #7a5f26, 0 6px 10px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.6)'
-      : '0 3px 0 #3a2e1e, 0 5px 8px rgba(0,0,0,0.35), inset 0 1px 1px rgba(255,255,255,0.25)',
+    fontWeight: 900,
+    color: '#ffffff',
+    background: `radial-gradient(circle at 32% 26%, ${light} 0%, ${base} 55%, ${dark} 100%)`,
+    border: `3px solid ${selected ? '#fffaf0' : 'rgba(255,250,240,0.55)'}`,
+    borderRadius: '30%',
+    boxShadow: `0 4px 0 ${dark}, 0 7px 11px rgba(0,0,0,0.3), inset 0 2px 2px rgba(255,255,255,0.65)`,
+    textShadow: '0 2px 0 rgba(0,0,0,0.25)',
     cursor: 'pointer',
   }
 }
