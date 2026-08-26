@@ -1,35 +1,45 @@
 import { StartScreenBackground } from '../scene/StartScreenBackground'
 
-// Round "coin/token" shape instead of a rounded square - reported directly (with a screenshot)
-// wanting a shape distinct from the rectangular action buttons elsewhere (Crear/Unirse/Jugar
-// local), not just a different color. Circular reads as a selectable token/die face rather than a
-// stretched-down version of the rectangular button language, while keeping the exact same
-// material (glossy gradient + solid offset-edge depth) so it's still obviously part of the same
-// set. Same background fix as StartScreen (see StartScreenBackground's own comment) - this screen
-// still had the old flat, blurry image after that redesign, an inconsistency reported directly
-// alongside the button-shape request.
+function lighten(hex: string, amount: number): string {
+  const n = parseInt(hex.slice(1), 16)
+  const clamp = (c: number) => Math.max(0, Math.min(255, c))
+  const r = clamp(((n >> 16) & 0xff) + Math.round(255 * amount))
+  const g = clamp(((n >> 8) & 0xff) + Math.round(255 * amount))
+  const b = clamp((n & 0xff) + Math.round(255 * amount))
+  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`
+}
+
 // clamp()-sized: 5 buttons at a fixed 64px plus gaps already overflow a narrow phone's own width
 // (reported directly, with a screenshot of the start screen clipping top/bottom on mobile - this
 // screen has the same class of bug, just horizontal instead of vertical: 5*64 + 4*18 = 392px
 // against a 375px-wide phone viewport). Shrinks smoothly with viewport width instead of a fixed
 // breakpoint.
-// Reported directly (Carlos's own "life journey" philosophy - camaraderie over competition, a
-// friend across the table rather than a HUD): these were a full cold-blue gradient, the single
-// biggest patch of "competitive game chrome" left on this screen. Warm gold instead - the same
-// "this is active/selectable" language the rest of the app already uses (PlayerPill's own gold
-// ring, the movable-piece indicator, etc.) rather than a one-off blue that meant nothing elsewhere.
-function countButtonStyle(): React.CSSProperties {
+//
+// Reported directly, twice: first that these read as a cold competitive-blue chip (recolored
+// warm gold), then - still not distinct enough sitting on the board's own similarly-toned gold
+// yard circles - asked for a genuinely different shape and feel entirely, explicitly "playful,
+// for a child's sense of wonder" rather than another variation on the app's usual premium-
+// tabletop chrome. A full candy-jar redesign: a rounded-square "gumdrop" instead of a coin,
+// one bright, fully saturated color per button (a real rainbow across the row, not five shades of
+// one hue) with a thick white border - the "wooden toy / candy button" language, nothing else in
+// this app uses - plus the wobble/bounce this file's own JSX wires up via .candy-btn
+// (see index.css's own candy-wobble comment for why idle motion specifically, not just color).
+const CANDY_COLORS = ['#ff6b6b', '#ffa94d', '#ffd43b', '#69db7c', '#4dabf7']
+
+function countButtonStyle(colorHex: string): React.CSSProperties {
+  const light = lighten(colorHex, 0.35)
+  const dark = lighten(colorHex, -0.3)
   return {
-    width: 'clamp(46px, 14vw, 64px)',
-    height: 'clamp(46px, 14vw, 64px)',
-    fontSize: 'clamp(17px, 5vw, 24px)',
-    fontWeight: 800,
-    color: '#fff6e0',
-    background: 'linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0) 45%), linear-gradient(180deg, #f5e2ae 0%, #c9a24b 48%, #7a5f26 100%)',
-    border: '3px solid #7a5f26',
-    borderRadius: '50%',
-    boxShadow: '0 5px 0 #7a5f26, 0 9px 14px rgba(0,0,0,0.4), inset 0 2px 1px rgba(255,255,255,0.55)',
-    textShadow: '0 1px 2px rgba(40,24,8,0.5)',
+    width: 'clamp(48px, 15vw, 68px)',
+    height: 'clamp(48px, 15vw, 68px)',
+    fontSize: 'clamp(18px, 5.2vw, 26px)',
+    fontWeight: 900,
+    color: '#ffffff',
+    background: `radial-gradient(circle at 32% 26%, ${light} 0%, ${colorHex} 55%, ${dark} 100%)`,
+    border: '4px solid #fffaf0',
+    borderRadius: '30%',
+    boxShadow: `0 6px 0 ${dark}, 0 10px 16px rgba(0,0,0,0.35), inset 0 3px 3px rgba(255,255,255,0.7)`,
+    textShadow: '0 2px 0 rgba(0,0,0,0.25)',
     cursor: 'pointer',
     flexShrink: 0,
   }
@@ -82,8 +92,13 @@ export function PlayerCountSelector({ onConfirm }: { onConfirm: (count: number) 
           ¿Cuántos jugadores?
         </h2>
         <div style={{ display: 'flex', gap: 'clamp(8px, 3vw, 18px)', padding: '0 12px' }}>
-          {[2, 3, 4, 5, 6].map((count) => (
-            <button key={count} className="chunky-btn" onClick={() => onConfirm(count)} style={countButtonStyle()}>
+          {[2, 3, 4, 5, 6].map((count, i) => (
+            <button
+              key={count}
+              className="chunky-btn candy-btn"
+              onClick={() => onConfirm(count)}
+              style={{ ...countButtonStyle(CANDY_COLORS[i]), ['--wobble-delay' as string]: `${i * 0.15}s` }}
+            >
               {count}
             </button>
           ))}
