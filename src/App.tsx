@@ -1,20 +1,43 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import { beginLocalGame } from './core/gameFlow/localGameSession'
 import { TURN_ORDER_BY_COUNT } from './core/turnOrder'
 import type { PieceColor } from './core/pieceColor'
 import { BOARD_DEFINITIONS } from './data/boards'
 import { ColorSelector } from './ui/ColorSelector'
-import { GameBoardScreen } from './ui/GameBoardScreen'
 import { PlayerCountSelector } from './ui/PlayerCountSelector'
 import { StartScreen } from './ui/StartScreen'
-import WaypointEditor from './tools/WaypointEditor'
-import ComponentPreview from './tools/ComponentPreview'
-import ParkillerEditor from './tools/ParkillerEditor'
-import OnlineLobbyScreen from './ui/OnlineLobbyScreen'
 import { preloadTexture } from './scene/useRobustTexture'
 
+// Reported directly ("이오락의 로딩속도가 매우느리다" - this game's loading speed is very slow):
+// every one of these used to be a plain top-level import, so the whole app - the entire Three.js/
+// @react-three/fiber 3D engine (GameBoardScreen's own BoardScene), Photon Realtime's SDK
+// (OnlineLobbyScreen), and three dev-only tools no real player ever reaches at all - had to
+// download and parse before even the start screen could paint, confirmed directly in the build's
+// own output warning (a single ~1.34MB/383KB-gzipped chunk). Splitting each into its own
+// lazy-loaded chunk means a player who never opens a dev tool or online play never downloads that
+// code at all, and the start/player-count/color screens (plain 2D UI, none of them import
+// anything from scene/) can paint and become interactive without waiting on the 3D engine first.
+// gameBoardScreenImport is called directly (not just handed to lazy()) in the preload effect below
+// so that fetch starts immediately instead of waiting for the player to actually reach the game
+// screen - same "start the fetch early, let real setup-screen interaction time cover it" pattern
+// this file's own preloadTexture calls already use for board art.
+const gameBoardScreenImport = () => import('./ui/GameBoardScreen').then((m) => ({ default: m.GameBoardScreen }))
+const GameBoardScreen = lazy(gameBoardScreenImport)
+const WaypointEditor = lazy(() => import('./tools/WaypointEditor'))
+const ComponentPreview = lazy(() => import('./tools/ComponentPreview'))
+const ParkillerEditor = lazy(() => import('./tools/ParkillerEditor'))
+const OnlineLobbyScreen = lazy(() => import('./ui/OnlineLobbyScreen'))
+
 type Screen = 'start' | 'selectCount' | 'selectColor' | 'game'
+
+// Matches the PWA manifest's own background_color - a plain dark fill reads as "still loading",
+// not a jarring flash-of-white, for whatever brief moment (if any - GameBoardScreen's own chunk is
+// pre-fetched well ahead of time, see the mount effect below) a lazy-loaded screen's chunk is still
+// in flight.
+function LazyScreenFallback() {
+  return <div style={{ height: '100vh', background: '#1a1310' }} />
+}
 
 // Reported directly (a client screenshot still on an old, pre-redesign build days after it
 // shipped - production itself was confirmed serving the current version at that exact moment):
@@ -62,6 +85,13 @@ export default function App() {
     preloadTexture('/tiles/tile-fill.png')
     preloadTexture('/tiles/tile-border.png')
   }, [playerCount])
+  // Fires once, unconditionally, regardless of playerCount - every game reaches GameBoardScreen
+  // eventually, so there's no "which one" question the way there is for board art. Starting this
+  // fetch on mount (not on reaching the game screen) gives it the whole start/count/color setup
+  // flow's own real time to finish in the background - see this file's own top comment.
+  useEffect(() => {
+    gameBoardScreenImport()
+  }, [])
   // null means classic hotseat (every color passed around one device) - see ColorSelector's own
   // "Jugar todos los colores" option. Non-null means vs-bots: the human plays only this color,
   // every other color in this count's own TURN_ORDER_BY_COUNT is bot-driven.
@@ -101,22 +131,38 @@ export default function App() {
 
   // Dev-only route: open with #editor to trace board waypoints. See src/tools/WaypointEditor.tsx.
   if (hash === '#editor') {
-    return <WaypointEditor />
+    return (
+      <Suspense fallback={<LazyScreenFallback />}>
+        <WaypointEditor />
+      </Suspense>
+    )
   }
   // Dev-only route: open with #component to inspect a single track-square component in
   // isolation, with nothing else rendered. See src/tools/ComponentPreview.tsx.
   if (hash === '#component') {
-    return <ComponentPreview />
+    return (
+      <Suspense fallback={<LazyScreenFallback />}>
+        <ComponentPreview />
+      </Suspense>
+    )
   }
   // Dev-only route: click-trace the Parkiller piece's body/hood silhouette against the reference
   // photo with a live 3D preview alongside it. See src/tools/ParkillerEditor.tsx.
   if (hash === '#parkiller-editor') {
-    return <ParkillerEditor />
+    return (
+      <Suspense fallback={<LazyScreenFallback />}>
+        <ParkillerEditor />
+      </Suspense>
+    )
   }
   // Milestone 2: online play via Photon Realtime, linked from StartScreen's "Jugar online" button
   // once VITE_PHOTON_APP_ID is configured. See src/ui/OnlineLobbyScreen.tsx.
   if (hash === '#online') {
-    return <OnlineLobbyScreen />
+    return (
+      <Suspense fallback={<LazyScreenFallback />}>
+        <OnlineLobbyScreen />
+      </Suspense>
+    )
   }
 
   return (
@@ -140,11 +186,13 @@ export default function App() {
         />
       )}
       {screen === 'game' && (
-        <GameBoardScreen
-          definition={BOARD_DEFINITIONS[playerCount]}
-          session={localSession}
-          onExit={() => setScreen('start')}
-        />
+        <Suspense fallback={<LazyScreenFallback />}>
+          <GameBoardScreen
+            definition={BOARD_DEFINITIONS[playerCount]}
+            session={localSession}
+            onExit={() => setScreen('start')}
+          />
+        </Suspense>
       )}
     </div>
   )
