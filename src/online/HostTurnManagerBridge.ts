@@ -1,3 +1,4 @@
+import type { BoardData } from '../core/board/boardData'
 import type { PlayerState } from '../core/gameFlow/playerState'
 import { TurnManager } from '../core/gameFlow/turnManager'
 import type { TurnManagerLike } from '../core/gameFlow/turnManagerLike'
@@ -40,7 +41,12 @@ export class HostTurnManagerBridge implements TurnManagerLike {
 
   private readonly inner: TurnManager
   private readonly dice: RecordingDice
-  private readonly players: PlayerState[]
+  // Readonly-public, not private - BotDrivableSession (botController.ts) needs read access to
+  // every player's own state for its own wouldWalkIntoUnprotectedParki check, same reasoning as
+  // TurnManager's own board/players fields going public.
+  readonly players: PlayerState[]
+  /** Forwarded straight from `inner` - same reasoning as `players` above. */
+  readonly board: BoardData
   private readonly transport: RoomTransport
   /** Which color each room seat (actor number) controls - fixed once the game starts (see
    * OnlineLobbyScreen for how seats are assigned before that). Bot-controlled colors have no
@@ -67,6 +73,7 @@ export class HostTurnManagerBridge implements TurnManagerLike {
     this.inner = inner
     this.dice = dice
     this.players = players
+    this.board = inner.board
     this.transport = transport
     this.actorColors = actorColors
     this.localPlayerColor = localPlayerColor

@@ -161,8 +161,12 @@ export class TurnManager {
   readonly rewardForfeited = new EventEmitter<RewardGrant>()
   readonly gameWon = new EventEmitter<PlayerState>()
 
-  private board: BoardData
-  private players: PlayerState[]
+  // Both readonly-public, not private - BotController (see its own wouldWalkIntoUnprotectedParki)
+  // needs read access to the board and every player's own state, not just this.currentPlayer, to
+  // judge whether a candidate move is safe before picking it. Still never reassigned after the
+  // constructor, same as when these were private - only the *visibility* changed.
+  readonly board: BoardData
+  readonly players: PlayerState[]
   private settings: RuleSettings
   private dice: DiceLike
 

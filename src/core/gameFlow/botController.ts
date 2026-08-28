@@ -1,4 +1,6 @@
+import type { BoardData } from '../board/boardData'
 import type { PieceColor } from '../pieceColor'
+import { isParkillerOnTrack } from '../rules/parchisRules'
 import type { MoveOption, MoveResult } from '../rules/moveOption'
 import type { Piece } from '../pieces/piece'
 import type { DiceRoll } from './turnManager'
@@ -94,6 +96,11 @@ class EventEmitter<T> {
  * per CLAUDE.md's own architecture. */
 export interface BotDrivableSession {
   readonly currentPlayer: PlayerState
+  /** Every player in this game, not just currentPlayer - needed to check an opposing color's own
+   * Parkiller position (see wouldWalkIntoUnprotectedParki). */
+  readonly players: readonly PlayerState[]
+  /** Needed for safeTrackIndices - see wouldWalkIntoUnprotectedParki. */
+  readonly board: BoardData
   readonly turnStarted: Listenable<PlayerState>
   readonly diceRolled: Listenable<DiceRoll>
   readonly moveChoicesReady: Listenable<MoveOption[]>
@@ -215,6 +222,18 @@ export class BotController {
     // this still falls back to the plain first option if avoiding a barrier isn't actually possible
     // this roll.
     const nonBarrierMoves = moves.filter((m) => !this.wouldFormOwnBarrier(m))
+    // Reported directly ("El BOT tenía dos peones para mover y en vez de mover uno y luego otro,
+    // siguió con el que iba a caer en la casilla del parki y se suicidó" - the bot had two pawns
+    // to move and instead of moving one then the other, it kept going with the one that was going
+    // to land on the Parki's square and it committed suicide): landing on an unprotected opposing
+    // Parkiller (PK5: sent straight home, no reward) when an equally legal alternative move exists
+    // is the same class of avoidable self-inflicted mistake as forming an own barrier above - just
+    // costlier (the whole piece's progress lost, not just a temporary wait). Layered on top of the
+    // barrier-avoidance above, not instead of it: prefers a move that dodges both when one exists,
+    // falls back to whichever of the two sets is non-empty otherwise, same graceful degradation the
+    // barrier check alone already used.
+    const preferredMoves = nonBarrierMoves.filter((m) => !this.wouldWalkIntoUnprotectedParki(m))
+    const safeMoves = preferredMoves.length > 0 ? preferredMoves : nonBarrierMoves
     // Reported directly, with the client's own rulebook page: a capture's 20-square reward is a
     // genuine choice - "Move one Pawn 20 spaces" OR "Move one Pawn 10 spaces and another pawn 10
     // spaces" - both are real, already-working options (verified directly: turnManager.ts's own
@@ -226,11 +245,11 @@ export class BotController {
     // it's fully implemented and available to a human player. Every move in a reward offer shares
     // the same diceSource ('reward') - not mixed with an ordinary dieA/dieB/sum offer - so
     // preferring the smaller amount present only ever kicks in for an actual reward decision.
-    const isRewardOffer = nonBarrierMoves[0]?.diceSource === 'reward'
+    const isRewardOffer = safeMoves[0]?.diceSource === 'reward'
     const candidates = isRewardOffer
-      ? nonBarrierMoves.filter((m) => m.amount === Math.min(...nonBarrierMoves.map((c) => c.amount)))
-      : nonBarrierMoves
-    const chosen = candidates[0] ?? nonBarrierMoves[0] ?? moves[0]
+      ? safeMoves.filter((m) => m.amount === Math.min(...safeMoves.map((c) => c.amount)))
+      : safeMoves
+    const chosen = candidates[0] ?? safeMoves[0] ?? nonBarrierMoves[0] ?? moves[0]
     // Fired now, not inside the scheduled callback below - the highlight should cover this whole
     // think-delay (see this class's own pieceHighlighted doc comment), not just flash right before
     // the move actually submits.
@@ -264,6 +283,25 @@ export class BotController {
       if (piece === move.piece) continue
       if (move.resultingTrackPosition !== -1 && piece.state === 'OnTrack' && piece.trackPosition === move.resultingTrackPosition) return true
       if (move.resultingCorridorPosition !== -1 && piece.state === 'InHomeCorridor' && piece.corridorPosition === move.resultingCorridorPosition) return true
+    }
+    return false
+  }
+
+  // True when landing here would put this piece on an *unprotected* (non-safe-square) opposing
+  // Parkiller - PK5: the pawn is sent straight back to its own yard, with no reward, losing
+  // whatever progress it had made. Doesn't apply to a corridor destination (resultingTrackPosition
+  // stays -1 for a CorridorMove/FinishMove - a color's own home corridor is private, no opposing
+  // Parkiller can ever be there) or to a safe square (PK4: the two would simply coexist as a
+  // barrier instead, no elimination). Deliberately simpler than parchisRules.ts's own
+  // unprotectedOpposingParkillerColorAt - that one accounts for the mover already occupying the
+  // square (called *after* the move applies); this runs *before* any move is chosen, so the
+  // destination's current occupancy needs no such adjustment.
+  private wouldWalkIntoUnprotectedParki(move: MoveOption): boolean {
+    if (move.resultingTrackPosition === -1) return false
+    if (this.session.board.safeTrackIndices.has(move.resultingTrackPosition)) return false
+    for (const player of this.session.players) {
+      if (player.color === move.piece.color) continue
+      if (isParkillerOnTrack(player.parkiller) && player.parkiller.trackPosition === move.resultingTrackPosition) return true
     }
     return false
   }

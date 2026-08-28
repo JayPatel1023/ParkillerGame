@@ -277,6 +277,47 @@ describe('BotController', () => {
     bots.dispose()
   })
 
+  // Reported directly ("El BOT tenía dos peones para mover y en vez de mover uno y luego otro,
+  // siguió con el que iba a caer en la casilla del parki y se suicidó" - the bot had two pawns to
+  // move and instead of moving one then the other, it kept going with the one that was going to
+  // land on the Parki's square and it committed suicide): landing on an unprotected opposing
+  // Parkiller sends the pawn straight home (PK5) with no reward - an avoidable, self-inflicted loss
+  // whenever a non-suicidal alternative move exists, same class of mistake the barrier-avoidance
+  // heuristic already fixed above.
+  it('avoids walking a pawn onto an unprotected opposing Parkiller when a safe move is also available', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5 // dieA(2) lands this one exactly on blue's Parkiller - moves[0]
+    // under the old "always pick the first option" behavior (getValidMoves walks pieces in index
+    // order, dieA combined into the list before dieB - same ordering the barrier-avoidance test
+    // above already relies on).
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 12 // every option for this piece (dieA/dieB/sum) lands somewhere
+    // safe/empty - a genuine non-suicidal alternative this roll.
+    blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+    blue.parkiller.trackPosition = 7 // not a safe square (board's own safeTrackIndices is {0, 10})
+
+    const dice = new RecordingDice(new ScriptedDice([2, 4, 1]))
+    const inner = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+    const network = new FakeRoomNetwork(MASTER_ACTOR)
+    const transport = network.createTransport(MASTER_ACTOR)
+    const host = new HostTurnManagerBridge(inner, dice, [red, blue], transport, new Map<number, PieceColor>())
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2)
+
+    host.start()
+    vi.advanceTimersByTime(10) // the roll fires
+    vi.advanceTimersByTime(10) // the first move fires
+
+    // Whichever move actually got picked, piece0 must not have been sent home by walking onto
+    // blue's own Parkiller - the one avoidable, self-inflicted "suicide" this roll could produce.
+    expect(red.pieces[0].state).not.toBe('InYard')
+    expect(blue.parkiller.state).toBe('InPlay') // untouched - not a double, no elimination possible
+
+    bots.dispose()
+  })
+
   // Reported directly ("El bot debe esperar a que terminen de moverse los peones antes de lanzar
   // los dados del siguiente jugador" - the bot must wait for the pawns to finish moving before
   // rolling the next player's dice): onMoveChoicesReady's own markBusy call only ever ran for this

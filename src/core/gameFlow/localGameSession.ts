@@ -1,3 +1,4 @@
+import type { BoardData } from '../board/boardData'
 import type { BoardDefinition } from '../board/boardDefinition'
 import { toBoardData } from '../board/boardDefinition'
 import type { DiceLike } from '../dice'
@@ -51,6 +52,17 @@ class LocalVsBotsSession implements TurnManagerLike, BotDrivableSession {
 
   get currentPlayer(): PlayerState {
     return this.inner.currentPlayer
+  }
+
+  // Forwarded straight from `inner` - BotDrivableSession (botController.ts) needs read access to
+  // the board and every player's own state for its own wouldWalkIntoUnprotectedParki check, same
+  // reasoning as HostTurnManagerBridge's own board/players forwarding.
+  get board(): BoardData {
+    return this.inner.board
+  }
+
+  get players(): readonly PlayerState[] {
+    return this.inner.players
   }
 
   start(): void {
