@@ -11,9 +11,13 @@ import { TURN_ORDER_BY_COUNT } from '../src/core/turnOrder'
 // deterministic - same rolls every run - while still exercising the real dice mechanics, unlike a
 // hand-picked ScriptedDice queue that would need to be long enough to cover many bot turns. This
 // specific seed is simply the first one tried that produces an early exit-roll for Red within the
-// budget below; if this ever needs to change (e.g. a rules change shifts what's legal), just try
+// budget below, *and* has Red win the game's own pre-game roll-off (determineStartingPlayer,
+// consuming this same Dice's first few rolls before any real turn begins - see beginLocalGame's own
+// startingPlayerResult) - both tests below need Red to be the one moving first with zero human
+// input, so a seed that hands the roll-off to Blue instead would stall the whole game at Blue's own
+// un-rolled turn. If this ever needs to change (e.g. a rules change shifts what's legal), just try
 // nearby integers until one works again - the seed's value itself carries no other meaning.
-const BOT_TEST_SEED = 7
+const BOT_TEST_SEED = 3
 
 beforeEach(() => {
   vi.useFakeTimers()

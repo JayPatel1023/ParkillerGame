@@ -14,6 +14,7 @@ import {
 import type { MoveOption, MoveResult } from '../rules/moveOption'
 import type { RuleSettings } from '../rules/ruleSettings'
 import { hasWon, type PlayerState } from './playerState'
+import { determineStartingPlayer as computeStartingPlayer, type StartingPlayerResult } from './startingPlayer'
 
 export interface DiceRoll {
   dieA: number
@@ -246,6 +247,18 @@ export class TurnManager {
 
   get currentPlayer(): PlayerState {
     return this.players[this.currentPlayerIndex]
+  }
+
+  // Requested directly ("cada jugador y los bots lanzan los dados blancos para indicar quien
+  // comienza la partida"): rolls the white dice once per player (see startingPlayer.ts's own doc
+  // comment for the tie-break) and sets currentPlayerIndex to whoever rolled highest - call this
+  // *before* start(), or the very first turnStarted still fires for whichever player happened to
+  // be listed first. Optional precisely so every existing test that doesn't care who goes first
+  // can keep relying on the old, deterministic "players[0] starts" behavior unchanged.
+  determineStartingPlayer(): StartingPlayerResult {
+    const result = computeStartingPlayer(this.players, this.dice)
+    this.currentPlayerIndex = result.winnerIndex
+    return result
   }
 
   start() {

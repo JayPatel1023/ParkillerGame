@@ -1138,3 +1138,43 @@ describe('TurnManager - landing on an unprotected opposing Parkiller (PK5)', () 
     expect(rewardOffered).toBe(false)
   })
 })
+
+// Requested directly ("para empezar la partida cada jugador y los bots lanzan los dados blancos
+// para indicar quien comienza la partida"): TurnManager previously always started with players[0]
+// unconditionally - see determineStartingPlayer's own doc comment (startingPlayer.ts) for the full
+// rationale and tie-break behavior; this just locks in that calling it actually moves
+// currentPlayerIndex before start()'s own first turnStarted emit, and that skipping it entirely
+// leaves the old default behavior completely unchanged (every other test in this file never calls
+// it at all, and still expects Red - players[0] - to go first).
+describe('TurnManager - pre-game starting-player roll-off', () => {
+  it('determineStartingPlayer moves currentPlayer before start() fires the first turnStarted', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    // Red: 1+1=2, Blue: 6+6=12 - Blue wins outright.
+    const dice = new ScriptedDice([1, 1, 6, 6])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    const result = manager.determineStartingPlayer()
+    expect(result.winnerIndex).toBe(1)
+    expect(manager.currentPlayer.color).toBe('Blue')
+
+    let started: string | null = null
+    manager.turnStarted.on((player) => (started = player.color))
+    manager.start()
+    expect(started).toBe('Blue')
+  })
+
+  it('players[0] still starts by default when determineStartingPlayer is never called', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), new ScriptedDice([1]))
+
+    expect(manager.currentPlayer.color).toBe('Red')
+    let started: string | null = null
+    manager.turnStarted.on((player) => (started = player.color))
+    manager.start()
+    expect(started).toBe('Red')
+  })
+})

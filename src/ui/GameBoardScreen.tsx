@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { BoardDefinition } from '../core/board/boardDefinition'
 import type { PlayerState } from '../core/gameFlow/playerState'
 import { getColor } from '../core/colorPalette'
+import type { StartingPlayerResult } from '../core/gameFlow/startingPlayer'
 import type { Listenable, TurnManagerLike } from '../core/gameFlow/turnManagerLike'
 import type { Piece } from '../core/pieces/piece'
 import type { MoveOption } from '../core/rules/moveOption'
@@ -13,6 +14,7 @@ import { HelpModal } from './HelpModal'
 import { MoveLog } from './MoveLog'
 import { RewardBurst } from './RewardBurst'
 import { RewardToast } from './RewardToast'
+import { StartingPlayerModal } from './StartingPlayerModal'
 
 // Reported directly, with a photoreal reference (ornate leather-and-gold game table, candlelit):
 // match its background mood plus its buttons' style/shape/position. This trim color used to be
@@ -44,6 +46,9 @@ export interface GameSession {
    * decided to move, so it can carry the same selectable-piece indicator a human's own choosable
    * piece already gets (see BotController's own pieceHighlighted doc comment for why). */
   botPieceHighlighted?: Listenable<Piece | null>
+  /** Only set by local play (beginLocalGame always runs this pre-game roll-off - see
+   * startingPlayer.ts) - shown once via StartingPlayerModal on mount, undefined for online play. */
+  startingPlayerResult?: StartingPlayerResult
 }
 
 export function GameBoardScreen({
@@ -63,6 +68,13 @@ export function GameBoardScreen({
   // isn't one to pause anyway; it's all synchronous) keeps running underneath exactly like the exit
   // confirmation dialog already does.
   const [showingHelp, setShowingHelp] = useState(false)
+  // See GameSession's own startingPlayerResult doc comment - shown exactly once, right when this
+  // screen first mounts for a local game; undefined session.startingPlayerResult (online play)
+  // just means this never becomes true at all. Not reset on a later re-render even if the prop
+  // reference changes - a fresh game always remounts this whole screen (App.tsx's own key/session
+  // rebuild on playerCount/humanColor change), so there's no case where this needs to fire twice
+  // for the same still-mounted screen.
+  const [showingStartingPlayer, setShowingStartingPlayer] = useState(session.startingPlayerResult !== undefined)
   const {
     currentPlayer,
     lastRoll,
@@ -273,6 +285,10 @@ export function GameBoardScreen({
       </button>
 
       {showingHelp && <HelpModal onClose={() => setShowingHelp(false)} />}
+
+      {showingStartingPlayer && session.startingPlayerResult && (
+        <StartingPlayerModal result={session.startingPlayerResult} onDone={() => setShowingStartingPlayer(false)} />
+      )}
 
       {confirmingExit && (
         <div style={overlayStyle}>

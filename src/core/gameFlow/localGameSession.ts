@@ -8,6 +8,7 @@ import type { MoveResult } from '../rules/moveOption'
 import type { Piece } from '../pieces/piece'
 import { BotController, type BotDrivableSession } from './botController'
 import { createPlayerState, type PlayerState } from './playerState'
+import type { StartingPlayerResult } from './startingPlayer'
 import { TurnManager } from './turnManager'
 import type { Listenable, TurnManagerLike } from './turnManagerLike'
 
@@ -98,6 +99,12 @@ export interface LocalGameSession {
    * (see that field's own doc comment) so GameBoardScreen can run the same selectable-piece
    * indicator for a bot's just-decided move that a human's own choosable piece already gets. */
   botPieceHighlighted?: Listenable<Piece | null>
+  /** Requested directly ("cada jugador y los bots lanzan los dados blancos para indicar quien
+   * comienza la partida"): every local game's own pre-game roll-off (see startingPlayer.ts),
+   * always run before the first real turn - GameBoardScreen shows this once on mount, then never
+   * again for this session (the game itself has already started by the time it's shown; nothing
+   * about game state depends on the player actually seeing it). */
+  startingPlayerResult: StartingPlayerResult
 }
 
 // Entry point for milestone 1: same-device play, 2-6 real players, no networking. Two modes:
@@ -125,10 +132,11 @@ export function beginLocalGame(
   const board = toBoardData(boardDefinition)
   const players = participatingColors.map((color) => createPlayerState(color, board))
   const turnManager = new TurnManager(board, players, defaultRuleSettings(), dice)
+  const startingPlayerResult = turnManager.determineStartingPlayer()
 
   if (humanColor === undefined) {
     turnManager.start()
-    return { turnManager, players }
+    return { turnManager, players, startingPlayerResult }
   }
 
   const session = new LocalVsBotsSession(turnManager, humanColor)
@@ -136,6 +144,7 @@ export function beginLocalGame(
   const botController = botColors.size > 0 ? new BotController(session, botColors) : null
   turnManager.start()
   return {
+    startingPlayerResult,
     turnManager: session,
     players,
     dispose: () => botController?.dispose(),
