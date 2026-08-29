@@ -116,17 +116,35 @@ describe('BotController', () => {
   // fixes both cases the same way. Verified directly against resolveParkillerMove: a single roll's
   // Parkiller hop is always capped at the black die's own value (1-6), never a flat worst case.
   it('sequences a roll into its Parkiller hop, first move, and second move with no overlap', () => {
-    const board = buildTestBoard()
+    const board = buildBigTestBoard()
     const red = createPlayerState('Red', board)
     const blue = createPlayerState('Blue', board)
     red.pieces[0].state = 'OnTrack'
-    red.pieces[0].trackPosition = 5 // dieA moves this one
+    red.pieces[0].trackPosition = 3
     red.pieces[1].state = 'OnTrack'
-    red.pieces[1].trackPosition = 8 // dieB moves this one - two independent moves this roll
-    // dieA=2, dieB=4 (not 3 - 2+3 sums to the exit roll, 5, which with red's other pieces still in
-    // the yard would make the exit mandatory and mask the very thing this test means to isolate),
-    // blackDie=1 (small, so the Parkiller-hop wait below is easy to distinguish from thinkDelayMs).
-    const dice = new RecordingDice(new ScriptedDice([2, 4, 1]))
+    red.pieces[1].trackPosition = 25 // far enough from piece0 that neither piece's own individual
+    // moves below ever cross paths with the other's.
+    // Two own-color Blue barriers (BARRIERS page case 1: "two pawns of the same color - any
+    // square", not gated on a safe square) block passage through 11 and 33 - exactly the two
+    // squares the sum (dieA+dieB=8) would land on for piece0 (3->11) and pass through for piece1
+    // (25->33), without touching either piece's own individual-die destinations (5, 9, 27, 31).
+    // With the sum illegal for both, this isolates the actual property this test cares about -
+    // hop sequencing has no overlap - from item 6's own "prefer the higher single die over the
+    // lower one, but never prefer the sum away from a piece that could still use it" preference,
+    // which would otherwise make the very first move combine both dice on one piece instead of two
+    // separate moves.
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 11
+    blue.pieces[1].state = 'OnTrack'
+    blue.pieces[1].trackPosition = 11
+    blue.pieces[2].state = 'OnTrack'
+    blue.pieces[2].trackPosition = 33
+    blue.pieces[3].state = 'OnTrack'
+    blue.pieces[3].trackPosition = 33
+    // dieA=2, dieB=6 (neither is the exit roll 5, and their sum 8 isn't either, so no exit-lock
+    // interaction), blackDie=1 (small, so the Parkiller-hop wait below is easy to distinguish from
+    // thinkDelayMs).
+    const dice = new RecordingDice(new ScriptedDice([2, 6, 1]))
     const inner = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
     const network = new FakeRoomNetwork(MASTER_ACTOR)
     const transport = network.createTransport(MASTER_ACTOR)
@@ -149,11 +167,21 @@ describe('BotController', () => {
     // roll - the first move can't fire before that finishes.
     vi.advanceTimersByTime(150) // t=200
     expect(redMoveCount).toBe(1)
+    // Item 6's own preference: the sum is illegal for both pieces (blocked above), so the bot
+    // prefers whichever single die moves farther - dieB(6) - over dieA(2). piece0 (3) is offered
+    // before piece1 (25) on a tie between dieB options, so piece0 takes it: 3 -> 9.
+    expect(red.pieces[0].trackPosition).toBe(9)
 
-    // The first move's own hop: dieA(2)*hopDurationMs = 200ms - the second move can't fire before
+    // The first move's own hop: dieB(6)*hopDurationMs = 600ms - the second move can't fire before
     // *that* finishes either.
-    vi.advanceTimersByTime(200) // t=400
+    vi.advanceTimersByTime(400) // t=600
+    expect(redMoveCount).toBe(1) // still mid-hop from the first move
+    vi.advanceTimersByTime(200) // t=800
     expect(redMoveCount).toBe(2)
+    // Only dieA(2) is left. piece0's own dieA(2) from its new position (9 -> 11) is now blocked by
+    // the same Blue barrier that ruled out its sum - piece1's dieA(2) (25 -> 27) is the only
+    // survivor, so it takes the second move instead.
+    expect(red.pieces[1].trackPosition).toBe(27)
 
     bots.dispose()
   })

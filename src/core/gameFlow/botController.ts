@@ -272,7 +272,18 @@ export class BotController {
     // specifically about eliminating a pawn.
     const capturingMoves = isRewardOffer ? [] : rewardCandidates.filter((m) => wouldCapture(this.session.board, m, this.session.players, false))
     const candidates = capturingMoves.length > 0 ? capturingMoves : rewardCandidates
-    const chosen = candidates[0] ?? finalMoves[0] ?? safeMoves[0] ?? nonBarrierMoves[0] ?? moves[0]
+    // Requested directly ("si no se puede mover un peón el total de los dos dados debe moverse con
+    // el valor superior y si no es posible con el inferior pero no elegir el inferior y quedarse
+    // sin utilizar el valor del otro dado" - if a pawn can't move with the sum of both dice, it
+    // should move with the higher value, falling back to the lower one only if that's not
+    // possible, but never choosing the lower one while leaving the other die's value unused): the
+    // sum is always >= either individual die, so simply preferring the largest `amount` among the
+    // remaining safe candidates already gets this ordering for free - sum first when a piece can
+    // use it, else whichever single die's own move goes farther. `>` (not `>=`) keeps the earliest
+    // candidate on a tie, so this doesn't disturb the reward-split preference above (every
+    // candidate there already shares the same minimum amount).
+    const largestAmount = candidates.reduce((best: MoveOption | undefined, m) => (best === undefined || m.amount > best.amount ? m : best), undefined)
+    const chosen = largestAmount ?? finalMoves[0] ?? safeMoves[0] ?? nonBarrierMoves[0] ?? moves[0]
     // Fired now, not inside the scheduled callback below - the highlight should cover this whole
     // think-delay (see this class's own pieceHighlighted doc comment), not just flash right before
     // the move actually submits.
