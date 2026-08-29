@@ -138,6 +138,7 @@ export function useTurnManager(turnManager: TurnManagerLike) {
             currentPlayerColorRef.current = player.color
             setCurrentPlayer(player)
             setPendingMoves([])
+            setLastRoll(null)
             setNoMoveReason(null)
             setTurnEndingSoon(false)
           }, NO_MOVE_HOLD_MS)
@@ -147,6 +148,15 @@ export function useTurnManager(turnManager: TurnManagerLike) {
         currentPlayerColorRef.current = player.color
         setCurrentPlayer(player)
         setPendingMoves([])
+        // Reported directly ("Estoy jugando con las azules... no he podido jugar ni siquiera yo
+        // solo"): lastRoll used to survive across the turn boundary untouched - a brand new turn
+        // (this player's own bonus turn included) rendered the *previous* roller's dice values
+        // under "Dados: X y Y", indistinguishable from this turn's own roll, right up until this
+        // player actually rolled again. GameBoardScreen's own statusLine falls straight to that
+        // branch whenever pendingMoves is empty (just cleared above) and nothing else is pending,
+        // which is exactly the state a fresh turn starts in - reading as "the dice are already
+        // rolled" when nothing has happened yet this turn at all.
+        setLastRoll(null)
       }),
       turnManager.diceRolled.on((roll) => {
         // The roll itself (and every consequence of it - Parkiller move, capture, etc.) has
