@@ -66,6 +66,7 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
       afterCorridorPosition: 6,
       capturedPawn: null,
       capturedParkillerColor: null,
+      secondCapturedParkillerColor: null,
     })
     expect(red.parkiller.trackPosition).toBe(16)
   })
@@ -96,6 +97,7 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
       afterCorridorPosition: 6,
       capturedPawn: blue.pieces[0],
       capturedParkillerColor: null,
+      secondCapturedParkillerColor: null,
     })
     expect(blue.pieces[0].state).toBe('InYard')
     expect(blue.pieces[0].trackPosition).toBe(-1)
@@ -128,6 +130,7 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
       afterCorridorPosition: 6,
       capturedPawn: blue.pieces[0],
       capturedParkillerColor: null,
+      secondCapturedParkillerColor: null,
     })
     expect(blue.pieces[0].state).toBe('InYard')
     // Red's own pawn is protected by sharing the Parkiller's color - stays right where it was.
@@ -275,6 +278,72 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     expect(blue.parkiller.state).toBe('InPlay')
     expect(blue.parkiller.trackPosition).toBe(15)
     expect(grants).toEqual([]) // no elimination, no PK7 reward either
+  })
+
+  // Client's own "Special Situations" guide, "PARKI REMOVES TWO PARKIS": a third Parki landing on
+  // two already-paired opposing Parkis (only possible on a safe square, per the sibling test just
+  // above) eliminates both, not just one - the general "landing on a barrier always eliminates
+  // exactly one" rule (PK5/PK10) has this one documented exception.
+  it('landing on two already-paired opposing Parkillers eliminates both of them', () => {
+    // A bigger board than buildTestBoard's (trackLength 20 is too tight - a lone piece's first
+    // 20-square reward would push it straight into its home corridor, past the point either
+    // reward could still be spent, forfeiting the second one for a reason unrelated to this rule).
+    const board: BoardData = {
+      playerCount: 2,
+      trackLength: 40,
+      lanes: {
+        Red: { color: 'Red', entryTrackIndex: 0, homeEntranceTrackIndex: 39, corridorLength: 6 },
+        Blue: { color: 'Blue', entryTrackIndex: 20, homeEntranceTrackIndex: 19, corridorLength: 6 },
+      },
+      safeTrackIndices: new Set([0, 20]),
+    }
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    const green = createPlayerState('Green', board)
+    red.parkiller.corridorPosition = red.parkiller.corridorLength
+    red.parkiller.trackPosition = 24 // blackDie=4 below walks it 24 -> 20
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 0 // spends the first reward
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 5 // spends the second reward
+    blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+    blue.parkiller.trackPosition = 20 // a safe square
+    green.parkiller.corridorPosition = green.parkiller.corridorLength
+    green.parkiller.trackPosition = 20 // paired with blue's, forming a "Two Parkis" barrier
+
+    const dice = new ScriptedDice([1, 1, 4])
+    const manager = new TurnManager(board, [red, blue, green], defaultRuleSettings(), dice)
+
+    const grants: RewardGrant[] = []
+    manager.rewardOffered.on((g) => grants.push(g))
+    const parkillerResults: ParkillerMoveResult[] = []
+    manager.parkillerMoved.on((r) => parkillerResults.push(r))
+
+    manager.requestRoll()
+
+    expect(red.parkiller.trackPosition).toBe(20)
+    expect(blue.parkiller.state).toBe('Eliminated')
+    expect(green.parkiller.state).toBe('Eliminated')
+    expect(parkillerResults[0]?.capturedParkillerColor).toBe('Blue')
+    expect(parkillerResults[0]?.secondCapturedParkillerColor).toBe('Green')
+    // The first of the two 20-square rewards is offered right away - the second grant stays
+    // queued (offerNextReward's own one-grant-at-a-time draining) until this one is spent.
+    expect(grants).toEqual([{ amount: 20, reason: 'capture' }])
+
+    manager.submitMove(red.pieces[0], 20) // 0 -> 20, spends the first reward in full
+
+    // Spending the first grant drains the queue straight to the second one, offered the same way.
+    expect(grants).toEqual([
+      { amount: 20, reason: 'capture' },
+      { amount: 20, reason: 'capture' },
+    ])
+
+    // Only the 10-square split is still open for pieces[1] here - red's own Parkiller stayed
+    // parked at 20 (Parkillers don't move via these two white dice), so pieces[0] joining it
+    // there for the first reward formed a genuine own barrier (Parkiller + pawn) that blocks any
+    // path crossing square 20, pieces[1]'s own full-20 destination (5 -> 25) included.
+    manager.submitMove(red.pieces[1], 10) // 5 -> 15, spends the second reward's split half
+    expect(red.pieces[1].trackPosition).toBe(15)
   })
 
   it('a pawn move landing on an opposing Parkiller during a doubles roll eliminates it and grants a reward', () => {
@@ -641,6 +710,7 @@ describe('TurnManager - Parkiller corridor crossing (PK1)', () => {
       afterCorridorPosition: 6,
       capturedPawn: blue.pieces[0],
       capturedParkillerColor: null,
+      secondCapturedParkillerColor: null,
     })
     expect(blue.pieces[0].state).toBe('InYard')
   })

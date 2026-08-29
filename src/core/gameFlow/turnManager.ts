@@ -52,6 +52,14 @@ export interface ParkillerMoveResult {
   afterCorridorPosition: number
   capturedPawn: Piece | null
   capturedParkillerColor: PieceColor | null
+  /** Client's own "Special Situations" guide, "PARKI REMOVES TWO PARKIS": two opposing Parkis
+   * already paired on one square (BARRIERS page case 4 - only possible on a safe square) are both
+   * eliminated at once when a *third* Parki lands there, not just one - the general "landing on an
+   * existing barrier always eliminates exactly one" rule (PK5/PK10) turns out to have this one
+   * documented exception once the landing piece is itself a Parki. Only ever set alongside
+   * capturedParkillerColor (the first of the two, by scan order - see resolveParkillerCollisions).
+   */
+  secondCapturedParkillerColor?: PieceColor | null
 }
 
 /** Everything BoardScene needs to play a piece's move as a square-by-square hop instead of an
@@ -298,6 +306,12 @@ export class TurnManager {
     // offerMoves() once the reward is spent or forfeited.
     if (parkillerResult.capturedParkillerColor) {
       this.pendingRewardQueue.push({ reason: 'capture', amount: REWARD_UNIT * 2 })
+      // "PARKI REMOVES TWO PARKIS": each of the two eliminations earns its own reward, same as two
+      // separate captures would - queued together and drained one grant at a time, same as any
+      // other chain (see offerNextReward's own comment).
+      if (parkillerResult.secondCapturedParkillerColor) {
+        this.pendingRewardQueue.push({ reason: 'capture', amount: REWARD_UNIT * 2 })
+      }
       this.offerNextReward()
       return
     }
@@ -374,7 +388,7 @@ export class TurnManager {
       const leftover = blackDieValue - remaining
       const after = mod(before - leftover, this.board.trackLength)
       parkiller.trackPosition = after
-      const { capturedPawn, capturedParkillerColor } = this.resolveParkillerCollisions(player, after)
+      const { capturedPawn, capturedParkillerColor, secondCapturedParkillerColor } = this.resolveParkillerCollisions(player, after)
       return {
         color: player.color,
         before,
@@ -383,12 +397,13 @@ export class TurnManager {
         afterCorridorPosition: parkiller.corridorPosition,
         capturedPawn,
         capturedParkillerColor,
+        secondCapturedParkillerColor,
       }
     }
 
     const after = mod(before - blackDieValue, this.board.trackLength)
     parkiller.trackPosition = after
-    const { capturedPawn, capturedParkillerColor } = this.resolveParkillerCollisions(player, after)
+    const { capturedPawn, capturedParkillerColor, secondCapturedParkillerColor } = this.resolveParkillerCollisions(player, after)
     return {
       color: player.color,
       before,
@@ -397,13 +412,14 @@ export class TurnManager {
       afterCorridorPosition: beforeCorridorPosition,
       capturedPawn,
       capturedParkillerColor,
+      secondCapturedParkillerColor,
     }
   }
 
   private resolveParkillerCollisions(
     player: PlayerState,
     after: number,
-  ): { capturedPawn: Piece | null; capturedParkillerColor: PieceColor | null } {
+  ): { capturedPawn: Piece | null; capturedParkillerColor: PieceColor | null; secondCapturedParkillerColor: PieceColor | null } {
     let capturedPawn: Piece | null = null
     // Not block-scoped - the capturedParkillerColor resolution below also needs to know whether a
     // pawn is already here too (see its own comment on why an already-paired square breaks its
@@ -472,20 +488,34 @@ export class TurnManager {
     // eliminates it" priority, grants that same PK7 reward, and never needs to weigh the existing
     // pawn's own color against the mover's, which pawn-vs-pawn barrier elimination (above) can do
     // but this file has no equivalent "arrival order" concept for Parkillers to fall back on.
+    const opposingParkillersThere = this.players.filter(
+      (opponent) => opponent.color !== player.color && isParkillerOnTrack(opponent.parkiller) && opponent.parkiller.trackPosition === after,
+    )
+
     let capturedParkillerColor: PieceColor | null = null
-    for (const opponent of this.players) {
-      if (opponent.color === player.color) continue
-      if (isParkillerOnTrack(opponent.parkiller) && opponent.parkiller.trackPosition === after) {
-        const alreadyPairedWithSomethingElse = piecesThere.length >= 1
-        if (alreadyPairedWithSomethingElse || !this.board.safeTrackIndices.has(after)) {
-          opponent.parkiller.state = 'Eliminated'
-          capturedParkillerColor = opponent.color
-        }
-        break
+    let secondCapturedParkillerColor: PieceColor | null = null
+    // Client's own "Special Situations" guide, "PARKI REMOVES TWO PARKIS": two opposing Parkis
+    // already paired together (BARRIERS page case 4 - only ever possible on a safe square, with no
+    // pawn also there - piecesThere.length checked below to stay scoped to exactly that case) both
+    // go at once when a third Parki lands on them, not just one. The three-way case this same
+    // square could instead hold - a lone opposing Parki already paired with a *pawn* - is a
+    // different, still-undocumented scenario (see this function's own comment above) and keeps its
+    // existing single-elimination resolution untouched.
+    if (opposingParkillersThere.length >= 2 && piecesThere.length === 0) {
+      capturedParkillerColor = opposingParkillersThere[0].color
+      secondCapturedParkillerColor = opposingParkillersThere[1].color
+      opposingParkillersThere[0].parkiller.state = 'Eliminated'
+      opposingParkillersThere[1].parkiller.state = 'Eliminated'
+    } else if (opposingParkillersThere.length >= 1) {
+      const opponent = opposingParkillersThere[0]
+      const alreadyPairedWithSomethingElse = piecesThere.length >= 1
+      if (alreadyPairedWithSomethingElse || !this.board.safeTrackIndices.has(after)) {
+        opponent.parkiller.state = 'Eliminated'
+        capturedParkillerColor = opponent.color
       }
     }
 
-    return { capturedPawn, capturedParkillerColor }
+    return { capturedPawn, capturedParkillerColor, secondCapturedParkillerColor }
   }
 
   // Client's own corrected rulebook (rules.pdf, "OPENING A BARRIER" - "THERE ARE TWO WAYS TO

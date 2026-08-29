@@ -77,6 +77,9 @@ function describeMove(result: MoveResult): string {
 // two outcomes that are actually news - a Parki eliminating another Parki, or sending a pawn home -
 // produce an entry; a plain hop returns null and is skipped entirely.
 function describeParkillerMove(result: ParkillerMoveResult): string | null {
+  if (result.capturedParkillerColor && result.secondCapturedParkillerColor) {
+    return `${result.color}'s Parki eliminated ${result.capturedParkillerColor}'s and ${result.secondCapturedParkillerColor}'s Parkis`
+  }
   if (result.capturedParkillerColor) {
     return `${result.color}'s Parki eliminated ${result.capturedParkillerColor}'s Parki`
   }
