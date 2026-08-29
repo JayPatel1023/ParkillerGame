@@ -425,8 +425,22 @@ export class TurnManager {
       // protected flag). Gating the whole block on safeTrackIndices, as an earlier version of this
       // did, let a Parkiller land on a protected 2-pawn barrier with no resolution at all, leaving 3
       // pieces stacked on one square - reported directly with a screenshot.
-      const target =
-        piecesThere.length >= 2
+      //
+      // Reported directly ("Debe dejarme mover también alguno de los peones que forman la
+      // barrera... no puede ser"), then reproduced via a stress test: PK5/PK10's "always eliminates
+      // exactly one" is about the Parkiller landing on an *opposing or mixed* barrier - it never
+      // covers landing on the mover's *own* same-color barrier (2 of the mover's own pawns,
+      // BARRIERS-page case 1). resolveBarrierElimination's "both match the mover's color" branch
+      // exists only to break a tie between two barrier pieces that both happen to share a *third*
+      // color, and was never meant to fire when that shared color *is* the mover's own - it would
+      // otherwise pick one of the mover's own two pawns via nothing but arrival order and eliminate
+      // it, an own-color self-elimination the rulebook has no mechanic for at all. The player's own
+      // Parkiller joining its own 2-pawn barrier is exactly BARRIERS-page case 3 with an extra own
+      // pawn along for the ride - harmless, no elimination, same as the ordinary lone-pawn case.
+      const ownBarrier = piecesThere.length >= 2 && piecesThere.every((p) => p.color === player.color)
+      const target = ownBarrier
+        ? null
+        : piecesThere.length >= 2
           ? resolveBarrierElimination(player.color, piecesThere)
           : this.board.safeTrackIndices.has(after)
             ? null

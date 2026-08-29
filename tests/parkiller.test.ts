@@ -166,6 +166,41 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     expect(red.parkiller.trackPosition).toBe(15)
   })
 
+  // Reported directly ("Debe dejarme mover también alguno de los peones que forman la barrera...
+  // no puede ser"), then reproduced via a randomized stress test: PK5/PK10's "landing on an
+  // existing barrier always eliminates exactly one" describes the Parkiller landing on an
+  // *opposing or mixed* barrier - resolveBarrierElimination's tie-break (arrival order, once
+  // color alone doesn't decide it) was only ever meant to settle which of two same-*third*-color
+  // pieces goes. It didn't check whether that shared color was the *mover's own* - a Parkiller
+  // landing on its own player's already-formed 2-pawn barrier hit that same tie-break and wiped
+  // one of the mover's own pawns for no in-game reason at all, an own-color self-elimination the
+  // rulebook has no mechanic for. The correct read (BARRIERS page case 3, "a Parkiller and a pawn
+  // of its own color - any space") is that the Parkiller just joins its own family peacefully,
+  // same as the ordinary lone-own-pawn case.
+  it('a Parkiller landing on its own player\'s existing 2-pawn barrier joins peacefully, eliminating neither', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 16
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 16 // own barrier: two Red pawns, not a safe square
+    red.parkiller.corridorPosition = red.parkiller.corridorLength
+    red.parkiller.trackPosition = 19 // Red's own Parkiller start, reaches 16 with blackDie=3
+
+    const dice = new ScriptedDice([1, 1, 3])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    manager.requestRoll()
+
+    expect(red.parkiller.trackPosition).toBe(16)
+    expect(red.parkiller.state).toBe('InPlay')
+    expect(red.pieces[0].state).toBe('OnTrack')
+    expect(red.pieces[0].trackPosition).toBe(16)
+    expect(red.pieces[1].state).toBe('OnTrack')
+    expect(red.pieces[1].trackPosition).toBe(16)
+  })
+
   it('does not capture a pawn sitting on a protected square', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)
