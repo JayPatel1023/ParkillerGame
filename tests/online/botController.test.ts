@@ -359,6 +359,42 @@ describe('BotController', () => {
     bots.dispose()
   })
 
+  // Requested directly ("el bot, si puede eliminar un peón de otro jugador sin riesgo, debe
+  // hacerlo" - the bot, if it can eliminate an opponent's pawn without risk, must do so): a
+  // capturing move already surviving every risk filter above is exactly a "risk-free" capture in
+  // this file's own established sense, but the selection used to have no preference for capturing
+  // at all - whichever move happened to sort first won, capture or not.
+  it('prefers a risk-free capture over an earlier-sorted non-capturing move', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5 // dieA(2) -> 7, empty and safe, no capture - moves[0] under the
+    // old "always pick the first option" behavior (getValidMoves walks pieces in index order, dieA
+    // combined into the list before dieB - same ordering the other preference tests above rely on).
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 12 // dieB(4) -> 16, capturing blue.pieces[0] there.
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 16 // not a safe square (board's own safeTrackIndices is {0, 10})
+
+    const dice = new RecordingDice(new ScriptedDice([2, 4, 1]))
+    const inner = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+    const network = new FakeRoomNetwork(MASTER_ACTOR)
+    const transport = network.createTransport(MASTER_ACTOR)
+    const host = new HostTurnManagerBridge(inner, dice, [red, blue], transport, new Map<number, PieceColor>())
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2)
+
+    host.start()
+    vi.advanceTimersByTime(10) // the roll fires
+    vi.advanceTimersByTime(10) // the first move fires
+
+    // The risk-free capture must have been taken, not the earlier-sorted non-capturing move.
+    expect(blue.pieces[0].state).toBe('InYard')
+    expect(red.pieces[1].trackPosition).toBe(16)
+
+    bots.dispose()
+  })
+
   // Reported directly ("El bot debe esperar a que terminen de moverse los peones antes de lanzar
   // los dados del siguiente jugador" - the bot must wait for the pawns to finish moving before
   // rolling the next player's dice): onMoveChoicesReady's own markBusy call only ever ran for this

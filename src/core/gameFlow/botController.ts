@@ -1,6 +1,6 @@
 import type { BoardData } from '../board/boardData'
 import type { PieceColor } from '../pieceColor'
-import { isParkillerOnTrack } from '../rules/parchisRules'
+import { isParkillerOnTrack, wouldCapture } from '../rules/parchisRules'
 import type { MoveOption, MoveResult } from '../rules/moveOption'
 import type { Piece } from '../pieces/piece'
 import type { DiceRoll } from './turnManager'
@@ -257,9 +257,21 @@ export class BotController {
     // the same diceSource ('reward') - not mixed with an ordinary dieA/dieB/sum offer - so
     // preferring the smaller amount present only ever kicks in for an actual reward decision.
     const isRewardOffer = finalMoves[0]?.diceSource === 'reward'
-    const candidates = isRewardOffer
+    const rewardCandidates = isRewardOffer
       ? finalMoves.filter((m) => m.amount === Math.min(...finalMoves.map((c) => c.amount)))
       : finalMoves
+    // Requested directly ("el bot, si puede eliminar un peón de otro jugador sin riesgo, debe
+    // hacerlo" - the bot, if it can eliminate an opponent's pawn without risk, must do so): a
+    // capturing move already surviving every filter above (doesn't form an own barrier, doesn't
+    // land on or expose itself to an opposing Parkiller) is exactly a "risk-free" capture in this
+    // file's own established sense - previously the selection below just fell through to whichever
+    // move happened to come first, with no preference for capturing at all, even when one was
+    // sitting right there in the candidate list. Parkiller captures aren't covered here (allowParkillerCapture
+    // = false) - those only ever apply on the specific roll that produced doubles, tracked
+    // separately as TurnManager-internal state this class has no access to, and this request was
+    // specifically about eliminating a pawn.
+    const capturingMoves = isRewardOffer ? [] : rewardCandidates.filter((m) => wouldCapture(this.session.board, m, this.session.players, false))
+    const candidates = capturingMoves.length > 0 ? capturingMoves : rewardCandidates
     const chosen = candidates[0] ?? finalMoves[0] ?? safeMoves[0] ?? nonBarrierMoves[0] ?? moves[0]
     // Fired now, not inside the scheduled callback below - the highlight should cover this whole
     // think-delay (see this class's own pieceHighlighted doc comment), not just flash right before
