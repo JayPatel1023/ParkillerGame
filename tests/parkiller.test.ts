@@ -508,6 +508,143 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     expect(blue.parkiller.state).toBe('InPlay') // the Parkiller itself is unharmed
   })
 
+  // Client's own "Special Situations" guide, "PARKI ON THE STARTING SQUARE": a foreign Parkiller
+  // already paired with a pawn of its *own* color on the entry square is a real, protected barrier
+  // (BARRIERS page, case 2's own opposing-pawn logic extended to a Parkiller) - a single 5 has
+  // *no* legal exit for it at all, exactly like any other barrier a non-double roll can't open.
+  describe('a foreign Parkiller paired with a pawn of its own color on the entry square (client\'s guide, page 2-3)', () => {
+    function buildBoard(): BoardData {
+      return {
+        playerCount: 2,
+        trackLength: 40,
+        lanes: {
+          Red: { color: 'Red', entryTrackIndex: 0, homeEntranceTrackIndex: 2, corridorLength: 2 },
+          Blue: { color: 'Blue', entryTrackIndex: 20, homeEntranceTrackIndex: 19, corridorLength: 6 },
+        },
+        safeTrackIndices: new Set([0, 20]),
+      }
+    }
+
+    it('single 5: no legal exit at all - the pairing is fully protected', () => {
+      const board = buildBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+      blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+      blue.parkiller.trackPosition = 0
+      blue.pieces[0].state = 'OnTrack'
+      blue.pieces[0].trackPosition = 0
+
+      const dice = new ScriptedDice([5, 2, 1])
+      const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+      let latestMoves: MoveOption[] = []
+      manager.moveChoicesReady.on((m) => (latestMoves = m))
+
+      manager.requestRoll()
+
+      expect(latestMoves.some((m) => m.kind === 'ExitYard')).toBe(false)
+      expect(red.pieces[0].state).toBe('InYard')
+    })
+
+    it('double 5, only one shelter pawn: eliminates the pawn only - the Parkiller survives', () => {
+      const board = buildBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+      blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+      blue.parkiller.trackPosition = 0
+      blue.pieces[0].state = 'OnTrack'
+      blue.pieces[0].trackPosition = 0
+      red.pieces[1].state = 'Finished'
+      red.pieces[2].state = 'Finished'
+      red.pieces[3].state = 'Finished'
+
+      const dice = new ScriptedDice([5, 5, 1])
+      const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+      manager.requestRoll()
+      const result = manager.submitMove(red.pieces[0])
+
+      expect(result?.capturedPiece).toBe(blue.pieces[0])
+      expect(result?.capturedParkillerColor).toBeFalsy()
+      expect(blue.pieces[0].state).toBe('InYard')
+      expect(blue.parkiller.state).toBe('InPlay')
+      expect(red.pieces[0].state).toBe('OnTrack')
+      expect(red.pieces[0].trackPosition).toBe(0)
+    })
+
+    it('double 5, two shelter pawns: the first exit eliminates the pawn, the second eliminates the Parkiller too', () => {
+      const board = buildBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+      blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+      blue.parkiller.trackPosition = 0
+      blue.pieces[0].state = 'OnTrack'
+      blue.pieces[0].trackPosition = 0
+
+      const dice = new ScriptedDice([5, 5, 1])
+      const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+      let latestMoves: MoveOption[] = []
+      manager.moveChoicesReady.on((m) => (latestMoves = m))
+
+      manager.requestRoll()
+      const r1 = manager.submitMove(red.pieces[0])
+
+      expect(r1?.capturedPiece).toBe(blue.pieces[0])
+      expect(r1?.capturedParkillerColor).toBeFalsy()
+      expect(blue.parkiller.state).toBe('InPlay') // not yet - only the first exit has happened
+
+      const secondExit = latestMoves.find((m) => m.kind === 'ExitYard')
+      expect(secondExit).toBeTruthy()
+      const r2 = manager.submitMove(secondExit!.piece)
+
+      expect(r2?.capturedParkillerColor).toBe('Blue')
+      expect(blue.parkiller.state).toBe('Eliminated')
+      expect(red.pieces[0].state).toBe('OnTrack')
+      expect(red.pieces[0].trackPosition).toBe(0)
+      expect(secondExit!.piece.state).toBe('OnTrack')
+      expect(secondExit!.piece.trackPosition).toBe(0)
+    })
+  })
+
+  // Client's own "Special Situations" guide, page 4: a foreign Parkiller already paired with a
+  // *third* player's pawn (neither matching the exiting player's own color) is never protected the
+  // way a same-color pairing is - a single 5 already eliminates the pawn (parchisRules.test.ts
+  // covers that in isolation); this locks in the double-5 case end to end, where PK6's own
+  // existing "single die during a double" window happens to eliminate the Parkiller on the very
+  // same first exit - "double 5 removes both the pawn and the Parki" holds regardless of whether
+  // one or two shelter pawns are available (the client's own text draws no such distinction here,
+  // unlike the same-color pairing above).
+  it('double 5, foreign Parkiller paired with a third player\'s pawn: removes both on the very first exit', () => {
+    const board: BoardData = {
+      playerCount: 2,
+      trackLength: 40,
+      lanes: {
+        Red: { color: 'Red', entryTrackIndex: 0, homeEntranceTrackIndex: 2, corridorLength: 2 },
+        Blue: { color: 'Blue', entryTrackIndex: 20, homeEntranceTrackIndex: 19, corridorLength: 6 },
+      },
+      safeTrackIndices: new Set([0, 20]),
+    }
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    const green = createPlayerState('Green', board)
+    blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+    blue.parkiller.trackPosition = 0
+    green.pieces[0].state = 'OnTrack'
+    green.pieces[0].trackPosition = 0
+
+    const dice = new ScriptedDice([5, 5, 1])
+    const manager = new TurnManager(board, [red, blue, green], defaultRuleSettings(), dice)
+
+    manager.requestRoll()
+    const result = manager.submitMove(red.pieces[0])
+
+    expect(result?.capturedPiece).toBe(green.pieces[0])
+    expect(result?.capturedParkillerColor).toBe('Blue')
+    expect(green.pieces[0].state).toBe('InYard')
+    expect(blue.parkiller.state).toBe('Eliminated')
+    expect(red.pieces[0].state).toBe('OnTrack')
+    expect(red.pieces[0].trackPosition).toBe(0)
+  })
+
   // Reported directly ("도착하기전에 이미 먹히울걸 타산해서 가기도전에 갑자기 먼저 사라지는" - the
   // piece vanishes before even arriving, as if pre-calculated): the scene layer only ever learns
   // about a move via moveAnimationReady, not by inspecting MoveResult directly - this is the actual

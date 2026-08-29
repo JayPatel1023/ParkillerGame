@@ -226,6 +226,14 @@ export class TurnManager {
   // boolean flag, since offerMoves() needs to exclude only *that* specific destination for *that*
   // specific piece, not restrict the second die generally.
   private brokenBarrierThisRoll: (BarrierLocation & { resultingTrackPosition: number; resultingCorridorPosition: number }) | null = null
+  // Client's own "Special Situations" guide: the entry track square this same roll's own earlier
+  // exit already cleared an opposing pawn from, leaving that pawn's own Parkiller alone there
+  // (page 3/page 4's "double 5 removes both" - the pawn on the first exit, the Parkiller on the
+  // second). applyMove needs this to tell that specific, same-roll history apart from an
+  // unrelated, genuinely pre-existing pawn+Parkiller pairing elsewhere, which keeps its own
+  // "bounces the joining pawn home" resolution (the sibling "3-stack" test). Reset at the start of
+  // every roll, same as brokenBarrierThisRoll just above.
+  private openedEntryPairThisRoll: number | null = null
 
   // `dice` accepts anything roll()-shaped, not just the real Dice class - tests inject an exact
   // roll queue instead of a seed, since a seed's resulting face values aren't hand-pickable.
@@ -298,6 +306,7 @@ export class TurnManager {
 
     this.diceState = { dieA, dieB, dieAUsed: false, dieBUsed: false }
     this.brokenBarrierThisRoll = null
+    this.openedEntryPairThisRoll = null
 
     // PC 6.2: collecting a reward takes priority over any dice still unspent - if the Parkiller's
     // own move just eliminated an opposing Parkiller, its PK7 reward is offered ahead of the
@@ -566,17 +575,18 @@ export class TurnManager {
       return filtered
     }
 
+    const isDoubleRoll = state.dieA === state.dieB
     const dieAMoves = !state.dieAUsed
-      ? excludeLockedBarrierPieces(getValidMoves(this.board, this.currentPlayer, this.players, state.dieA, this.settings, 'dieA'))
+      ? excludeLockedBarrierPieces(getValidMoves(this.board, this.currentPlayer, this.players, state.dieA, this.settings, 'dieA', isDoubleRoll))
       : null
     const dieBMoves = !state.dieBUsed
-      ? excludeLockedBarrierPieces(getValidMoves(this.board, this.currentPlayer, this.players, state.dieB, this.settings, 'dieB'))
+      ? excludeLockedBarrierPieces(getValidMoves(this.board, this.currentPlayer, this.players, state.dieB, this.settings, 'dieB', isDoubleRoll))
       : null
     // Only ever a candidate move source before either die is individually spent - same precondition
     // the sum-move computation further down already required.
     const sumMoves =
       !state.dieAUsed && !state.dieBUsed
-        ? excludeLockedBarrierPieces(getValidMoves(this.board, this.currentPlayer, this.players, state.dieA + state.dieB, this.settings, 'sum'))
+        ? excludeLockedBarrierPieces(getValidMoves(this.board, this.currentPlayer, this.players, state.dieA + state.dieB, this.settings, 'sum', isDoubleRoll))
         : null
 
     // PC2.1: "A pawn must move to the starting square" whenever a die's own value is the exit
@@ -739,7 +749,31 @@ export class TurnManager {
     const isRewardMove = move.diceSource === 'reward'
     const before = snapshotPiece(chosenPiece)
 
-    const result = applyMove(this.board, move, this.players, this.settings, this.parkillerCapturableThisRoll, this.nextArrivalSequence++)
+    const isDoubleRoll = this.diceState ? this.diceState.dieA === this.diceState.dieB : false
+    const result = applyMove(
+      this.board,
+      move,
+      this.players,
+      this.settings,
+      this.parkillerCapturableThisRoll,
+      this.nextArrivalSequence++,
+      isDoubleRoll,
+      this.openedEntryPairThisRoll,
+    )
+    // Client's own "Special Situations" guide: this exit just resolved a mixed pawn+Parkiller pair
+    // on the entry square by eliminating the pawn (case C/B in applyMove's own comments) - if that
+    // Parkiller is still standing there, track the square so a further own pawn joining it later
+    // this same roll (the double's other exit) eliminates the Parkiller too, instead of applyMove's
+    // ordinary "bounces the joining pawn home" resolution for an unrelated, genuinely pre-existing
+    // pairing. Cleared at the start of every roll (requestRoll), same as brokenBarrierThisRoll.
+    this.openedEntryPairThisRoll =
+      move.kind === 'ExitYard' &&
+      result.capturedPiece &&
+      this.players.some(
+        (p) => p.color !== chosenPiece.color && isParkillerOnTrack(p.parkiller) && p.parkiller.trackPosition === move.resultingTrackPosition,
+      )
+        ? move.resultingTrackPosition
+        : this.openedEntryPairThisRoll
     // PK9.1's own "IMPORTANT!" qualifier (see brokenBarrierThisRoll's own comment): this move just
     // broke an own-color barrier if it started exactly on the square offerMoves() most recently
     // flagged as one, on a double (barrier-break obligation is only ever offered on a double, and

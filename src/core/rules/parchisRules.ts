@@ -116,6 +116,14 @@ export function getValidMoves(
   amount: number,
   settings: RuleSettings,
   diceSource: DiceSource = 'sum',
+  // Client's own "Special Situations" guide, "PARKI ON THE STARTING SQUARE": a foreign Parkiller
+  // already paired with a pawn of its *own* color on this player's entry square blocks a plain
+  // single-5 exit outright (same "protection" a same-color pair always gets - PK9.1's own "THERE
+  // ARE TWO WAYS TO OPEN A BARRIER" precedent), but a double opens it, same as any other barrier -
+  // "double 5 is rolled... eliminates that pawn" (page 3). Only ever relevant to that one specific
+  // pairing (see the isDoubleRoll usage below) - a plain 2-same-color-*pawns* barrier isn't
+  // documented anywhere as double-openable for someone else's exit, so it keeps blocking either way.
+  isDoubleRoll = false,
 ): MoveOption[] {
   const lane = board.lanes[player.color]
   if (!lane) return []
@@ -155,7 +163,13 @@ export function getValidMoves(
           .map((p) => p.color)
         const opposingColorsAtEntry = [...opposingAtEntry.map((p) => p.color), ...opposingParkillerColorsAtEntry]
         const foreignBarrier = opposingColorsAtEntry.length >= 2 && opposingColorsAtEntry.every((c) => c === opposingColorsAtEntry[0])
-        const blockedByOccupancy = ownOnEntry >= 2 || foreignBarrier
+        // A double opens *this specific* foreign barrier (an opposing pawn paired with that exact
+        // opponent's own Parkiller) - the one shape the client's guide documents a double-5 exit
+        // resolving (page 3: eliminates the pawn, the Parkiller itself untouched - see applyMove).
+        // A plain two-same-color-opposing-*pawns* barrier isn't covered by that page at all, so it
+        // keeps blocking regardless of a double, same as it always has.
+        const foreignBarrierOpenedByDouble = isDoubleRoll && foreignBarrier && opposingParkillerColorsAtEntry.length > 0
+        const blockedByOccupancy = ownOnEntry >= 2 || (foreignBarrier && !foreignBarrierOpenedByDouble)
         if (!blockedByOccupancy) {
           moves.push({
             piece,
@@ -312,6 +326,19 @@ export function applyMove(
   // comment. Optional/defaulted so every existing caller (tests included) that doesn't care about
   // arrival order keeps working unchanged.
   arrivalSequence = 0,
+  // Client's own "Special Situations" guide: a double opens a same-color opposing pawn+Parkiller
+  // pairing on the entry square for this exit (see getValidMoves' own foreignBarrierOpenedByDouble,
+  // which already gates *whether* this move exists at all on the same flag) - kept separate from
+  // allowParkillerCapture (PK6/PK8's own single-move-per-roll window, already closed by the time a
+  // double's *second* exit could reach this same square) since this one needs to stay true for the
+  // whole roll, not just its first move.
+  isDoubleRoll = false,
+  // Client's own guide again: the entry square this same roll's own *first* exit already resolved
+  // a mixed pawn+Parkiller pair on (eliminating the pawn, leaving the Parkiller) - a further own
+  // pawn joining *that specific* square this same roll eliminates the Parkiller instead of bouncing
+  // home the way it normally would (the sibling, already-correct "3-stack" test's own pre-existing-
+  // pairing scenario). Null whenever no such square is being tracked this roll.
+  openedEntryPairTrackPosition: number | null = null,
 ): MoveResult {
   const piece = move.piece
   const result: MoveResult = { movedPiece: piece, amount: move.amount, capturedPiece: null, capturedParkillerColor: null, pieceFinished: false }
@@ -386,6 +413,16 @@ export function applyMove(
       // *pawn* joining a pawn+foreign-Parki pair - only ever a pawn joining its own Parki.
       const joiningOwnParkillerOnly = ownParkillerAtDestination && occupantsAtDestination.filter((p) => p !== piece && p.color === piece.color).length === 0
       let capturedOpposingParkillerColor: PieceColor | null = null
+      // Client's own guide, page 3 case 1 (double 5, only *one* shelter pawn left): "ONLY the pawn
+      // protected by that player's Parki will be removed... any pawn moves the remaining five
+      // spaces" - the Parkiller explicitly survives this first (and, with only one pawn, only)
+      // exit. Sat alongside PK6/PK8 below, whose own single-die-during-a-double window would
+      // otherwise fire completely independently and eliminate that same Parkiller regardless -
+      // correct for case C's different-color pair (page 4 draws no "only one vs. two pawns"
+      // distinction there, so PK6 coincidentally firing on the very first exit already matches "at
+      // least one pawn... removes both"), but wrong for this one, same-color pairing specifically,
+      // where page 3 draws that distinction on purpose. Set only by that one branch below.
+      let protectParkillerFromPK6ThisMove = false
       if (!result.capturedPiece && opposingParkillerAtDestination) {
         if (joiningOwnParkillerOnly) {
           // Case: this mover's own pawn joins its own Parkiller, already paired with a foreign
@@ -397,14 +434,34 @@ export function applyMove(
           // lone opposing pawn, generalized to a lone opposing Parkiller here.
           opposingParkillerAtDestination.parkiller.state = 'Eliminated'
           capturedOpposingParkillerColor = opposingParkillerAtDestination.color
-        } else if (!joiningOwnPawn && opposingAtDestination.length === 1 && opposingAtDestination[0].color !== opposingParkillerAtDestination.color) {
-          // Case: a foreign Parkiller already paired with a *third* player's pawn (neither matching
-          // this mover's own color) - client's guide: "single 5 eliminates that [third player's]
-          // pawn", the Parkiller itself untouched. Re-runs captureAt with the safe-zone bypassed
-          // (this pair, Parkiller included, is exactly as real as the plain two-different-opposing-
-          // pawns case PC2.1 already names) now that it's known there's a genuine pawn+Parkiller
-          // pair here for it to resolve, not just a lone protected pawn.
+        } else if (move.kind === 'ExitYard' && joiningOwnPawn && move.resultingTrackPosition === openedEntryPairTrackPosition) {
+          // Case: this same roll's own earlier exit already cleared the opposing pawn half of a
+          // pawn+Parkiller pair right on this exact square (the branch just below, on an earlier
+          // move this same roll), leaving only its Parkiller - client's guide: "double 5 removes
+          // BOTH the pawn and the Parki because both pawns leave the shelter at the same time"
+          // (page 3) / "...alongside a pawn belonging to a third player... double 5 removes both"
+          // (page 4). A further own pawn joining *that* now-lone Parkiller eliminates it too,
+          // rather than the ordinary "second own pawn bounces home" a genuinely pre-existing
+          // pairing gets (the sibling "3-stack" test, unrelated to this same roll's own history).
+          opposingParkillerAtDestination.parkiller.state = 'Eliminated'
+          capturedOpposingParkillerColor = opposingParkillerAtDestination.color
+        } else if (
+          !joiningOwnPawn &&
+          opposingAtDestination.length === 1 &&
+          (opposingAtDestination[0].color !== opposingParkillerAtDestination.color || isDoubleRoll)
+        ) {
+          // Case: a foreign Parkiller already paired with a pawn - a *third* player's (client's
+          // guide, page 4: "single 5 eliminates that pawn", any dice), or that exact Parkiller's
+          // *own* color (page 3: protected against a single 5 - getValidMoves' own
+          // foreignBarrierOpenedByDouble already keeps this move from existing at all unless
+          // isDoubleRoll opened it, so reaching here on a same-color pair only ever happens on a
+          // double). Either way, the pawn goes, the Parkiller itself untouched *by this specific
+          // capture* - re-runs captureAt with the safe-zone bypassed (this pair is exactly as real
+          // as the plain two-different-opposing-pawns case PC2.1 already names) now that it's known
+          // there's a genuine pawn+Parkiller pair here to resolve, not just a lone protected pawn.
+          const sameColorPair = opposingAtDestination[0].color === opposingParkillerAtDestination.color
           result.capturedPiece = settings.captureSendsToYard ? captureAt(board, piece, move.resultingTrackPosition, allPlayers, true) : null
+          if (sameColorPair) protectParkillerFromPK6ThisMove = true
         }
       }
       // PK6/PK8: a common piece only eliminates the Parkiller during the roll that just produced
@@ -414,7 +471,9 @@ export function applyMove(
       const usesSingleDie = move.diceSource === 'dieA' || move.diceSource === 'dieB'
       result.capturedParkillerColor =
         capturedOpposingParkillerColor ??
-        (allowParkillerCapture && usesSingleDie ? captureParkillerAt(piece, move.resultingTrackPosition, allPlayers) : null)
+        (!protectParkillerFromPK6ThisMove && allowParkillerCapture && usesSingleDie
+          ? captureParkillerAt(piece, move.resultingTrackPosition, allPlayers)
+          : null)
       // PK5: landing on an unprotected opposing Parkiller without eliminating it (PK6, just
       // above) turns the tables instead - the arriving pawn is sent straight back to its own
       // yard, with no reward. Verified directly against the reference implementation's
