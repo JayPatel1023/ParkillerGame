@@ -387,6 +387,52 @@ describe('BotController', () => {
     bots.dispose()
   })
 
+  // Requested directly ("cuando cuente las recompensas idem: debe ver si elimina algún peón en
+  // algún salto de 10 o se cae sobre un parki y se queda eliminado" - when counting rewards,
+  // likewise: check whether it eliminates a pawn on some 10-jump): a reward move can capture too
+  // (PC5 chains a fresh 20 on top) - the split-exploration preference above is purely cosmetic
+  // (so a human watching bot play sees the split get used sometimes), while a capture during a
+  // reward has real value, so it must win out even though it isn't the "explore the smaller
+  // amount" option this test's own sibling above prefers.
+  it('prefers a capturing reward move over the split-exploration preference', () => {
+    const board = buildBigTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 3 // dieA(3) lands it on blue.pieces[0] at 6 - the triggering capture
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 0 // a second piece, offering a genuine non-capturing 10-split path
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 6
+    blue.pieces[1].state = 'OnTrack'
+    blue.pieces[1].trackPosition = 26 // exactly 6 + 20 - the reward's own full amount lands here
+
+    const dice = new RecordingDice(new ScriptedDice([3, 4, 1]))
+    const inner = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+    const network = new FakeRoomNetwork(MASTER_ACTOR)
+    const transport = network.createTransport(MASTER_ACTOR)
+    const host = new HostTurnManagerBridge(inner, dice, [red, blue], transport, new Map<number, PieceColor>())
+    const thinkDelayMs = 50
+    const hopDurationMs = 100
+    const diceSpinMs = 50
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), thinkDelayMs, hopDurationMs, diceSpinMs)
+
+    host.start()
+    vi.advanceTimersByTime(thinkDelayMs) // the roll fires
+    vi.advanceTimersByTime(150) // the capturing move (piece0, dieA=3: 3 -> 6) submits, offering the reward
+    expect(blue.pieces[0].state).toBe('InYard') // confirms the triggering capture happened
+
+    vi.advanceTimersByTime(thinkDelayMs + hopDurationMs * 20) // the reward move fires (up to 20 squares)
+
+    // The full 20 was taken specifically because it captures blue.pieces[1] - not the 10-split
+    // this same scenario's sibling test above would otherwise prefer.
+    expect(red.pieces[0].trackPosition).toBe(26)
+    expect(blue.pieces[1].state).toBe('InYard')
+    expect(red.pieces[1].trackPosition).toBe(0) // untouched - the split was never taken
+
+    bots.dispose()
+  })
+
   // Requested directly ("si algún peón del bot está en una casilla protegida no debería
   // arriesgarse a ser eliminado salvo para eliminar a otro peón. Es mejor que se mueva otro peón" -
   // if a bot's pawn is on a protected square, it shouldn't risk elimination except to capture;

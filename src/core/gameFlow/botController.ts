@@ -286,7 +286,17 @@ export class BotController {
     // = false) - those only ever apply on the specific roll that produced doubles, tracked
     // separately as TurnManager-internal state this class has no access to, and this request was
     // specifically about eliminating a pawn.
-    const capturingMoves = isRewardOffer ? [] : rewardCandidates.filter((m) => wouldCapture(this.session.board, m, this.session.players, false))
+    // Requested directly ("cuando cuente las recompensas idem: debe ver si elimina algún peón en
+    // algún salto de 10 o se cae sobre un parki y se queda eliminado" - when counting rewards,
+    // likewise: check whether it eliminates a pawn on some 10-jump, or lands on a Parki and gets
+    // eliminated itself): a reward move can capture too (PC5 chains a fresh 20 on top of the
+    // current one) - checked against every reward-move option in finalMoves, not just the
+    // amount-narrowed rewardCandidates above, so a capturing move using the full amount isn't
+    // silently dropped by the split-exploration preference just because a non-capturing split
+    // option happens to use less. The Parki-risk half of this same request is already covered -
+    // wouldWalkIntoUnprotectedParki/wouldLeavePieceExposedToParkiller above run on every move
+    // regardless of diceSource, reward moves included.
+    const capturingMoves = finalMoves.filter((m) => wouldCapture(this.session.board, m, this.session.players, false))
     const candidates = capturingMoves.length > 0 ? capturingMoves : rewardCandidates
     // Requested directly ("si no se puede mover un peón el total de los dos dados debe moverse con
     // el valor superior y si no es posible con el inferior pero no elegir el inferior y quedarse
