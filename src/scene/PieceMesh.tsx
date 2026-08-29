@@ -76,7 +76,15 @@ export const PIECE_PROFILE_RAW: [number, number][] = [
 // radius, and the existing stacking clamp (BoardScene.tsx's own localStackOffset/MAX_OCCUPANT_RADIUS)
 // scales with this constant automatically, so two pieces sharing a square still can't spill past
 // their tile's own border regardless of how large this gets.
-export const PIECE_BASE_RADIUS = 0.28
+//
+// Bumped an eleventh time, 0.28 -> 0.4 - reported directly, again, as still too small. Ten
+// consecutive "still too small" reports in a row is well past the point where another 20-30%
+// nudge is a reasonable bet - jumping to roughly 1.4x this time (54% of the tightest board's own
+// tile radius, ~0.739, per the tenth round's own measurement) instead of the usual smaller step.
+// Verified live, via a screenshot, on that same tightest (6-player) board with two pieces sharing
+// one square (the actual worst case for overlap, not just a single idle piece) - both pieces are
+// still clearly separated, not touching, so there's no need to also touch the stacking clamp itself.
+export const PIECE_BASE_RADIUS = 0.4
 export const PROFILE_SCALE = PIECE_BASE_RADIUS / Math.max(...PIECE_PROFILE_RAW.map(([r]) => r))
 // Stretches the profile taller without widening the base - requested directly, twice now ("peones
 // más alargados" both times), each time with a reference photo of taller pawns. Applied only to
