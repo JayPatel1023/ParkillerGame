@@ -448,6 +448,32 @@ describe('parchisRules', () => {
       expect(red.pieces[0].state).toBe('OnTrack')
       expect(red.pieces[0].trackPosition).toBe(5)
     })
+
+    // Client's own "Special Situations" guide: a lone opposing Parkiller with no pawn paired with
+    // it (unlike the sibling tests above, which all start from an already-*full* entry square) is
+    // exactly PK6's own ordinary "single die during a double" elimination window - already
+    // verified working through the exact same applyMove machinery elsewhere in this file, this
+    // test locks in that the *exit* path specifically reaches it too, since PC2.1's own exit
+    // obligation is a distinct code path from a plain TrackMove.
+    it('exiting via a single die of a double onto a lone foreign Parkiller eliminates it (PK6), same as any other single-die move', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+      blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+      blue.parkiller.trackPosition = 0 // Red's own entry square, lone foreign Parkiller
+
+      const settings = defaultRuleSettings()
+      const exitMove = getValidMoves(board, red, [red, blue], 5, settings, 'dieA').find((m) => m.kind === 'ExitYard')
+      expect(exitMove).toBeTruthy()
+
+      const result = applyMove(board, exitMove!, [red, blue], settings, true) // doubles window open
+
+      expect(result.capturedParkillerColor).toBe('Blue')
+      expect(result.eliminatedByParkiller).toBeFalsy()
+      expect(blue.parkiller.state).toBe('Eliminated')
+      expect(red.pieces[0].state).toBe('OnTrack')
+      expect(red.pieces[0].trackPosition).toBe(0)
+    })
   })
 
   // Reported directly, with a screenshot: an opposing Parkiller and a Red pawn were already
