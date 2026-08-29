@@ -405,13 +405,16 @@ export class TurnManager {
     after: number,
   ): { capturedPawn: Piece | null; capturedParkillerColor: PieceColor | null } {
     let capturedPawn: Piece | null = null
-    {
-      const piecesThere: Piece[] = []
-      for (const p of this.players) {
-        for (const piece of p.pieces) {
-          if (piece.state === 'OnTrack' && piece.trackPosition === after) piecesThere.push(piece)
-        }
+    // Not block-scoped - the capturedParkillerColor resolution below also needs to know whether a
+    // pawn is already here too (see its own comment on why an already-paired square breaks its
+    // safe-square exception the same way).
+    const piecesThere: Piece[] = []
+    for (const p of this.players) {
+      for (const piece of p.pieces) {
+        if (piece.state === 'OnTrack' && piece.trackPosition === after) piecesThere.push(piece)
       }
+    }
+    {
       // PK4/PK5: a protected square only shields a *lone* pawn from the Parkiller - it lands and
       // the two simply form a barrier instead of a capture (PK5's own "except in protected zones,
       // where it would form a barrier with that pawn"). It does NOT shield an existing full 2-pawn
@@ -439,20 +442,32 @@ export class TurnManager {
     // space"): two opposing Parkillers landing together are exactly as real a barrier as any other
     // pairing on this page, with the same safe-square gate every other mixed pairing above already
     // gets - this was the one case missing it, unconditionally eliminating the opposing Parkiller
-    // even on a protected square instead of letting the two simply coexist there. Scoped to a lone
-    // opposing Parkiller only (mirrors the pawn block above, which does not extend its own
-    // safe-square exception to an already-full 2-occupant square either) - a third Parkiller
-    // joining two already sharing a safe square is a deeper edge case this page doesn't address,
-    // left unhandled like this file's other explicitly out-of-scope PK10.1/PK10.2 cases.
+    // even on a protected square instead of letting the two simply coexist there.
+    //
+    // Reported directly, via a stress test simulating full games: the safe-square exception above
+    // was scoped to a *lone* opposing Parkiller (mirrors the pawn block above, which never lets its
+    // own safe-square exception cover an already-full 2-occupant square either) - flagged, when
+    // that exception first shipped, as a deeper edge case left unhandled like this file's other
+    // explicitly out-of-scope PK10.1/PK10.2 cases. Concrete stress-test evidence means it's not
+    // nearly as rare as it looked on paper: a lone pawn and an opposing Parkiller already
+    // peacefully sharing a safe square (case 5) is itself an ordinary, common state, and *any*
+    // third color's Parkiller landing there too hits exactly this gap. The rulebook doesn't specify
+    // which of the two existing occupants a third Parkiller's arrival should resolve in this exact
+    // three-way case - eliminating the found opposing Parkiller specifically (never the pawn) is a
+    // deliberate, consistent choice: it matches PK6/PK7's own "landing on an opposing Parkiller
+    // eliminates it" priority, grants that same PK7 reward, and never needs to weigh the existing
+    // pawn's own color against the mover's, which pawn-vs-pawn barrier elimination (above) can do
+    // but this file has no equivalent "arrival order" concept for Parkillers to fall back on.
     let capturedParkillerColor: PieceColor | null = null
-    if (!this.board.safeTrackIndices.has(after)) {
-      for (const opponent of this.players) {
-        if (opponent.color === player.color) continue
-        if (isParkillerOnTrack(opponent.parkiller) && opponent.parkiller.trackPosition === after) {
+    for (const opponent of this.players) {
+      if (opponent.color === player.color) continue
+      if (isParkillerOnTrack(opponent.parkiller) && opponent.parkiller.trackPosition === after) {
+        const alreadyPairedWithSomethingElse = piecesThere.length >= 1
+        if (alreadyPairedWithSomethingElse || !this.board.safeTrackIndices.has(after)) {
           opponent.parkiller.state = 'Eliminated'
           capturedParkillerColor = opponent.color
-          break
         }
+        break
       }
     }
 

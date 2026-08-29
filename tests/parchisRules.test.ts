@@ -540,6 +540,41 @@ describe('parchisRules', () => {
       const moves = getValidMoves(board, red, [red, blue], 3, settings) // 2 -> 5, crossing square 4
       expect(moves.find((m) => m.piece === red.pieces[1])).toBeUndefined()
     })
+
+    // Reported directly, via a stress test simulating full games (not from a specific screenshot -
+    // this one surfaced from running many complete bot-vs-bot games and watching for exactly this
+    // invariant): the mirror of the "own pawn + opposing Parkiller" case above. Gold's own Parkiller
+    // was already sharing a safe square with a lone opposing (Purple) pawn - a real, full "Parki +
+    // different-color pawn" barrier (BARRIERS rules page, case 5) - when Gold's own *second* pawn
+    // then exited onto that same square. getValidMoves' own exit-blocking check never blocked this
+    // (correctly - PC2.1 only blocks on 2 *own* pieces or a *foreign* barrier, neither of which this
+    // is), but applyMove's own "joining an own piece already there captures the opponent" resolution
+    // used to only ever count *pawns* toward "own pieces at the destination" - it never recognized
+    // the player's own Parkiller as one of them, so Purple's pawn was never captured, leaving 3
+    // pieces stacked on the square (Gold's new pawn, Gold's own Parkiller, and Purple's pawn) instead
+    // of correctly resolving back down to 2.
+    it('exiting to join a square already holding the own Parkiller and a lone opposing pawn captures that pawn, never a 3-stack', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+      red.parkiller.corridorPosition = red.parkiller.corridorLength
+      red.parkiller.trackPosition = 0 // Red's own entry square, already holding Red's own Parkiller...
+      blue.pieces[0].state = 'OnTrack'
+      blue.pieces[0].trackPosition = 0 // ...and (correctly, PK4) a lone opposing pawn too
+
+      const settings = defaultRuleSettings()
+      const exitMove = getValidMoves(board, red, [red, blue], 5, settings).find((m) => m.kind === 'ExitYard')
+      expect(exitMove).toBeTruthy() // never blocked outright - matches the mirror case above
+
+      const result = applyMove(board, exitMove!, [red, blue], settings, true)
+
+      expect(result.capturedPiece).toBe(blue.pieces[0])
+      expect(blue.pieces[0].state).toBe('InYard')
+      expect(red.pieces[0].state).toBe('OnTrack') // the newly-exited pawn stays put
+      expect(red.pieces[0].trackPosition).toBe(0)
+      expect(red.parkiller.trackPosition).toBe(0) // untouched
+      // Exactly 2 occupants remain (Red's new pawn + Red's own Parkiller) - never three.
+    })
   })
 
   describe('resolveBarrierElimination (PK5/PK10 - a Parkiller landing on a barrier)', () => {

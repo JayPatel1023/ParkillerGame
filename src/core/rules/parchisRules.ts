@@ -327,11 +327,26 @@ export function applyMove(
       // only for an ExitYard landing (never a plain TrackMove) - piece.trackPosition is already
       // set above, so `occupantsAtDestination` below includes the mover itself.
       const occupantsAtDestination = move.kind === 'ExitYard' ? piecesAtTrackSquare(allPlayers, move.resultingTrackPosition) : []
-      const ownAtDestination = occupantsAtDestination.filter((p) => p.color === piece.color).length
+      // Reported directly, via a stress test simulating full games: a Gold pawn exited onto its own
+      // entry square where Gold's *own* Parkiller (landed there via that same roll's own black die)
+      // and a lone opposing (Purple) pawn already sat together - a real, full "Parki + different-
+      // color pawn" barrier (client's own BARRIERS rules page, case 5). ownAtDestination below used
+      // to only ever count *pawns*, so it saw just the one arriving Gold pawn (=1, not >1) and never
+      // recognized this as "an own piece joining an own piece already here" the way it already does
+      // for two own *pawns* - Purple's pawn was never captured, leaving 3 pieces stacked on one
+      // square instead of correctly resolving back down to 2 (Gold's new pawn + its own Parkiller,
+      // with Purple's pawn bumped the same way a second own pawn joining already bumps a lone
+      // opponent). Same domain-model equivalence getValidMoves' own ExitYard blocking check already
+      // uses elsewhere in this file ("the player's own pawn + their own Parkiller... is just as real
+      // an own barrier as two own pawns").
+      const owner = allPlayers.find((p) => p.color === piece.color)
+      const ownParkillerAtDestination =
+        move.kind === 'ExitYard' && !!owner && isParkillerOnTrack(owner.parkiller) && owner.parkiller.trackPosition === move.resultingTrackPosition
+      const ownAtDestination = occupantsAtDestination.filter((p) => p.color === piece.color).length + (ownParkillerAtDestination ? 1 : 0)
       const opposingAtDestination = occupantsAtDestination.filter((p) => p !== piece && p.color !== piece.color)
-      // 1) joining an own pawn already there (>1 own, counting the mover) - a lone opponent
-      //    already on the square doesn't get captured by a first exit, only once a further own
-      //    pawn joins that same mixed square.
+      // 1) joining an own pawn (or own Parkiller) already there (>1 own, counting the mover) - a
+      //    lone opponent already on the square doesn't get captured by a first exit, only once a
+      //    further own piece joins that same mixed square.
       const joiningOwnPawn = ownAtDestination > 1
       // 2) two *different-colored* opposing pawns already sharing the square (not a real barrier
       //    - see getValidMoves' own comment on foreignBarrier) - PC2.1 names this outright:
