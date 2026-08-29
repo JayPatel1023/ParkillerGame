@@ -785,6 +785,37 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
       expect(red.pieces[0].trackPosition).toBe(0)
     })
 
+    // The page's own first illustration is specifically a *double* 5 with only one shelter pawn
+    // left, not a plain single 5 (the sibling test above) - same resolution either way (this exit
+    // was never blocked to begin with, single or double), but worth locking in precisely as shown.
+    it('double 5, only one shelter pawn: still eliminates whichever of the two arrived later', () => {
+      const board = buildBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+      const green = createPlayerState('Green', board)
+      blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+      blue.parkiller.trackPosition = 0
+      blue.parkiller.arrivedAt = 1
+      green.parkiller.corridorPosition = green.parkiller.corridorLength
+      green.parkiller.trackPosition = 0
+      green.parkiller.arrivedAt = 2 // arrived later - this is the one that should go
+      red.pieces[1].state = 'Finished'
+      red.pieces[2].state = 'Finished'
+      red.pieces[3].state = 'Finished'
+
+      const dice = new ScriptedDice([5, 5, 1]) // a genuine double, unlike the sibling test above
+      const manager = new TurnManager(board, [red, blue, green], defaultRuleSettings(), dice)
+
+      manager.requestRoll()
+      const result = manager.submitMove(red.pieces[0])
+
+      expect(result?.capturedParkillerColor).toBe('Green')
+      expect(green.parkiller.state).toBe('Eliminated')
+      expect(blue.parkiller.state).toBe('InPlay')
+      expect(red.pieces[0].state).toBe('OnTrack')
+      expect(red.pieces[0].trackPosition).toBe(0)
+    })
+
     it('double 5, two shelter pawns: the first exit eliminates the later arrival, the second eliminates the other', () => {
       const board = buildBoard()
       const red = createPlayerState('Red', board)
