@@ -12,6 +12,29 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Parkiller" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <!-- Reported directly, reproduced under a throttled connection: on a slow first load, the
+         board texture (and the track-square tile images every board uses) can stay unloaded for
+         several real seconds after the game screen itself is already interactive - the render-time
+         fetch (useRobustTexture.ts's own preloadTexture, called from App.tsx as early as that code
+         can run) can't start until the whole JS bundle has downloaded, parsed, and mounted React,
+         which is itself the slow part on a bad connection. A browser-level preload hint starts
+         these three specific fetches immediately on HTML parse, in parallel with the JS bundle
+         rather than after it - by the time App.tsx's own preloadTexture call runs, these are
+         already well underway (or done), so it becomes a same-URL cache hit instead of a fresh
+         fetch. board_4p.jpg matches PlayerCountSelector's own default selection (App.tsx's
+         `useState(4)`) - the single most likely board a first-time visitor actually needs; the two
+         tile images are shared by every board regardless of player count.
+
+         crossorigin="anonymous" matters, not decorative - confirmed directly via a console warning
+         ("preload... not used because the request credentials mode does not match") without it:
+         THREE.Loader (the base TextureLoader/ImageLoader every texture load in this app goes
+         through - see useRobustTexture.ts) defaults its own crossOrigin to 'anonymous', and a
+         preload's credentials mode has to match the real request's exactly or the browser treats
+         them as different resources entirely, fetching the image *twice* - once for the unused
+         preload, once for real - which silently defeated this whole preload's own purpose. -->
+    <link rel="preload" href="/boards/board_4p.jpg" as="image" crossorigin="anonymous" />
+    <link rel="preload" href="/tiles/tile-fill.png" as="image" crossorigin="anonymous" />
+    <link rel="preload" href="/tiles/tile-border.png" as="image" crossorigin="anonymous" />
   </head>
   <body>
     <div id="root"></div>
