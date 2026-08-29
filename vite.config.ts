@@ -62,6 +62,13 @@ export default defineConfig({
         // is nothing against the budget below, and a move's own sound shouldn't depend on network
         // timing any more than the board art it plays alongside does.
         globPatterns: ['**/*.{js,css,html,jpg,png,svg,ico,mp3}'],
+        // public/music/ holds the intro/background music track (introMusic.ts) - several MB,
+        // unlike every other mp3 here (a few KB to ~70KB apiece). Unlike hop/capture/finish
+        // sounds, nothing about actually playing the game depends on it - same "don't force every
+        // visitor to download something big upfront" reasoning this file's own rules.pdf exclusion
+        // below already uses, not a blanket precache-everything case. Loaded on demand instead
+        // (still cacheable by the browser's normal HTTP cache once played), same as the PDF.
+        globIgnores: ['music/**'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         // Reported directly ("직접 문서로 가게 만들라" - make it go directly to the document):
         // clicking the help card's own rulebook PDF link opened the app's start screen instead of

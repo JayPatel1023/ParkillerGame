@@ -8,6 +8,7 @@ import type { Piece } from '../core/pieces/piece'
 import type { MoveOption } from '../core/rules/moveOption'
 import { useTurnManager } from '../hooks/useTurnManager'
 import { BoardScene } from '../scene/BoardScene'
+import { playCaptureSound, playFinishSound, playGameWonSound } from './celebrationSound'
 import { Confetti } from './Confetti'
 import { EliminationToast } from './EliminationToast'
 import { HelpModal } from './HelpModal'
@@ -160,6 +161,41 @@ export function GameBoardScreen({
   const visiblePendingMoves = isMyTurn && animationsSettled ? pendingMoves : []
   const visiblePendingReward = animationsSettled ? pendingReward : null
   const visibleForfeitedReward = animationsSettled ? forfeitedReward : null
+
+  // Requested directly ("cuando se elimina a un peón o un peón llega a la meta debe haber alguna
+  // celebración con música"): every capture (a regular pawn's own move, or a Parki eliminating an
+  // opposing Parki - PK6/PK7) always queues a reward grant (PC5), reason 'capture' either way, and
+  // a finished piece always queues one too, reason 'finish' - so watching *either* the pendingReward
+  // or the forfeitedReward on this same reward exactly matches "a capture/finish just happened",
+  // regardless of whether the resulting bonus itself could actually be spent. Gated on the already-
+  // animation-settled visible* versions (not the raw pendingReward/forfeitedReward), so this fires
+  // at the same moment RewardToast/RewardBurst reveal themselves, not the instant the underlying
+  // game state updates well before the capturing piece's own hop has visually landed.
+  useEffect(() => {
+    const grant = visiblePendingReward ?? visibleForfeitedReward
+    if (!grant) return
+    if (grant.reason === 'capture') playCaptureSound()
+    else playFinishSound()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visiblePendingReward, visibleForfeitedReward])
+
+  // PK5: a Parki landing on an opposing *pawn* (not another Parki) sends it home with no reward at
+  // all (turnManager.ts's own resolveParkillerCollisions) - the one capture shape the reward-based
+  // effect above can never see, since nothing gets queued for it. parkillerAnimation is set the
+  // instant the black die resolves (useTurnManager.ts), synced with the Parki's own hop, so this
+  // still lands at essentially the same "just happened" moment the reward-based captures do.
+  useEffect(() => {
+    if (parkillerAnimation?.capturedPawn) playCaptureSound()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parkillerAnimation])
+
+  // Pairs a sound with the existing Confetti visual (below) for the game's own final celebration -
+  // client's own original prototype plays sound_partida_finalizada alongside its win banner too
+  // (obj_cartel_ganaste/Create_0.gml).
+  useEffect(() => {
+    if (winner) playGameWonSound()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [winner])
 
   // Reported directly ("SE DEBE PODER ELEGIR CON CUAL DE LOS DOS DADOS SE MUEVE EL PEON QUE SE
   // DESEE"): a piece reachable by both dice (to two different squares) used to just move by

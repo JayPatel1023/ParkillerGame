@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { GoldPanel } from './GoldPanel'
+import { isMusicMuted, toggleMusicMuted } from './introMusic'
 import { THEME } from './theme'
 
 // Where "Ayuda" (inside the settings panel below) sends the player - supplied directly, not
@@ -17,10 +18,13 @@ const HELP_URL = 'https://moonlighteditors.com/instructions-parkiller/'
 // trying to recreate it.
 export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
   const canPlayOnline = Boolean(import.meta.env.VITE_PHOTON_APP_ID)
-  // Reported directly: the app had no settings entry point at all. Kept to exactly what was
-  // asked for - a settings button whose one item opens the help page - rather than inventing
-  // placeholder rows (sound/language toggles etc.) with no real functionality behind them yet.
+  // Reported directly: the app had no settings entry point at all. Originally kept to exactly one
+  // item (Ayuda) rather than inventing placeholder rows (sound/language toggles etc.) with no real
+  // functionality behind them yet - a real music toggle now exists (introMusic.ts, requested
+  // directly: "habría que ponerle alguna música a la introducción del juego"), so it earns its own
+  // row here instead of staying a placeholder.
   const [showSettings, setShowSettings] = useState(false)
+  const [musicMuted, setMusicMuted] = useState(isMusicMuted)
   return (
     <div style={{ height: '100%', position: 'relative', backgroundColor: THEME.wood }}>
       {/* `cover` (not `contain`) so the photo fills every viewport edge to edge with zero visible
@@ -107,6 +111,10 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
         <div style={settingsOverlayStyle}>
           <GoldPanel style={settingsPanelStyle}>
             <div style={{ fontSize: 20, fontWeight: 800, color: THEME.goldBright, letterSpacing: 0.5 }}>Configuración</div>
+            <button className="chunky-btn" onClick={() => setMusicMuted(toggleMusicMuted())} style={settingsRowStyle}>
+              <span aria-hidden style={iconBadgeStyle}>{musicMuted ? <MusicOffIcon /> : <MusicOnIcon />}</span>
+              {musicMuted ? 'Música: apagada' : 'Música: encendida'}
+            </button>
             <button
               className="chunky-btn"
               onClick={() => window.open(HELP_URL, '_blank', 'noopener,noreferrer')}
@@ -204,6 +212,27 @@ function HelpIcon() {
       <circle cx="12" cy="12" r="9" />
       <path d="M9.3 9.3a2.7 2.7 0 1 1 3.9 2.4c-.8.4-1.2.9-1.2 1.8" strokeLinecap="round" />
       <circle cx="12" cy="17" r="0.9" fill="#eef4ff" stroke="none" />
+    </svg>
+  )
+}
+
+function MusicOnIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="#eef4ff" aria-hidden focusable="false">
+      <circle cx="6.5" cy="18" r="3.2" />
+      <circle cx="17" cy="15.5" r="3.2" />
+      <path d="M9.7 18V5.2L20.2 3v12.5" stroke="#eef4ff" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function MusicOffIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="#eef4ff" aria-hidden focusable="false">
+      <circle cx="6.5" cy="18" r="3.2" opacity="0.5" />
+      <circle cx="17" cy="15.5" r="3.2" opacity="0.5" />
+      <path d="M9.7 18V5.2L20.2 3v12.5" stroke="#eef4ff" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" opacity="0.5" />
+      <path d="M3 3l18 18" stroke="#eef4ff" strokeWidth="2.2" strokeLinecap="round" />
     </svg>
   )
 }

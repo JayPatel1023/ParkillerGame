@@ -5,6 +5,7 @@ import { TURN_ORDER_BY_COUNT } from './core/turnOrder'
 import type { PieceColor } from './core/pieceColor'
 import { BOARD_DEFINITIONS } from './data/boards'
 import { ColorSelector } from './ui/ColorSelector'
+import { pauseIntroMusic, playIntroMusic } from './ui/introMusic'
 import { PlayerCountSelector } from './ui/PlayerCountSelector'
 import { StartScreen } from './ui/StartScreen'
 import { preloadTexture } from './scene/useRobustTexture'
@@ -128,6 +129,16 @@ export default function App() {
     window.addEventListener('hashchange', onHashChange)
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
+
+  // Requested directly ("habría que ponerle alguna música a la introducción del juego"): plays
+  // while the player is still setting a game up (start/player-count/color screens), not once real
+  // gameplay (or a dev-only tool, or online play - a separate mode with its own concerns) has
+  // actually started. introMusic.ts's own play/pause are safe to call repeatedly - this just
+  // re-asserts the right state on every render rather than tracking a previous value.
+  useEffect(() => {
+    if (screen !== 'game' && hash === '') playIntroMusic()
+    else pauseIntroMusic()
+  }, [screen, hash])
 
   // Dev-only route: open with #editor to trace board waypoints. See src/tools/WaypointEditor.tsx.
   if (hash === '#editor') {
