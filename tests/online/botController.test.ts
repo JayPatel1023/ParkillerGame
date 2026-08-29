@@ -387,6 +387,47 @@ describe('BotController', () => {
     bots.dispose()
   })
 
+  // Requested directly ("si algún peón del bot está en una casilla protegida no debería
+  // arriesgarse a ser eliminado salvo para eliminar a otro peón. Es mejor que se mueva otro peón" -
+  // if a bot's pawn is on a protected square, it shouldn't risk elimination except to capture;
+  // better to move a different pawn instead): a piece already sheltered on a protected square
+  // gives up that guaranteed safety the moment it leaves - even to a destination the existing
+  // Parkiller-exposure checks don't flag as risky at all (this scenario has no opposing Parkiller
+  // in play whatsoever, isolating this specific preference from those other two).
+  it('leaves a piece on a protected square alone and moves a different piece instead, when both are equally legal', () => {
+    const board = buildTestBoard() // safeTrackIndices: {0, 10}
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    blue.parkiller.state = 'Eliminated' // no Parkiller-exposure interaction at all this roll
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 0 // sitting on Red's own protected entry square
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 5 // not on a protected square - free to move without giving up
+    // any shelter
+
+    // dieA=2, dieB=4 (sum=6) - deliberately not the exit roll (5) either individually or summed,
+    // with pieces[2]/[3] still in the yard by default - PC2.1's own exit lock would otherwise
+    // override this whole scenario with a mandatory ExitYard-only offer instead.
+    const dice = new RecordingDice(new ScriptedDice([2, 4, 1]))
+    const inner = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+    const network = new FakeRoomNetwork(MASTER_ACTOR)
+    const transport = network.createTransport(MASTER_ACTOR)
+    const host = new HostTurnManagerBridge(inner, dice, [red, blue], transport, new Map<number, PieceColor>())
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2)
+
+    host.start()
+    vi.advanceTimersByTime(10) // the roll fires
+    vi.advanceTimersByTime(10) // the first move fires
+
+    // piece0 must still be exactly where it started - never moved off its own protected square.
+    expect(red.pieces[0].trackPosition).toBe(0)
+    // piece1 took the move instead (the sum, 5 -> 11, per item 6's own "prefer the largest legal
+    // amount" preference layered on top of this one).
+    expect(red.pieces[1].trackPosition).toBe(11)
+
+    bots.dispose()
+  })
+
   // Requested directly ("el bot, si puede eliminar un peón de otro jugador sin riesgo, debe
   // hacerlo" - the bot, if it can eliminate an opponent's pawn without risk, must do so): a
   // capturing move already surviving every risk filter above is exactly a "risk-free" capture in

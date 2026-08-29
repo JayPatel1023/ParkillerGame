@@ -244,7 +244,23 @@ export class BotController {
     // same avoidable class of risk, one step earlier. Same layering/fallback pattern as the two
     // preferences above it.
     const unexposedMoves = safeMoves.filter((m) => !this.wouldLeavePieceExposedToParkiller(m))
-    const finalMoves = unexposedMoves.length > 0 ? unexposedMoves : safeMoves
+    const riskAwareMoves = unexposedMoves.length > 0 ? unexposedMoves : safeMoves
+    // Requested directly ("si algún peón del bot está en una casilla protegida no debería
+    // arriesgarse a ser eliminado salvo para eliminar a otro peón. Es mejor que se mueva otro
+    // peón y nunca suicidarse avanzando sin contar contra un parki" - if a bot's pawn is on a
+    // protected square, it shouldn't risk elimination except to capture; better to move a
+    // different pawn instead, never suicide by advancing without accounting for a Parki): the two
+    // exposure checks just above only ever look at where a move *lands* - a piece already
+    // sheltered on a protected square gives up that guaranteed safety the moment it leaves, even
+    // to a destination neither check flags as risky. Among otherwise equally-safe options, prefer
+    // leaving that piece exactly where it is and moving a different one instead - unless this
+    // move itself captures, worth trading the shelter for.
+    const keepsProtectedPiecesSheltered = riskAwareMoves.filter((m) => {
+      const leavesProtectedSquare = m.piece.state === 'OnTrack' && this.session.board.safeTrackIndices.has(m.piece.trackPosition)
+      if (!leavesProtectedSquare) return true
+      return wouldCapture(this.session.board, m, this.session.players, false)
+    })
+    const finalMoves = keepsProtectedPiecesSheltered.length > 0 ? keepsProtectedPiecesSheltered : riskAwareMoves
     // Reported directly, with the client's own rulebook page: a capture's 20-square reward is a
     // genuine choice - "Move one Pawn 20 spaces" OR "Move one Pawn 10 spaces and another pawn 10
     // spaces" - both are real, already-working options (verified directly: turnManager.ts's own
