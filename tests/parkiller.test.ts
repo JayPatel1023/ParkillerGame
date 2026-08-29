@@ -646,13 +646,14 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     expect(red.pieces[0].trackPosition).toBe(0)
   })
 
-  // Client's own "Special Situations" guide, page 6 case 2: own Parkiller alone on the entry
-  // square, double 5, two shelter pawns - "only ONE of the pawns leaves. The other is eliminated
-  // upon leaving" (i.e. stays in the shelter, that die simply has nothing left to spend it on).
-  // Already correctly handled by existing machinery (ownOnEntry's own >=2 re-evaluation, fresh on
-  // every offerMoves() call) - this locks in the full end-to-end sequence, not just the single
-  // exit's own resolution (parchisRules.test.ts's sibling test covers that in isolation).
-  it('double 5, own Parkiller alone on the entry square, two shelter pawns: first exit eliminates the foreign Parkiller, second stays blocked (own barrier re-forms)', () => {
+  // Client's own "Special Situations" guide, page 5 case 2: two Parkis already paired on the
+  // entry square, one the shelter's own color, double 5, two shelter pawns - the first exit
+  // eliminates the foreign Parkiller (joining its own), the second has nowhere to go (the square
+  // is full again with this pawn + red's own Parkiller) and stays blocked. Already correctly
+  // handled by existing machinery (ownOnEntry's own >=2 re-evaluation, fresh on every offerMoves()
+  // call) - this locks in the full end-to-end sequence, not just the single exit's own resolution
+  // (parchisRules.test.ts's sibling test covers that in isolation).
+  it('double 5, two Parkis (one the shelter\'s own) on the entry square, two shelter pawns: first exit eliminates the foreign Parkiller, second stays blocked (own barrier re-forms)', () => {
     const board: BoardData = {
       playerCount: 2,
       trackLength: 40,
@@ -690,6 +691,52 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     // The second shelter pawn has nowhere to go - the square is full again (this pawn + red's own
     // Parkiller) - the remaining die simply has nothing to spend, and since this was a double, the
     // same player rolls again rather than the turn passing on.
+    expect(notPossibleReason).toBe('none')
+    expect(turnStartedAgainFor).toBe('Red')
+    expect(red.pieces[1].state).toBe('InYard')
+  })
+
+  // Client's own "Special Situations" guide, page 6 case 2: this time the shelter owner's own
+  // Parkiller is genuinely alone on the entry square - no foreign Parkiller involved at all, unlike
+  // the sibling test just above. Double 5, two shelter pawns - the first pawn simply joins its own
+  // Parkiller peacefully (no capture, nothing foreign there to eliminate), and the second pawn then
+  // has nowhere to go (the square is already full with the first pawn + the own Parkiller) and
+  // stays blocked in the shelter, same underlying mechanism as the sibling test.
+  it('double 5, own Parkiller genuinely alone (no foreign Parkiller) on the entry square, two shelter pawns: first pawn joins peacefully, second stays blocked', () => {
+    const board: BoardData = {
+      playerCount: 2,
+      trackLength: 40,
+      lanes: {
+        Red: { color: 'Red', entryTrackIndex: 0, homeEntranceTrackIndex: 2, corridorLength: 2 },
+        Blue: { color: 'Blue', entryTrackIndex: 20, homeEntranceTrackIndex: 19, corridorLength: 6 },
+      },
+      safeTrackIndices: new Set([0, 20]),
+    }
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    const blackDie = 3
+    red.parkiller.corridorPosition = red.parkiller.corridorLength
+    red.parkiller.trackPosition = (0 + blackDie) % board.trackLength // lands exactly on 0 this roll
+    // Blue's Parkiller is deliberately not on this square at all - genuinely alone.
+
+    const dice = new ScriptedDice([5, 5, blackDie])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+    let notPossibleReason: string | null = null
+    manager.moveNotPossible.on((r) => (notPossibleReason = r))
+    let turnStartedAgainFor: string | null = null
+    manager.turnStarted.on((p) => (turnStartedAgainFor = p.color))
+
+    manager.requestRoll()
+    expect(red.parkiller.trackPosition).toBe(0)
+
+    const result = manager.submitMove(red.pieces[0])
+
+    expect(result?.capturedPiece).toBeNull()
+    expect(result?.capturedParkillerColor).toBeFalsy()
+    expect(red.pieces[0].state).toBe('OnTrack')
+    expect(red.pieces[0].trackPosition).toBe(0)
+    expect(red.parkiller.state).toBe('InPlay')
+    // The second shelter pawn has nowhere to go - blocked the same way the sibling test's does.
     expect(notPossibleReason).toBe('none')
     expect(turnStartedAgainFor).toBe('Red')
     expect(red.pieces[1].state).toBe('InYard')
