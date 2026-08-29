@@ -333,6 +333,64 @@ describe('TurnManager - mandatory departure (PC2.1)', () => {
     expect(red.pieces[1].state).toBe('OnTrack')
     expect(red.pieces[1].trackPosition).toBe(0)
   })
+
+  // Client's own "SPECIAL STARTING SQUARE RULE" infographic: two pawns of different colors already
+  // on the entry square, neither a real barrier (PC2.1's own "exposed foreign pair" exception,
+  // already covered in isolation by parchisRules.test.ts's own sibling test) - a plain single 5
+  // eliminates whichever arrived later. This locks in the *double* 5 half end to end: with two
+  // shelter pawns, the first exit eliminates the later arrival (same as a single 5 would), and the
+  // second exit - joining an own pawn already there, the existing "further own pawn captures the
+  // lone opponent" rule everywhere else in this file already relies on - eliminates the other one
+  // too, with no special-casing needed for this to already work correctly.
+  it('two different-colored foreign pawns on the entry square, double 5 with two shelter pawns: both eliminated', () => {
+    // A short home-corridor distance, not buildBigTestBoard()'s - the first capture's own 20-square
+    // reward would otherwise actually be spendable, moving pieces[0] away from the entry square
+    // before the second exit even happens and defeating the very "further own pawn joins" mechanic
+    // this test means to check. Forcing the reward to forfeit (nothing in play can use 20 *or* 10)
+    // keeps pieces[0] planted exactly where the second exit needs it.
+    const board: BoardData = {
+      playerCount: 2,
+      trackLength: 40,
+      lanes: {
+        Red: { color: 'Red', entryTrackIndex: 0, homeEntranceTrackIndex: 2, corridorLength: 2 },
+        Blue: { color: 'Blue', entryTrackIndex: 20, homeEntranceTrackIndex: 19, corridorLength: 6 },
+      },
+      safeTrackIndices: new Set([0, 20]),
+    }
+    const red = createPlayerState('Red', board)
+    const gold = createPlayerState('Gold', board) // no lane defined on this board for Gold
+    const blue = createPlayerState('Blue', board)
+    gold.parkiller.state = 'Eliminated' // keep Gold's lane-less default Parkiller out of the way
+    gold.pieces[0].state = 'OnTrack'
+    gold.pieces[0].trackPosition = 0
+    gold.pieces[0].arrivedAt = 1 // arrived first - protected by the tie-break on the first exit
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 0
+    blue.pieces[0].arrivedAt = 2 // arrived later - goes first
+
+    const dice = new ScriptedDice([5, 5, 1])
+    const manager = new TurnManager(board, [red, gold, blue], defaultRuleSettings(), dice)
+    let latestMoves: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((m) => (latestMoves = m))
+
+    manager.requestRoll()
+    const r1 = manager.submitMove(red.pieces[0])
+
+    expect(r1?.capturedPiece).toBe(blue.pieces[0])
+    expect(blue.pieces[0].state).toBe('InYard')
+    expect(gold.pieces[0].state).toBe('OnTrack') // not yet - only the first exit has happened
+
+    const secondExit = latestMoves.find((m) => m.kind === 'ExitYard')
+    expect(secondExit).toBeTruthy()
+    const r2 = manager.submitMove(secondExit!.piece)
+
+    expect(r2?.capturedPiece).toBe(gold.pieces[0])
+    expect(gold.pieces[0].state).toBe('InYard')
+    expect(red.pieces[0].state).toBe('OnTrack')
+    expect(red.pieces[0].trackPosition).toBe(0)
+    expect(secondExit!.piece.state).toBe('OnTrack')
+    expect(secondExit!.piece.trackPosition).toBe(0)
+  })
 })
 
 describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
