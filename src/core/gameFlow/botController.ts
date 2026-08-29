@@ -234,6 +234,17 @@ export class BotController {
     // barrier check alone already used.
     const preferredMoves = nonBarrierMoves.filter((m) => !this.wouldWalkIntoUnprotectedParki(m))
     const safeMoves = preferredMoves.length > 0 ? preferredMoves : nonBarrierMoves
+    // Requested directly ("Debía haber movido incluso todas las casillas con el peón más alejado y
+    // quedar a más de 6 casillas del Parki" - it should have moved even all the squares with the
+    // farthest pawn and ended up more than 6 squares from the Parki): the black die is 1-6, so a
+    // piece left within that range of an opposing Parkiller, on an unprotected square, could be
+    // reached on that Parkiller's very *next* roll - not yet an actual elimination this roll
+    // (wouldWalkIntoUnprotectedParki, above, already dodges landing directly on one), but leaving a
+    // piece exposed to next roll's danger when an equally legal move would clear it entirely is the
+    // same avoidable class of risk, one step earlier. Same layering/fallback pattern as the two
+    // preferences above it.
+    const unexposedMoves = safeMoves.filter((m) => !this.wouldLeavePieceExposedToParkiller(m))
+    const finalMoves = unexposedMoves.length > 0 ? unexposedMoves : safeMoves
     // Reported directly, with the client's own rulebook page: a capture's 20-square reward is a
     // genuine choice - "Move one Pawn 20 spaces" OR "Move one Pawn 10 spaces and another pawn 10
     // spaces" - both are real, already-working options (verified directly: turnManager.ts's own
@@ -245,11 +256,11 @@ export class BotController {
     // it's fully implemented and available to a human player. Every move in a reward offer shares
     // the same diceSource ('reward') - not mixed with an ordinary dieA/dieB/sum offer - so
     // preferring the smaller amount present only ever kicks in for an actual reward decision.
-    const isRewardOffer = safeMoves[0]?.diceSource === 'reward'
+    const isRewardOffer = finalMoves[0]?.diceSource === 'reward'
     const candidates = isRewardOffer
-      ? safeMoves.filter((m) => m.amount === Math.min(...safeMoves.map((c) => c.amount)))
-      : safeMoves
-    const chosen = candidates[0] ?? safeMoves[0] ?? nonBarrierMoves[0] ?? moves[0]
+      ? finalMoves.filter((m) => m.amount === Math.min(...finalMoves.map((c) => c.amount)))
+      : finalMoves
+    const chosen = candidates[0] ?? finalMoves[0] ?? safeMoves[0] ?? nonBarrierMoves[0] ?? moves[0]
     // Fired now, not inside the scheduled callback below - the highlight should cover this whole
     // think-delay (see this class's own pieceHighlighted doc comment), not just flash right before
     // the move actually submits.
@@ -302,6 +313,28 @@ export class BotController {
     for (const player of this.session.players) {
       if (player.color === move.piece.color) continue
       if (isParkillerOnTrack(player.parkiller) && player.parkiller.trackPosition === move.resultingTrackPosition) return true
+    }
+    return false
+  }
+
+  // True when landing here leaves this piece within an *opposing* Parkiller's own one-roll reach
+  // (PK2's black die is 1-6) on an unprotected square - not an immediate collision (that's
+  // wouldWalkIntoUnprotectedParki, above), but exposed to becoming one on that Parkiller's very
+  // next roll. Distance is measured the way a Parkiller itself actually travels to get there -
+  // backward (decreasing trackPosition) from its own current position, matching
+  // resolveParkillerMove's own `mod(before - blackDieValue, trackLength)` - not simple square
+  // subtraction, which would silently measure the wrong direction on a looped track. A safe square
+  // is never "exposed" regardless of distance, same exemption wouldWalkIntoUnprotectedParki uses
+  // (PK4: landing there just forms a barrier, no elimination either way).
+  private wouldLeavePieceExposedToParkiller(move: MoveOption): boolean {
+    if (move.resultingTrackPosition === -1) return false
+    if (this.session.board.safeTrackIndices.has(move.resultingTrackPosition)) return false
+    const trackLength = this.session.board.trackLength
+    for (const player of this.session.players) {
+      if (player.color === move.piece.color) continue
+      if (!isParkillerOnTrack(player.parkiller)) continue
+      const distance = (((player.parkiller.trackPosition - move.resultingTrackPosition) % trackLength) + trackLength) % trackLength
+      if (distance >= 1 && distance <= 6) return true
     }
     return false
   }
