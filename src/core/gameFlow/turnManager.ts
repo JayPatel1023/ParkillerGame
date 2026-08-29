@@ -592,12 +592,17 @@ export class TurnManager {
         : null
 
     // PC2.1: "A pawn must move to the starting square" whenever a die's own value is the exit
-    // roll and a yard piece could use it - that die can only be spent on the exit, or on a move
-    // that would capture something (PC3/PK8 already outrank this via the filter below, so a
-    // capture must survive here too), not reassigned to a different, non-capturing piece by the
-    // same amount. The *other* die stays completely free, before or after, in either order
-    // (offerMoves runs fresh after every move, so whichever die the player didn't spend just gets
-    // offered again next time around).
+    // roll and a yard piece could use it - that die can only be spent on the exit, full stop, not
+    // reassigned to a different piece by the same amount even when that move would capture.
+    // Verified directly against the reference implementation's own activarFichasMovibles(): once
+    // hayFichasEnCasaQuePuedenSalir is true, it unconditionally clears debe_mover for every
+    // non-yard piece of that color for this die - no exception checked for a move that would have
+    // captured. The rulebook's own PC2.1 text carries only one stated exception (the entry square
+    // already full of the player's own two pawns), not an available capture elsewhere. An earlier
+    // version of this code carved out captures here on the theory that PC3/PK8's own mandatory-
+    // capture rule outranked this - unsupported by either source, and reverted. The *other* die
+    // stays completely free, before or after, in either order (offerMoves runs fresh after every
+    // move, so whichever die the player didn't spend just gets offered again next time around).
     const dieAHasExit = state.dieA === this.settings.exitRoll && (dieAMoves?.some((m) => m.kind === 'ExitYard') ?? false)
     const dieBHasExit = state.dieB === this.settings.exitRoll && (dieBMoves?.some((m) => m.kind === 'ExitYard') ?? false)
     // PC2.1 also names the sum ("a die shows a 5, or the sum is 5") as its own, equally valid exit
@@ -610,8 +615,7 @@ export class TurnManager {
     // own lock be bypassed by spending both dice on one already-in-play piece instead).
     const sumHasExit =
       !dieAHasExit && !dieBHasExit && state.dieA + state.dieB === this.settings.exitRoll && (sumMoves?.some((m) => m.kind === 'ExitYard') ?? false)
-    const restrictToExitOrCapture = (moves: MoveOption[]) =>
-      moves.filter((m) => m.kind === 'ExitYard' || wouldCapture(this.board, m, this.players, this.parkillerCapturableThisRoll))
+    const restrictToExit = (moves: MoveOption[]) => moves.filter((m) => m.kind === 'ExitYard')
 
     // PK9.1: a double obligates breaking an existing barrier of the player's own pawns before
     // anything else this roll (PK9's own priority order: barrier-break, then PK9.2's rewards -
@@ -653,7 +657,7 @@ export class TurnManager {
       // sumHasExit restricts every move source alike, not just the sum's own moves - using either
       // individual die on some other, non-capturing piece would just dodge the sum-only exit the
       // same way a single die's own dieHasExit lock already prevents for that one die.
-      return dieHasExit || sumHasExit ? restrictToExitOrCapture(moves) : moves
+      return dieHasExit || sumHasExit ? restrictToExit(moves) : moves
     }
 
     // Keyed by piece + amount, not piece alone - a piece reachable by *both* dice (or a die and the

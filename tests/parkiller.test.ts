@@ -351,13 +351,17 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     const red = createPlayerState('Red', board)
     const blue = createPlayerState('Blue', board)
     red.pieces[0].state = 'OnTrack'
-    red.pieces[0].trackPosition = 0
+    red.pieces[0].trackPosition = 1
     blue.parkiller.corridorPosition = blue.parkiller.corridorLength
     blue.parkiller.trackPosition = 5
 
     // PK6/PK8: verified directly against the reference implementation's doblete_mata_parkiller
     // flag - a common piece only eliminates the Parkiller during the roll that produced doubles.
-    const dice = new ScriptedDice([5, 5, 1]) // dieA=dieB=5 (double) moves red.pieces[0] 0 -> 5, onto blue's parkiller
+    // Deliberately not a double-5 - PC2.1's own exit lock would otherwise outrank this capture
+    // outright (a die matching the exit roll can only be spent on the exit itself, per the
+    // reference implementation's own activarFichasMovibles, never on a different piece's capture),
+    // which is a real interaction but not what this test means to isolate.
+    const dice = new ScriptedDice([4, 4, 1]) // dieA=dieB=4 (double) moves red.pieces[0] 1 -> 5, onto blue's parkiller
     const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
 
     const grants: RewardGrant[] = []

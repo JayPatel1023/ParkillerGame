@@ -264,6 +264,41 @@ describe('TurnManager - mandatory departure (PC2.1)', () => {
     expect(red.pieces[1].trackPosition).toBe(0)
   })
 
+  // Relayed directly from the client ("se apliquen la norma de obligación: salir con 5 sobre
+  // eliminar otro peón con ese 5" - the exit-with-5 obligation applies over eliminating another
+  // pawn with that same 5): verified directly against the reference implementation's own
+  // activarFichasMovibles - once a die's own value is a mandatory exit trigger and a yard piece
+  // could use it, that die unconditionally clears every other piece's move, with no exception for
+  // one that would have captured. An earlier version of this code carved out a capture as a
+  // surviving alternative for that die, which neither the rulebook (PC2.1's only stated exception
+  // is an already-full own entry square) nor the reference GML implementation supports.
+  it('a die matching the exit roll locks out even a capturing move for a different piece', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 2 // +5 -> 7, would capture blue.pieces[0] there
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 7
+
+    const dice = new ScriptedDice([5, 3, 1]) // dieA=5 (the exit roll), dieB=3
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let latestMoves: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((m) => (latestMoves = m))
+    manager.requestRoll()
+
+    // die A (5) is locked to exiting a yard piece - piece0's own capturing +5 move is not offered,
+    // even though it would capture.
+    expect(latestMoves.find((m) => m.piece === red.pieces[0] && m.diceSource === 'dieA')).toBeUndefined()
+    expect(latestMoves.filter((m) => m.kind === 'ExitYard')).toHaveLength(3)
+    expect(blue.pieces[0].state).toBe('OnTrack') // untouched - the capture never happened
+
+    // die B (3) stays completely free, same as ever.
+    const dieBMove = latestMoves.find((m) => m.piece === red.pieces[0] && m.diceSource === 'dieB')
+    expect(dieBMove?.resultingTrackPosition).toBe(5)
+  })
+
   // A TurnManager-level "both eliminated" integration test turned out very hard to construct
   // cleanly: the capture reward is mandatory to claim immediately (PC6.2) before the second
   // exit's own obligation can resume, and any piece able to receive that reward without moving
