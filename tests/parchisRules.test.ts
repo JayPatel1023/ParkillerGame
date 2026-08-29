@@ -482,6 +482,66 @@ describe('parchisRules', () => {
       expect(blue.parkiller.trackPosition).toBe(0)
     })
 
+    // Client's own "Special Situations" guide, "PARKI ON THE STARTING SQUARE": two Parkis already
+    // paired on the entry square, one of them this exiting pawn's own color, is a genuinely
+    // different shape from the sibling test just above (an own *pawn* + a foreign Parki) - a pawn
+    // joining its *own Parkiller* is protected by it and eliminates the foreign one, rather than
+    // bouncing home itself. "Pawns cannot eliminate their own Parki" (same page) - only the
+    // foreign one is ever a target here.
+    it('exiting onto an entry square already holding own Parkiller + a foreign Parkiller eliminates the foreign one', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+      red.parkiller.corridorPosition = red.parkiller.corridorLength
+      red.parkiller.trackPosition = 0 // Red's own entry square, already holding Red's own Parkiller...
+      blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+      blue.parkiller.trackPosition = 0 // ...paired with Blue's, a real "Two Parkis" barrier (safe square)
+
+      const settings = defaultRuleSettings()
+      const exitMove = getValidMoves(board, red, [red, blue], 5, settings).find((m) => m.kind === 'ExitYard')
+      expect(exitMove).toBeTruthy()
+
+      const result = applyMove(board, exitMove!, [red, blue], settings, false)
+
+      expect(result.capturedParkillerColor).toBe('Blue')
+      expect(result.eliminatedByParkiller).toBeFalsy() // the mover itself is protected, not bounced
+      expect(blue.parkiller.state).toBe('Eliminated')
+      expect(red.parkiller.state).toBe('InPlay') // pawns cannot eliminate their own Parki
+      expect(red.parkiller.trackPosition).toBe(0)
+      expect(red.pieces[0].state).toBe('OnTrack')
+      expect(red.pieces[0].trackPosition).toBe(0)
+    })
+
+    // Client's own "Special Situations" guide: a foreign Parki already paired with a *third*
+    // player's pawn (neither matching this exiting pawn's own color) is exposed exactly like two
+    // different-colored opposing pawns already are (PC2.1) - the pawn loses, the Parkiller is
+    // untouched, and this exit's own pawn safely takes its place alongside it.
+    it('exiting onto an entry square already holding a foreign Parkiller + a third player\'s pawn eliminates the pawn, not the Parkiller', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+      const green = createPlayerState('Green', board)
+      blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+      blue.parkiller.trackPosition = 0 // Red's own entry square, already holding Blue's Parkiller...
+      green.pieces[0].state = 'OnTrack'
+      green.pieces[0].trackPosition = 0 // ...paired with Green's lone pawn (Barriers case 5, safe square)
+
+      const settings = defaultRuleSettings()
+      const exitMove = getValidMoves(board, red, [red, blue, green], 5, settings).find((m) => m.kind === 'ExitYard')
+      expect(exitMove).toBeTruthy()
+
+      const result = applyMove(board, exitMove!, [red, blue, green], settings, false)
+
+      expect(result.capturedPiece).toBe(green.pieces[0])
+      expect(result.capturedParkillerColor).toBeFalsy()
+      expect(result.eliminatedByParkiller).toBeFalsy() // the mover safely takes green's place
+      expect(green.pieces[0].state).toBe('InYard')
+      expect(blue.parkiller.state).toBe('InPlay')
+      expect(blue.parkiller.trackPosition).toBe(0)
+      expect(red.pieces[0].state).toBe('OnTrack')
+      expect(red.pieces[0].trackPosition).toBe(0)
+    })
+
     it('an own pawn plus the player\'s own Parkiller already on the entry square blocks exit as an own barrier', () => {
       const board = buildTestBoard()
       const red = createPlayerState('Red', board)

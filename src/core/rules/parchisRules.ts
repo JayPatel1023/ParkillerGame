@@ -344,6 +344,18 @@ export function applyMove(
         move.kind === 'ExitYard' && !!owner && isParkillerOnTrack(owner.parkiller) && owner.parkiller.trackPosition === move.resultingTrackPosition
       const ownAtDestination = occupantsAtDestination.filter((p) => p.color === piece.color).length + (ownParkillerAtDestination ? 1 : 0)
       const opposingAtDestination = occupantsAtDestination.filter((p) => p !== piece && p.color !== piece.color)
+      // Client's own "Special Situations" guide, "PARKI ON THE STARTING SQUARE": an opposing
+      // Parkiller can be one half of an already-formed mixed pair this exit joins or passes
+      // through, exactly like an opposing pawn can - piecesAtTrackSquare (occupantsAtDestination,
+      // opposingAtDestination above) only ever sees pawns, so a Parkiller sharing that pair was
+      // structurally invisible to every check below it. Only relevant once there's a genuine
+      // *pre-existing* pair to resolve (ownAtDestination>1 or two opposing occupants already
+      // there) - a single already-present Parkiller with no pawn alongside it is a different, already-
+      // correct case (PK5/PK6 below, gated off entirely once this block already resolved one).
+      const opposingParkillerAtDestination =
+        move.kind === 'ExitYard'
+          ? allPlayers.find((p) => p.color !== piece.color && isParkillerOnTrack(p.parkiller) && p.parkiller.trackPosition === move.resultingTrackPosition)
+          : undefined
       // 1) joining an own pawn (or own Parkiller) already there (>1 own, counting the mover) - a
       //    lone opponent already on the square doesn't get captured by a first exit, only once a
       //    further own piece joins that same mixed square.
@@ -355,20 +367,64 @@ export function applyMove(
       result.capturedPiece = settings.captureSendsToYard
         ? captureAt(board, piece, move.resultingTrackPosition, allPlayers, joiningOwnPawn || exposedForeignPair)
         : null
+      // Client's own "Special Situations" guide: a lone opposing pawn already sharing the square
+      // with an opposing Parkiller (case 1) is exactly as real a mixed pair as two opposing pawns
+      // (case 2, exposedForeignPair above) - resolves the same way (this exit passes through
+      // safely, nothing captured yet) *unless* a further own piece is what joins it (case 2 below).
+      // Only reachable when captureAt just above found no pawn to eliminate there (a genuine
+      // pre-existing opposing-pawn + opposing-Parkiller pair has exactly one pawn, already handled
+      // above if this mover is the second own piece to arrive - this only fires for the *other*
+      // shape, a lone opposing pawn on a square that ALSO independently already held an opposing
+      // Parkiller, i.e. exactly this exit's own single pre-existing mixed pair).
+      // Case D above (own pawn joins its *own Parkiller*, already paired with a foreign one) is
+      // narrower than joiningOwnPawn alone - joiningOwnPawn is equally true when this mover's own
+      // *pawn* is what's already there instead (paired with a foreign Parkiller on its own,
+      // Barriers case 5), and that shape keeps its own, already-correct, already-tested resolution
+      // (PK5 sends the arriving pawn straight home, not this one - "ES IMPOSIBLE TRES FICHAS EN UNA
+      // MISMA CASILLA", reported directly with a screenshot). Only the own-*Parkiller* pairing gets
+      // this exception, matching the client's own guide, which never once mentions a second own
+      // *pawn* joining a pawn+foreign-Parki pair - only ever a pawn joining its own Parki.
+      const joiningOwnParkillerOnly = ownParkillerAtDestination && occupantsAtDestination.filter((p) => p !== piece && p.color === piece.color).length === 0
+      let capturedOpposingParkillerColor: PieceColor | null = null
+      if (!result.capturedPiece && opposingParkillerAtDestination) {
+        if (joiningOwnParkillerOnly) {
+          // Case: this mover's own pawn joins its own Parkiller, already paired with a foreign
+          // Parkiller on this square (client's guide: "two Parkis, one is the shelter's own color -
+          // single 5 eliminates the OTHER player's Parki"). A pawn can't normally eliminate a
+          // Parkiller (PK6 reserves that for a single die during a double, see below) - this is the
+          // one documented exception, the same "a further own piece joining bumps the one occupant
+          // that isn't part of its own pairing" rule captureAt's joiningOwnPawn already applies to a
+          // lone opposing pawn, generalized to a lone opposing Parkiller here.
+          opposingParkillerAtDestination.parkiller.state = 'Eliminated'
+          capturedOpposingParkillerColor = opposingParkillerAtDestination.color
+        } else if (!joiningOwnPawn && opposingAtDestination.length === 1 && opposingAtDestination[0].color !== opposingParkillerAtDestination.color) {
+          // Case: a foreign Parkiller already paired with a *third* player's pawn (neither matching
+          // this mover's own color) - client's guide: "single 5 eliminates that [third player's]
+          // pawn", the Parkiller itself untouched. Re-runs captureAt with the safe-zone bypassed
+          // (this pair, Parkiller included, is exactly as real as the plain two-different-opposing-
+          // pawns case PC2.1 already names) now that it's known there's a genuine pawn+Parkiller
+          // pair here for it to resolve, not just a lone protected pawn.
+          result.capturedPiece = settings.captureSendsToYard ? captureAt(board, piece, move.resultingTrackPosition, allPlayers, true) : null
+        }
+      }
       // PK6/PK8: a common piece only eliminates the Parkiller during the roll that just produced
       // doubles (the reference implementation's own doblete_mata_parkiller flag) - landing on it
       // any other time does nothing at all, verified directly against that source. And even on a
       // double, only a single die's own value counts, not their sum (see wouldCapture).
       const usesSingleDie = move.diceSource === 'dieA' || move.diceSource === 'dieB'
-      result.capturedParkillerColor = allowParkillerCapture && usesSingleDie
-        ? captureParkillerAt(piece, move.resultingTrackPosition, allPlayers)
-        : null
+      result.capturedParkillerColor =
+        capturedOpposingParkillerColor ??
+        (allowParkillerCapture && usesSingleDie ? captureParkillerAt(piece, move.resultingTrackPosition, allPlayers) : null)
       // PK5: landing on an unprotected opposing Parkiller without eliminating it (PK6, just
       // above) turns the tables instead - the arriving pawn is sent straight back to its own
       // yard, with no reward. Verified directly against the reference implementation's
       // ingresaFicha(): the move is never blocked outright, it always completes first and only
-      // then bounces the arriving pawn home.
-      if (!result.capturedParkillerColor) {
+      // then bounces the arriving pawn home. Skipped once this exit's own mixed-pair resolution
+      // above already captured a pawn right here (case C) - PK5's "unprotected lone Parkiller"
+      // framing doesn't apply to a Parkiller that was already one half of a real, already-formed
+      // pair this same exit just resolved (capturedParkillerColor truthy, case D, already skips
+      // this check via its own clause above).
+      if (!result.capturedParkillerColor && !result.capturedPiece) {
         const dangerColor = unprotectedOpposingParkillerColorAt(board, piece.color, move.resultingTrackPosition, allPlayers)
         if (dangerColor) {
           result.eliminatedByParkiller = true
