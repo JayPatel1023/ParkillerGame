@@ -397,6 +397,7 @@ export class TurnManager {
       const leftover = blackDieValue - remaining
       const after = mod(before - leftover, this.board.trackLength)
       parkiller.trackPosition = after
+      parkiller.arrivedAt = this.nextArrivalSequence++
       const { capturedPawn, capturedParkillerColor, secondCapturedParkillerColor } = this.resolveParkillerCollisions(player, after)
       return {
         color: player.color,
@@ -412,6 +413,7 @@ export class TurnManager {
 
     const after = mod(before - blackDieValue, this.board.trackLength)
     parkiller.trackPosition = after
+    parkiller.arrivedAt = this.nextArrivalSequence++
     const { capturedPawn, capturedParkillerColor, secondCapturedParkillerColor } = this.resolveParkillerCollisions(player, after)
     return {
       color: player.color,
@@ -761,14 +763,15 @@ export class TurnManager {
       this.openedEntryPairThisRoll,
     )
     // Client's own "Special Situations" guide: this exit just resolved a mixed pawn+Parkiller pair
-    // on the entry square by eliminating the pawn (case C/B in applyMove's own comments) - if that
-    // Parkiller is still standing there, track the square so a further own pawn joining it later
-    // this same roll (the double's other exit) eliminates the Parkiller too, instead of applyMove's
-    // ordinary "bounces the joining pawn home" resolution for an unrelated, genuinely pre-existing
-    // pairing. Cleared at the start of every roll (requestRoll), same as brokenBarrierThisRoll.
+    // on the entry square by eliminating the pawn (case C/B in applyMove's own comments), or one of
+    // two foreign Parkis paired there (case E) - if a Parkiller is still standing there either way,
+    // track the square so a further own pawn joining it later this same roll (the double's other
+    // exit) eliminates it too, instead of applyMove's ordinary "bounces the joining pawn home"
+    // resolution for an unrelated, genuinely pre-existing pairing. Cleared at the start of every
+    // roll (requestRoll), same as brokenBarrierThisRoll.
     this.openedEntryPairThisRoll =
       move.kind === 'ExitYard' &&
-      result.capturedPiece &&
+      (result.capturedPiece || result.capturedParkillerColor) &&
       this.players.some(
         (p) => p.color !== chosenPiece.color && isParkillerOnTrack(p.parkiller) && p.parkiller.trackPosition === move.resultingTrackPosition,
       )

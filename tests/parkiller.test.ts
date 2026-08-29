@@ -33,7 +33,7 @@ function buildTestBoard(): BoardData {
 
 describe('createParkiller', () => {
   it('starts InPlay at the given home-entrance track index, not yet having crossed its own corridor', () => {
-    expect(createParkiller('Red', 19, 6)).toEqual({ color: 'Red', state: 'InPlay', trackPosition: 19, corridorPosition: 0, corridorLength: 6 })
+    expect(createParkiller('Red', 19, 6)).toEqual({ color: 'Red', state: 'InPlay', trackPosition: 19, corridorPosition: 0, corridorLength: 6, arrivedAt: 0 })
   })
 })
 
@@ -626,6 +626,7 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     const red = createPlayerState('Red', board)
     const blue = createPlayerState('Blue', board)
     const green = createPlayerState('Green', board)
+    green.parkiller.state = 'Eliminated' // no lane defined for Green on this board - out of the way entirely
     blue.parkiller.corridorPosition = blue.parkiller.corridorLength
     blue.parkiller.trackPosition = 0
     green.pieces[0].state = 'OnTrack'
@@ -643,6 +644,134 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     expect(blue.parkiller.state).toBe('Eliminated')
     expect(red.pieces[0].state).toBe('OnTrack')
     expect(red.pieces[0].trackPosition).toBe(0)
+  })
+
+  // Client's own "Special Situations" guide, page 6 case 2: own Parkiller alone on the entry
+  // square, double 5, two shelter pawns - "only ONE of the pawns leaves. The other is eliminated
+  // upon leaving" (i.e. stays in the shelter, that die simply has nothing left to spend it on).
+  // Already correctly handled by existing machinery (ownOnEntry's own >=2 re-evaluation, fresh on
+  // every offerMoves() call) - this locks in the full end-to-end sequence, not just the single
+  // exit's own resolution (parchisRules.test.ts's sibling test covers that in isolation).
+  it('double 5, own Parkiller alone on the entry square, two shelter pawns: first exit eliminates the foreign Parkiller, second stays blocked (own barrier re-forms)', () => {
+    const board: BoardData = {
+      playerCount: 2,
+      trackLength: 40,
+      lanes: {
+        Red: { color: 'Red', entryTrackIndex: 0, homeEntranceTrackIndex: 2, corridorLength: 2 },
+        Blue: { color: 'Blue', entryTrackIndex: 20, homeEntranceTrackIndex: 19, corridorLength: 6 },
+      },
+      safeTrackIndices: new Set([0, 20]),
+    }
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    const blackDie = 3
+    red.parkiller.corridorPosition = red.parkiller.corridorLength
+    red.parkiller.trackPosition = (0 + blackDie) % board.trackLength // lands exactly on 0 this roll
+    blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+    blue.parkiller.trackPosition = 0
+
+    const dice = new ScriptedDice([5, 5, blackDie])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+    let notPossibleReason: string | null = null
+    manager.moveNotPossible.on((r) => (notPossibleReason = r))
+    let turnStartedAgainFor: string | null = null
+    manager.turnStarted.on((p) => (turnStartedAgainFor = p.color))
+
+    manager.requestRoll()
+    expect(red.parkiller.trackPosition).toBe(0) // own Parkiller's black-die move landed it here first
+
+    const result = manager.submitMove(red.pieces[0])
+
+    expect(result?.capturedParkillerColor).toBe('Blue')
+    expect(blue.parkiller.state).toBe('Eliminated')
+    expect(red.parkiller.state).toBe('InPlay') // pawns cannot eliminate their own Parki
+    expect(red.pieces[0].state).toBe('OnTrack')
+    expect(red.pieces[0].trackPosition).toBe(0)
+    // The second shelter pawn has nowhere to go - the square is full again (this pawn + red's own
+    // Parkiller) - the remaining die simply has nothing to spend, and since this was a double, the
+    // same player rolls again rather than the turn passing on.
+    expect(notPossibleReason).toBe('none')
+    expect(turnStartedAgainFor).toBe('Red')
+    expect(red.pieces[1].state).toBe('InYard')
+  })
+
+  // Client's own "Special Situations" guide, page 7: two Parkis already paired on the entry
+  // square, neither belonging to the shelter owner, are never a protected pairing (only a
+  // same-color pair is - getValidMoves' own foreignBarrier agrees, two different colors never
+  // block this exit at all) - a single 5 eliminates one, "the last Parki to arrive" being the same
+  // arrival-order tie-break resolveBarrierElimination already uses for two exposed opposing pawns.
+  describe('two foreign Parkis (neither the shelter owner\'s own) already paired on the entry square (client\'s guide, page 7)', () => {
+    function buildBoard(): BoardData {
+      return {
+        playerCount: 2,
+        trackLength: 40,
+        lanes: {
+          Red: { color: 'Red', entryTrackIndex: 0, homeEntranceTrackIndex: 2, corridorLength: 2 },
+          Blue: { color: 'Blue', entryTrackIndex: 20, homeEntranceTrackIndex: 19, corridorLength: 6 },
+        },
+        safeTrackIndices: new Set([0, 20]),
+      }
+    }
+
+    it('single 5 eliminates whichever of the two arrived later', () => {
+      const board = buildBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+      const green = createPlayerState('Green', board)
+      blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+      blue.parkiller.trackPosition = 0
+      blue.parkiller.arrivedAt = 1
+      green.parkiller.corridorPosition = green.parkiller.corridorLength
+      green.parkiller.trackPosition = 0
+      green.parkiller.arrivedAt = 2 // arrived later - this is the one that should go
+
+      const dice = new ScriptedDice([5, 2, 1])
+      const manager = new TurnManager(board, [red, blue, green], defaultRuleSettings(), dice)
+
+      manager.requestRoll()
+      const result = manager.submitMove(red.pieces[0])
+
+      expect(result?.capturedParkillerColor).toBe('Green')
+      expect(green.parkiller.state).toBe('Eliminated')
+      expect(blue.parkiller.state).toBe('InPlay') // arrived first - protected by the tie-break
+      expect(red.pieces[0].state).toBe('OnTrack')
+      expect(red.pieces[0].trackPosition).toBe(0)
+    })
+
+    it('double 5, two shelter pawns: the first exit eliminates the later arrival, the second eliminates the other', () => {
+      const board = buildBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+      const green = createPlayerState('Green', board)
+      blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+      blue.parkiller.trackPosition = 0
+      blue.parkiller.arrivedAt = 1
+      green.parkiller.corridorPosition = green.parkiller.corridorLength
+      green.parkiller.trackPosition = 0
+      green.parkiller.arrivedAt = 2
+
+      const dice = new ScriptedDice([5, 5, 1])
+      const manager = new TurnManager(board, [red, blue, green], defaultRuleSettings(), dice)
+      let latestMoves: MoveOption[] = []
+      manager.moveChoicesReady.on((m) => (latestMoves = m))
+
+      manager.requestRoll()
+      const r1 = manager.submitMove(red.pieces[0])
+
+      expect(r1?.capturedParkillerColor).toBe('Green')
+      expect(green.parkiller.state).toBe('Eliminated')
+      expect(blue.parkiller.state).toBe('InPlay') // not yet - only the first exit has happened
+
+      const secondExit = latestMoves.find((m) => m.kind === 'ExitYard')
+      expect(secondExit).toBeTruthy()
+      const r2 = manager.submitMove(secondExit!.piece)
+
+      expect(r2?.capturedParkillerColor).toBe('Blue')
+      expect(blue.parkiller.state).toBe('Eliminated')
+      expect(red.pieces[0].state).toBe('OnTrack')
+      expect(secondExit!.piece.state).toBe('OnTrack')
+      expect(secondExit!.piece.trackPosition).toBe(0)
+    })
   })
 
   // Reported directly ("도착하기전에 이미 먹히울걸 타산해서 가기도전에 갑자기 먼저 사라지는" - the

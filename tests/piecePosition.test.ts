@@ -143,21 +143,21 @@ describe('getParkillerWaypoint', () => {
   it('resolves the track waypoint at its current position while InPlay, once fully past the corridor', () => {
     const definition = buildTestDefinition()
     expect(
-      getParkillerWaypoint({ color: 'Red', state: 'InPlay', trackPosition: 5, corridorPosition: 4, corridorLength: 4 }, definition),
+      getParkillerWaypoint({ color: 'Red', state: 'InPlay', trackPosition: 5, corridorPosition: 4, corridorLength: 4, arrivedAt: 0 }, definition),
     ).toEqual([5, 5])
   })
 
   it("resolves to its lane's corridor waypoint while still crossing the corridor (PK1), ignoring trackPosition", () => {
     const definition = buildTestDefinition()
     expect(
-      getParkillerWaypoint({ color: 'Red', state: 'InPlay', trackPosition: 15, corridorPosition: 0, corridorLength: 4 }, definition),
+      getParkillerWaypoint({ color: 'Red', state: 'InPlay', trackPosition: 15, corridorPosition: 0, corridorLength: 4, arrivedAt: 0 }, definition),
     ).toEqual([100, 3])
   })
 
   it('is null once Eliminated, regardless of its last position', () => {
     const definition = buildTestDefinition()
     expect(
-      getParkillerWaypoint({ color: 'Red', state: 'Eliminated', trackPosition: 5, corridorPosition: 4, corridorLength: 4 }, definition),
+      getParkillerWaypoint({ color: 'Red', state: 'Eliminated', trackPosition: 5, corridorPosition: 4, corridorLength: 4, arrivedAt: 0 }, definition),
     ).toBeNull()
   })
 })

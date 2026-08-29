@@ -33,6 +33,13 @@ export interface Parkiller {
    * whether corridorPosition has fully crossed yet, and this is simpler than threading a lane
    * lookup through every call site that touches corridorPosition. */
   corridorLength: number
+  /** Same idea as Piece.arrivedAt (own doc comment) - stamped from TurnManager's own shared
+   * arrival-sequence counter whenever this Parkiller lands on the shared track. Client's own
+   * "Special Situations" guide names "the last Parki to arrive" as the tie-break when two foreign
+   * Parkis already paired on a player's entry square are exposed by an exit landing there, exactly
+   * the same tie-break resolveBarrierElimination already uses for two pawns. 0 for a Parkiller
+   * that has never landed on the track yet (still crossing its own corridor). */
+  arrivedAt: number
 }
 
 export function createParkiller(color: PieceColor, homeEntranceTrackIndex: number, corridorLength: number): Parkiller {
@@ -42,5 +49,6 @@ export function createParkiller(color: PieceColor, homeEntranceTrackIndex: numbe
     trackPosition: homeEntranceTrackIndex,
     corridorPosition: 0,
     corridorLength,
+    arrivedAt: 0,
   }
 }

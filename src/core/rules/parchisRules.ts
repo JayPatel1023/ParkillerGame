@@ -379,10 +379,11 @@ export function applyMove(
       // *pre-existing* pair to resolve (ownAtDestination>1 or two opposing occupants already
       // there) - a single already-present Parkiller with no pawn alongside it is a different, already-
       // correct case (PK5/PK6 below, gated off entirely once this block already resolved one).
-      const opposingParkillerAtDestination =
+      const opposingParkillersAtDestination =
         move.kind === 'ExitYard'
-          ? allPlayers.find((p) => p.color !== piece.color && isParkillerOnTrack(p.parkiller) && p.parkiller.trackPosition === move.resultingTrackPosition)
-          : undefined
+          ? allPlayers.filter((p) => p.color !== piece.color && isParkillerOnTrack(p.parkiller) && p.parkiller.trackPosition === move.resultingTrackPosition)
+          : []
+      const opposingParkillerAtDestination = opposingParkillersAtDestination.length === 1 ? opposingParkillersAtDestination[0] : undefined
       // 1) joining an own pawn (or own Parkiller) already there (>1 own, counting the mover) - a
       //    lone opponent already on the square doesn't get captured by a first exit, only once a
       //    further own piece joins that same mixed square.
@@ -463,6 +464,22 @@ export function applyMove(
           result.capturedPiece = settings.captureSendsToYard ? captureAt(board, piece, move.resultingTrackPosition, allPlayers, true) : null
           if (sameColorPair) protectParkillerFromPK6ThisMove = true
         }
+      }
+      // Client's own "Special Situations" guide, page 7: two Parkis already paired on the entry
+      // square, *neither* belonging to the shelter owner, are exposed exactly like the mixed
+      // pawn+Parkiller pair above - a single 5 (this exit never blocked on them in the first place,
+      // same reasoning as getValidMoves' own foreignBarrier: two *different* colors never form a
+      // protected pairing) eliminates one, "the last Parki to arrive" (the same arrival-order
+      // tie-break resolveBarrierElimination already uses for two pawns, generalized to a Parkiller's
+      // own arrivedAt). A double's second exit, joining whichever one is left (now a lone Parkiller
+      // - opposingParkillerAtDestination, length back down to 1), falls straight into the ordinary
+      // "second exit onto the tracked square" branch above and eliminates that one too - no separate
+      // handling needed here for that half.
+      if (!result.capturedPiece && !capturedOpposingParkillerColor && opposingParkillersAtDestination.length === 2 && opposingAtDestination.length === 0) {
+        const [a, b] = opposingParkillersAtDestination
+        const target = a.parkiller.arrivedAt >= b.parkiller.arrivedAt ? a : b
+        target.parkiller.state = 'Eliminated'
+        capturedOpposingParkillerColor = target.color
       }
       // PK6/PK8: a common piece only eliminates the Parkiller during the roll that just produced
       // doubles (the reference implementation's own doblete_mata_parkiller flag) - landing on it

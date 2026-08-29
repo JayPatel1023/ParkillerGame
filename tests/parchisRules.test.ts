@@ -547,6 +547,7 @@ describe('parchisRules', () => {
       const red = createPlayerState('Red', board)
       const blue = createPlayerState('Blue', board)
       const green = createPlayerState('Green', board)
+      green.parkiller.state = 'Eliminated' // no lane defined for Green on this board - out of the way entirely
       blue.parkiller.corridorPosition = blue.parkiller.corridorLength
       blue.parkiller.trackPosition = 0 // Red's own entry square, already holding Blue's Parkiller...
       green.pieces[0].state = 'OnTrack'
