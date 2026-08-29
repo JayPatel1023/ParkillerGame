@@ -267,6 +267,81 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     expect(grants).toEqual([{ amount: 20, reason: 'capture' }])
   })
 
+  // Relayed directly from the client, describing the full sequence he expects around a
+  // double-triggered Parkiller kill: eliminate with a single die -> spend the 20-square reward ->
+  // spend whatever's left of the double's own dice -> roll again (it was a double). Each link was
+  // already implemented separately (this test's own siblings cover the elimination+reward and the
+  // "a reward capture chains a fresh reward" case in tests/turnManager.test.ts) except one specific
+  // combination that had no coverage anywhere: a *reward* move (not a die move) landing on a
+  // *different* opposing Parkiller. PK6's own single-die requirement (see applyMove's usesSingleDie)
+  // means a reward move can never eliminate a Parkiller the way the original die move just did -
+  // PK5 applies instead, same as any other pawn move that isn't the doubles-producing single die.
+  it('resolves a full double-triggered Parkiller-kill chain: reward move bounces off a second Parkiller (PK5, not PK6), remaining die still spends, bonus turn follows', () => {
+    const board: BoardData = {
+      playerCount: 3,
+      trackLength: 40,
+      lanes: {
+        Red: { color: 'Red', entryTrackIndex: 0, homeEntranceTrackIndex: 39, corridorLength: 6 },
+        Blue: { color: 'Blue', entryTrackIndex: 20, homeEntranceTrackIndex: 19, corridorLength: 6 },
+      },
+      safeTrackIndices: new Set([0, 20]),
+    }
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    const green = createPlayerState('Green', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 0
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 1 // spends the double's remaining die once the reward chain resolves
+    blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+    blue.parkiller.trackPosition = 3 // reachable from red.pieces[0] (0) with a single die of 3
+    green.parkiller.corridorPosition = green.parkiller.corridorLength
+    green.parkiller.trackPosition = 23 // exactly where the 20-square reward lands (3 + 20), unprotected
+
+    // A double worth 3, not 5 (this board's own exitRoll) - deliberately avoids PC2.1's own die-
+    // locked-to-exit mechanic (already covered by its own dedicated tests), which would otherwise
+    // exclude pieces[1]'s plain, non-capturing move below the moment any yard piece could also use
+    // that same die's value to exit.
+    const dice = new ScriptedDice([3, 3, 1, /* bonus turn */ 2, 4, 9])
+    const manager = new TurnManager(board, [red, blue, green], defaultRuleSettings(), dice)
+
+    const grants: RewardGrant[] = []
+    manager.rewardOffered.on((g) => grants.push(g))
+    let latestMoves: MoveOption[] = []
+    manager.moveChoicesReady.on((m) => (latestMoves = m))
+
+    manager.requestRoll()
+
+    // Spends one of the double's two dice (both worth 3) to walk red.pieces[0] onto blue's
+    // Parkiller - PK6 lets a single die eliminate it since this is the doubles-producing roll.
+    const captureResult = manager.submitMove(red.pieces[0])
+    expect(captureResult?.capturedParkillerColor).toBe('Blue')
+    expect(blue.parkiller.state).toBe('Eliminated')
+    expect(grants).toEqual([{ amount: 20, reason: 'capture' }])
+
+    // Takes the full 20 in one go, landing red.pieces[0] (now at 3) straight on green's Parkiller.
+    manager.submitMove(red.pieces[0], 20)
+
+    // PK6 doesn't apply to a reward move (not a single die) - green's Parkiller survives, and PK5
+    // sends the arriving pawn home instead, with no further reward queued from this bounce.
+    expect(green.parkiller.state).toBe('InPlay')
+    expect(red.pieces[0].state).toBe('InYard')
+    expect(red.pieces[0].trackPosition).toBe(-1)
+    expect(grants).toEqual([{ amount: 20, reason: 'capture' }]) // unchanged - no new grant from the bounce
+
+    // The reward chain is done, but the double's other die (also a 3) is still unspent.
+    expect(latestMoves.length).toBeGreaterThan(0)
+    expect(latestMoves.every((m) => m.diceSource !== 'reward')).toBe(true)
+
+    manager.submitMove(red.pieces[1])
+    expect(red.pieces[1].trackPosition).toBe(4)
+
+    // Both dice spent, and the roll that produced all of this was itself a double - same player
+    // rolls again rather than the turn passing to blue.
+    manager.requestRoll()
+    expect(manager.currentPlayer.color).toBe('Red')
+  })
+
   it('never emits parkillerMoved for a roll once the current player\'s own Parkiller is eliminated (PK6)', () => {
     // Reproduces a real client-reported freeze: once a Parkiller is Eliminated, BoardScene never
     // mounts a mesh for it again (getParkillerWaypoint returns null for it), so nothing would ever
