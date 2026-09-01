@@ -5,9 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
     <title>Parkiller</title>
     <meta name="theme-color" content="#ccb154" />
+    <!-- No favicon.ico exists (this app ships PNG icons for the PWA manifest instead) - without an
+         explicit <link rel="icon">, the browser still probes /favicon.ico on its own and logs a
+         404 in the console for a file that was never meant to exist. Pointing it at the same icon
+         the manifest already uses stops that probe. -->
+    <link rel="icon" href="/icons/icon-192.png" type="image/png" />
     <!-- iOS Safari doesn't fully honor the Web App Manifest - these are the separate tags it
          actually reads for "Add to Home Screen" (standalone launch, status bar style, home
-         screen icon, splash screen background matching the manifest's). -->
+         screen icon, splash screen background matching the manifest's). mobile-web-app-capable is
+         the standards-track replacement Chrome/Android actually reads now (apple-mobile-web-app-
+         capable logs a "deprecated" console warning there) - kept alongside it, not instead of it,
+         since Safari still only honors the apple-prefixed one. -->
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Parkiller" />
