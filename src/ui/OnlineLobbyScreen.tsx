@@ -187,6 +187,38 @@ export default function OnlineLobbyScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
 
+  // Reported directly (a stuck game after the room creator disconnected mid-match, the remaining
+  // client left staring at "esperando el turno de X" forever): isMasterClient()/
+  // onMasterClientChanged (roomTransport.ts's own doc comment: "can change mid-game if the previous
+  // Master Client disconnects") were only ever consulted during the lobby phase before this - once
+  // the game actually started, nothing here reacted to Photon promoting a new Master at all. A
+  // client that started the game as a plain remote (RemoteTurnManager - only ever sends intents to
+  // whoever is Master and replays *their* broadcasts) has no way to carry on once it becomes that
+  // Master itself; its own session was never built to be authoritative. onActorLeft just above
+  // already stops the game the instant any actor leaves, which should already cover the common
+  // case - this is a second, independent safety net specifically for master promotion, in case that
+  // event doesn't land the same way (e.g. a dropped connection Photon only detects via its own
+  // timeout, not a clean leave). wasMasterRef captures this client's own master status once, right
+  // when the game starts - a client that started the game *as* Master (already running
+  // HostTurnManagerBridge) has nothing to do here even if this fires again later.
+  const wasMasterRef = useRef(false)
+  useEffect(() => {
+    const connection = connectionRef.current
+    if (!connection || phase !== 'game') return
+    wasMasterRef.current = connection.isMasterClient()
+    return connection.onMasterClientChanged(() => {
+      if (wasMasterRef.current || !connection.isMasterClient()) return
+      wasMasterRef.current = true
+      botControllerRef.current?.dispose()
+      botControllerRef.current = null
+      session?.turnManager.dispose?.()
+      setSession(null)
+      setStopReason('El anfitrión se desconectó - la partida se detuvo.')
+      setPhase('stopped')
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase])
+
   function startAsRemote(connection: PhotonConnection, colors: PieceColor[], seats: Record<number, PieceColor>) {
     const board = toBoardData(BOARD_DEFINITIONS[colors.length])
     const players = colors.map((color) => createPlayerState(color, board))
