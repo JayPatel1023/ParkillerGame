@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { BoardDefinition } from '../core/board/boardDefinition'
 import type { PlayerState } from '../core/gameFlow/playerState'
 import { getColor } from '../core/colorPalette'
@@ -33,6 +33,54 @@ function shade(hex: string, percent: number): string {
   const g = Math.min(255, Math.max(0, ((num >> 8) & 0xff) + Math.round(255 * percent)))
   const b = Math.min(255, Math.max(0, (num & 0xff) + Math.round(255 * percent)))
   return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`
+}
+
+// Reported directly ("잡아먹거나 어떤때 alert화면이 뜰때 너무 빨리 떳다 없어졌다. 자연스럽게 사람이
+// 볼수잇게 알수있게 해달라" - when a capture happens, or some other alert screen shows up, it pops
+// up and vanishes too fast - make it natural, so people can actually see and register it):
+// visiblePendingReward/visibleForfeitedReward/eliminatedByDoubles previously stayed visible only
+// until *whatever happened next* cleared them - most commonly the very next move's own moveApplied
+// (see useTurnManager.ts's own handler, which nulls pendingReward unconditionally on every move) or
+// the next roll, either of which can follow within a couple of seconds under bot play or a fast
+// human turn, well before there's been real time to actually read it. Same class of bug
+// useTurnManager.ts's own NO_MOVE_HOLD_MS already fixed for a different case (a barrier-locked
+// roll) - reused as the same duration here for consistency.
+//
+// Applied to the already animation-gated visible* values (not the raw pendingReward/
+// forfeitedReward useTurnManager returns), specifically so the hold clock only ever starts once a
+// toast has actually appeared on screen post-animation-settle - moveApplied unconditionally nulls
+// the raw value on every subsequent move regardless of what that move itself does, so a later,
+// unrelated move's own animation settling again can never make a stale grant "reappear" here.
+const ALERT_HOLD_MS = 2000
+
+function useHeldAlert<T>(value: T | null): T | null {
+  const [held, setHeld] = useState<T | null>(value)
+  const shownAtRef = useRef(0)
+  const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (clearTimerRef.current) {
+      clearTimeout(clearTimerRef.current)
+      clearTimerRef.current = null
+    }
+    if (value !== null) {
+      // A fresh (or still-current) alert - show it right away and restart the hold clock, so a
+      // second distinct event arriving mid-hold still gets its own full viewing time rather than
+      // inheriting whatever was left of the first one's countdown.
+      setHeld(value)
+      shownAtRef.current = Date.now()
+      return
+    }
+    const elapsed = Date.now() - shownAtRef.current
+    const remaining = Math.max(0, ALERT_HOLD_MS - elapsed)
+    clearTimerRef.current = setTimeout(() => setHeld(null), remaining)
+    return () => {
+      if (clearTimerRef.current) clearTimeout(clearTimerRef.current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value])
+
+  return held
 }
 
 /** A local game builds this via beginLocalGame (src/core/gameFlow/localGameSession.ts); an online
@@ -84,7 +132,7 @@ export function GameBoardScreen({
     winner,
     moveAnimation,
     parkillerAnimation,
-    eliminatedByDoubles,
+    eliminatedByDoubles: rawEliminatedByDoubles,
     pendingReward,
     forfeitedReward,
     noMoveReason,
@@ -95,6 +143,11 @@ export function GameBoardScreen({
     clearMoveAnimation,
     clearParkillerAnimation,
   } = useTurnManager(session.turnManager)
+  // See ALERT_HOLD_MS's own doc comment above - held so a fast-following move can't clear this
+  // again before there's been real time to read it. Not animation-gated the way the reward toasts
+  // are (this one never was, even before this fix), so no equivalent "stale value resurfacing"
+  // risk here - it only ever changes when useTurnManager's own raw value actually does.
+  const eliminatedByDoubles = useHeldAlert(rawEliminatedByDoubles)
 
   // See GameSession's own botPieceHighlighted doc comment - undefined for hotseat play and for any
   // session with no bot seats at all, in which case this just stays null forever, same as if no
@@ -159,8 +212,10 @@ export function GameBoardScreen({
   // turn it isn't - the Master would reject the resulting move intent, but the clicking player's
   // own board never should have offered it in the first place.
   const visiblePendingMoves = isMyTurn && animationsSettled ? pendingMoves : []
-  const visiblePendingReward = animationsSettled ? pendingReward : null
-  const visibleForfeitedReward = animationsSettled ? forfeitedReward : null
+  // See ALERT_HOLD_MS's own doc comment above - held so a fast-following move can't clear these
+  // again before there's been real time to read them.
+  const visiblePendingReward = useHeldAlert(animationsSettled ? pendingReward : null)
+  const visibleForfeitedReward = useHeldAlert(animationsSettled ? forfeitedReward : null)
 
   // Requested directly ("cuando se elimina a un peón o un peón llega a la meta debe haber alguna
   // celebración con música"): every capture (a regular pawn's own move, or a Parki eliminating an
