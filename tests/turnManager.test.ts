@@ -685,6 +685,35 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     expect(forOtherPiece.length).toBeGreaterThan(1)
   })
 
+  it('does not force a capture only reachable via the sum of both dice, unlike a single-die capture (PC3)', () => {
+    // PC3's own text draws this line explicitly: "if the roll of a die or the sum of both dice
+    // lands on [an opponent], that pawn is eliminated" (sum-captures are allowed, still rewarded)
+    // vs. "if the number rolled on one of the dice matches [an opponent's] square, you can only
+    // move forward if you capture" (mandatory only for a single die) - independently reinforced by
+    // the corrected rules.pdf's "CAPTURE OR JUMP" page ("if you have no other legal move using
+    // that die, you must capture"). Neither die alone reaches blue's square here; only their sum
+    // does, so red.pieces[0] must stay free to use either die individually too, not just the sum.
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 0 // dieA=3 -> 3, dieB=4 -> 4, sum=7 -> captures blue.pieces[0]
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 7
+
+    const dice = new ScriptedDice([3, 4, 1])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let offered: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((moves) => (offered = moves))
+
+    manager.requestRoll()
+
+    const forPiece = offered.filter((m) => m.piece === red.pieces[0])
+    const amounts = forPiece.map((m) => m.amount).sort((a, b) => a - b)
+    expect(amounts).toEqual([3, 4, 7])
+  })
+
   it('lets a capture be avoided by redirecting the capturing die elsewhere and jumping past with the other die (PC3/PK8)', () => {
     // The rulebook's own prose, and the reference implementation's tutorial message
     // ("Si con un peón tienes posibilidad de comer, debes comer obligadamente, excepto que elijas

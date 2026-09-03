@@ -729,6 +729,14 @@ export class TurnManager {
     // that would have captured. Reported directly as broken the previous way: capturing anywhere in
     // the roll forced every other piece into a capturing move too, with no way to redirect a die
     // elsewhere the way the rulebook explicitly allows.
+    //
+    // Scoped to a *single die's own* value, not the sum: PC3's own text draws this exact line -
+    // "if the roll of a die or the sum of both dice lands on [an opponent], that pawn is eliminated"
+    // (capturing via the sum is allowed and still rewarded) vs. "if the number rolled on *one of the
+    // dice* matches [an opponent's] square, you can only move forward if you capture" (only a
+    // single-die-reachable capture is mandatory) - independently reinforced by the corrected PDF's
+    // own "CAPTURE OR JUMP" page ("if you have no other legal move *using that die*, you must
+    // capture"). A capture only reachable via the sum stays a genuine option, never a forced one.
     const optionsByPiece = new Map<Piece, MoveOption[]>()
     for (const move of options) {
       const list = optionsByPiece.get(move.piece)
@@ -736,7 +744,9 @@ export class TurnManager {
       else optionsByPiece.set(move.piece, [move])
     }
     options = [...optionsByPiece.values()].flatMap((pieceOptions) => {
-      const capturing = pieceOptions.filter((m) => wouldCapture(this.board, m, this.players, this.parkillerCapturableThisRoll))
+      const capturing = pieceOptions.filter(
+        (m) => m.diceSource !== 'sum' && wouldCapture(this.board, m, this.players, this.parkillerCapturableThisRoll),
+      )
       return capturing.length > 0 ? capturing : pieceOptions
     })
 
