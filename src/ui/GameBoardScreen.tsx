@@ -132,6 +132,7 @@ export function GameBoardScreen({
     winner,
     moveAnimation,
     parkillerAnimation,
+    diceSettledAt,
     eliminatedByDoubles: rawEliminatedByDoubles,
     pendingReward,
     forfeitedReward,
@@ -331,6 +332,7 @@ export function GameBoardScreen({
         onAnimationComplete={clearMoveAnimation}
         parkillerAnimation={parkillerAnimation}
         onParkillerAnimationComplete={clearParkillerAnimation}
+        diceSettledAt={diceSettledAt}
         pieceChoice={pieceChoice ? { piece: pieceChoice.piece, amounts: pieceChoice.options.map((o) => o.amount) } : null}
         onChoosePieceAmount={confirmPieceChoice}
         botHighlightedPiece={botHighlightedPiece}

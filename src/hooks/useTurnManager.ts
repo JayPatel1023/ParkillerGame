@@ -97,6 +97,22 @@ export function useTurnManager(turnManager: TurnManagerLike) {
   const [winner, setWinner] = useState<PlayerState | null>(null)
   const [moveAnimation, setMoveAnimation] = useState<MoveAnimationRequest | null>(null)
   const [parkillerAnimation, setParkillerAnimation] = useState<ParkillerMoveResult | null>(null)
+  // Requested directly ("주사위가 돌아가는시간과... 말들이 움직이는시간이 일치하지않을때있다" - the
+  // dice-spin timing and the piece-movement timing don't match sometimes): moveAnimation/
+  // parkillerAnimation are set the instant their own events fire (moveAnimationReady/parkillerMoved,
+  // both synchronous - TurnManager itself never waits on animation), which is well before this
+  // hook's own DICE_SPIN_MS reveal delay below has necessarily finished. A human's own click is
+  // naturally safe (it can only happen once the player has already seen the dice, well after the
+  // spin), but an automatic move - a bot's, or a remote client replaying someone else's broadcast
+  // turn - has no such guarantee, and the diceRolled/moveAnimationReady broadcasts can arrive back
+  // to back over any real network latency. The scene layer can't just add a blind fixed wait before
+  // starting a hop (PieceMesh/ParkillerMesh have no way to tell "the dice already settled a while
+  // ago" from "the dice just barely started spinning" without this) and it can't be fixed by
+  // delaying moveAnimation/parkillerAnimation being *set* either - see parkillerMoved's own comment
+  // below for the "flashes to the final position, then snaps back" bug that caused directly. This
+  // exposes the actual deadline instead: the scene layer only ever needs to hold at its own
+  // hopFrom until Date.now() reaches this, and can start immediately whenever that's already true.
+  const [diceSettledAt, setDiceSettledAt] = useState(0)
   const [eliminatedByDoubles, setEliminatedByDoubles] = useState<Piece | null>(null)
   const [pendingReward, setPendingReward] = useState<RewardGrant | null>(null)
   const [forfeitedReward, setForfeitedReward] = useState<RewardGrant | null>(null)
@@ -166,6 +182,10 @@ export function useTurnManager(turnManager: TurnManagerLike) {
         // already happened synchronously by the time this event fires, same as every other event
         // here - only the reveal is delayed, spinning first so the values don't just snap in.
         setRolling(true)
+        // See diceSettledAt's own doc comment above - computed immediately (not read back inside
+        // the setTimeout below) so it's available to the scene layer the instant moveAnimation/
+        // parkillerAnimation themselves are set, which can happen before this timeout ever fires.
+        setDiceSettledAt(Date.now() + DICE_SPIN_MS)
         setTimeout(() => {
           setLastRoll(roll)
           setRolling(false)
@@ -268,6 +288,7 @@ export function useTurnManager(turnManager: TurnManagerLike) {
     winner,
     moveAnimation,
     parkillerAnimation,
+    diceSettledAt,
     eliminatedByDoubles,
     pendingReward,
     forfeitedReward,

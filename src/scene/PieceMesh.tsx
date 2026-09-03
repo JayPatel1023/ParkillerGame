@@ -243,6 +243,12 @@ interface PieceMeshProps {
    * scale the selectable/idle animation already drives, not a separate transform, so a crowded
    * piece still pops on selection the same way an uncrowded one does, just smaller throughout. */
   crowdedScale?: number
+  /** See useTurnManager.ts's own doc comment - Date.now()-comparable deadline this piece's own hop
+   * holds at hopFrom until, so an automatic move (a bot's, or a remote client replaying someone
+   * else's broadcast turn) never starts hopping before this client's own dice-spin reveal has
+   * actually finished. A human's own click always arrives well after this has already passed, so
+   * it adds no wait for that, normal, case. */
+  diceSettledAt: number
 }
 
 // Movable cue, keyed off `selectable` (not `isCurrentTurn` - see the prop doc above): a
@@ -348,6 +354,7 @@ export function PieceMesh({
   isCurrentTurn,
   highlighted = false,
   crowdedScale = 1,
+  diceSettledAt,
 }: PieceMeshProps) {
   const meshRef = useRef<Group>(null)
   const hopIndexRef = useRef(0)
@@ -510,6 +517,19 @@ export function PieceMesh({
         notifiedRef.current = true
         onHopsComplete?.()
       }
+      return
+    }
+
+    // See diceSettledAt's own doc comment - holds at hopFrom, not yet consuming any hop-elapsed
+    // time, until this deadline, so an automatic move never starts hopping before this client's own
+    // dice-spin reveal has actually finished (same underlying fix as ParkillerMesh's own matching
+    // gate, but computed dynamically here rather than a blind fixed wait - a human's own click
+    // already always arrives after this deadline has passed, so this never delays that case at all).
+    // Explicitly positioned at hopFrom (not left wherever it was) since restPosition above already
+    // reflects the piece's live, post-move state by the time this fires - see MoveAnimationRequest's
+    // own doc comment on why the *piece* still has to visually wait here despite that.
+    if (Date.now() < diceSettledAt) {
+      mesh.position.set(hopFrom[0], hopFrom[1], hopFrom[2])
       return
     }
 

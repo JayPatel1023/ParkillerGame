@@ -479,6 +479,12 @@ interface BoardSceneProps {
   onAnimationComplete: () => void
   parkillerAnimation: ParkillerMoveResult | null
   onParkillerAnimationComplete: () => void
+  /** See useTurnManager.ts's own doc comment - the Date.now()-comparable deadline PieceMesh/
+   * ParkillerMesh hold their own hop at hopFrom until, so an automatic move (a bot's, or a remote
+   * client replaying someone else's broadcast turn) never starts hopping before this client's own
+   * dice-spin reveal has actually finished. A human's own click already only ever happens well
+   * after this deadline has passed, so it adds no wait for that, normal, case. */
+  diceSettledAt: number
   /** Set only when the just-clicked piece has more than one legal amount to move by (reachable by
    * both dice, or a die and the sum) - see PieceChoiceMarkers' own comment for why this floats
    * small clickable markers above the piece itself instead of a flat 2D dialog. */
@@ -505,6 +511,7 @@ export function BoardScene({
   onAnimationComplete,
   parkillerAnimation,
   onParkillerAnimationComplete,
+  diceSettledAt,
   pieceChoice,
   onChoosePieceAmount,
   botHighlightedPiece,
@@ -868,6 +875,7 @@ export function BoardScene({
             isCurrentTurn={piece.color === currentPlayerColor}
             highlighted={piece === botHighlightedPiece}
             crowdedScale={crowded ? CROWDED_SCALE : 1}
+            diceSettledAt={diceSettledAt}
           />
         )
       })}
@@ -941,6 +949,7 @@ export function BoardScene({
             onHopsComplete={isAnimating ? onParkillerAnimationComplete : undefined}
             introDelay={(allPieces.length + index) * INTRO_STAGGER}
             crowdedScale={parkillerCrowded ? CROWDED_SCALE : 1}
+            diceSettledAt={diceSettledAt}
           />
         )
       })}

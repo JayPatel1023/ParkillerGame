@@ -19,22 +19,6 @@ import {
   easeOutCubic,
 } from './PieceMesh'
 
-// Reported directly, twice, in opposite directions: the Parkiller's own hop used to start the
-// instant parkillerMoved fired, well before the dice-spin animation (useTurnManager's own
-// DICE_SPIN_MS) had finished revealing the roll it came from - the piece was visibly moving before
-// its own result even appeared. Delaying *when* useTurnManager sets parkillerAnimation instead (an
-// earlier attempt) fixed that but caused a worse bug: player.parkiller is a live, mutable object
-// TurnManager already updated to its POST-move values the instant the roll resolved, completely
-// independent of when parkillerAnimation state updates - so restPosition (computed from that same
-// live object whenever this Parkiller isn't yet "animating") flashed to the final position
-// immediately, then visibly snapped back to the start once the hop animation finally arrived. This
-// is the correct layer for the delay instead: parkillerAnimation is set immediately (so
-// restPosition never gets read at all - hopFrom takes over from the very first render), but actual
-// hop-time progression here holds off for this long first, sitting exactly at hopFrom meanwhile.
-// Duplicated from useTurnManager.ts's own DICE_SPIN_MS (peer layers per CLAUDE.md - online/ already
-// duplicates the same constant for the same reason) and converted to seconds to match HOP_DURATION.
-const HOP_START_DELAY = 450 / 1000
-
 interface ParkillerMeshProps {
   color: PieceColor
   restPosition: [number, number, number]
@@ -51,6 +35,12 @@ interface ParkillerMeshProps {
    * occupant, 1 otherwise - see that constant's own comment (in BoardScene.tsx, next to
    * PieceMesh's matching prop) for why. */
   crowdedScale?: number
+  /** See useTurnManager.ts's own doc comment and PieceMesh's matching prop - Date.now()-comparable
+   * deadline this Parkiller's own hop holds at hopFrom until, so it never starts moving before this
+   * client's own dice-spin reveal has actually finished. The Parkiller's own move is always
+   * automatic (never a human click - PK2/PK6a), so this reliably matters on every single roll,
+   * unlike a regular piece's move, which a human's own click almost always arrives well after. */
+  diceSettledAt: number
 }
 
 // null when `from`/`to` are (near-)identical - happens when a Parkiller is captured/eliminated
@@ -342,11 +332,11 @@ export function ParkillerMesh({
   onHopsComplete,
   introDelay,
   crowdedScale = 1,
+  diceSettledAt,
 }: ParkillerMeshProps) {
   const meshRef = useRef<Group>(null)
   const hopIndexRef = useRef(0)
   const elapsedRef = useRef(0)
-  const startWaitRef = useRef(0)
   const notifiedRef = useRef(true)
   const introRef = useRef({ done: false, elapsed: 0 })
 
@@ -362,7 +352,6 @@ export function ParkillerMesh({
   useEffect(() => {
     hopIndexRef.current = 0
     elapsedRef.current = 0
-    startWaitRef.current = 0
     notifiedRef.current = hopFrom === null
   }, [hops, hopFrom])
 
@@ -421,13 +410,10 @@ export function ParkillerMesh({
       return
     }
 
-    // Holds at hopFrom - not yet consuming any hop-elapsed time - for HOP_START_DELAY after a new
-    // hop sequence arrives, so the actual walk starts in sync with the dice reveal instead of
-    // before it (see that constant's own comment for the two-sided bug this replaced). Same
-    // clamped-delta fix as the intro timer above - a slow/dropped frame here used to delay
-    // onHopsComplete far more than HOP_START_DELAY's own nominal 450ms actually calls for.
-    if (startWaitRef.current < HOP_START_DELAY) {
-      startWaitRef.current += rawDelta
+    // Holds at hopFrom - not yet consuming any hop-elapsed time - until diceSettledAt, so the
+    // actual walk starts in sync with the dice reveal instead of before it (see that prop's own
+    // doc comment for the two-sided bug this replaced).
+    if (Date.now() < diceSettledAt) {
       const waitYaw = yawTowards(hopFrom, hops[0])
       if (waitYaw !== null) mesh.rotation.y = waitYaw
       mesh.position.set(hopFrom[0], BASE_HEIGHT, hopFrom[2])
