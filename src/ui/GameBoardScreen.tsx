@@ -53,7 +53,7 @@ function shade(hex: string, percent: number): string {
 // unrelated move's own animation settling again can never make a stale grant "reappear" here.
 const ALERT_HOLD_MS = 2000
 
-function useHeldAlert<T>(value: T | null): T | null {
+function useHeldAlert<T>(value: T | null, holdMs: number = ALERT_HOLD_MS): T | null {
   const [held, setHeld] = useState<T | null>(value)
   const shownAtRef = useRef(0)
   const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -72,16 +72,28 @@ function useHeldAlert<T>(value: T | null): T | null {
       return
     }
     const elapsed = Date.now() - shownAtRef.current
-    const remaining = Math.max(0, ALERT_HOLD_MS - elapsed)
+    const remaining = Math.max(0, holdMs - elapsed)
     clearTimerRef.current = setTimeout(() => setHeld(null), remaining)
     return () => {
       if (clearTimerRef.current) clearTimeout(clearTimerRef.current)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value])
+  }, [value, holdMs])
 
   return held
 }
+
+// Reported directly, with a screenshot of the resting dice ("주사위가 항상 말들이 움직인다음에는
+// 이상태로 되돌아갔다가 다시 돌아가게 되여있다... 속도가 너무 빨리 되돌아가니까 내가 도대체 말의
+// 수가 얼마였는지 모르겠다" - after the pieces move the dice always reset and spin again, but it
+// resets so fast I can't tell what the roll even was): useTurnManager's own `lastRoll` nulls out
+// the *instant* turnStarted fires - which happens the moment this roll's dice are fully spent, well
+// before there's been any real chance to read the numbers, even for a same-player bonus turn (see
+// useTurnManager.ts's own turnStarted handler - it fires, and clears lastRoll, on every turn
+// transition, not just a handoff to a different player). A bit more generous than ALERT_HOLD_MS -
+// two or three numbers to read and cross-reference against which pieces just moved takes longer to
+// register than a single toast message.
+const DICE_DISPLAY_HOLD_MS = 2800
 
 /** A local game builds this via beginLocalGame (src/core/gameFlow/localGameSession.ts); an online
  * game builds it from a HostTurnManagerBridge/RemoteTurnManager (src/online/) plus the players
@@ -199,12 +211,16 @@ export function GameBoardScreen({
     return () => clearTimeout(timer)
   }, [canRoll, currentPlayer.color])
 
+  // See DICE_DISPLAY_HOLD_MS's own doc comment above - holds the last roll's numbers on screen for
+  // a minimum viewing window instead of blanking the instant the turn moves on. Shows a fresh roll
+  // immediately once its own spin/reveal actually completes, same as the reward/elimination toasts.
+  const visibleRoll = useHeldAlert(lastRoll, DICE_DISPLAY_HOLD_MS)
   const diceValues: [number | null, number | null, number | null] = [
-    lastRoll?.dieA ?? null,
-    lastRoll?.dieB ?? null,
-    lastRoll?.blackDie ?? null,
+    visibleRoll?.dieA ?? null,
+    visibleRoll?.dieB ?? null,
+    visibleRoll?.blackDie ?? null,
   ]
-  const isDouble = lastRoll !== null && lastRoll.dieA === lastRoll.dieB
+  const isDouble = visibleRoll !== null && visibleRoll.dieA === visibleRoll.dieB
 
   // Only the current turn's own piece choices are ever meant to be actionable - every online
   // client replays the same broadcast dice roll locally (see MoveAnimationInfo's own comment), so
@@ -311,8 +327,8 @@ export function GameBoardScreen({
             ? 'Elegí una ficha para tu recompensa'
             : visiblePendingMoves.length > 0
               ? 'Elegí una ficha para mover'
-              : lastRoll && !rolling
-                ? `Dados: ${lastRoll.dieA} y ${lastRoll.dieB}${isDouble ? ' (dobles)' : ''} · Parkiller: ${lastRoll.blackDie}`
+              : visibleRoll && !rolling
+                ? `Dados: ${visibleRoll.dieA} y ${visibleRoll.dieB}${isDouble ? ' (dobles)' : ''} · Parkiller: ${visibleRoll.blackDie}`
                 : 'Tirá los dados para empezar tu turno'
 
   return (
