@@ -220,6 +220,26 @@ export class TurnManager {
   // zone") - `kind` distinguishes the two since track positions and corridor positions are
   // separate numeric spaces that can otherwise collide on the same number.
   private lastOfferedBarrierPosition: BarrierLocation | null = null
+  // Reported directly by the client, with a chat transcript: PK9.1's "a double obligates breaking
+  // an existing barrier" was firing for a barrier the roll's *own* first die had just formed a
+  // moment earlier - "cuando la barrera se crea con una tirada no hay obligación de abrirla con el
+  // valor del otro dado... tiene que haber la opción de mover otro peón" (when the barrier is
+  // created by this same roll, there's no obligation to open it with the other die - there has to
+  // be the option to move a different piece). The rulebook's own wording ("if a barrier was present
+  // at the start of the move") only ever meant a barrier that already existed *before* this roll -
+  // "si ya hay una barrera formada y te sale un doble sí estás obligado" (if a barrier is *already*
+  // formed and you roll a double, yes you're obligated). offerMoves()'s own barrierLocation below
+  // only treats a *currently* detected barrier as this obligation if it matches this snapshot, so a
+  // barrier the roll's own white-dice choices just created is a free choice, never a forced one.
+  //
+  // Captured lazily - the *first* time offerMoves() runs each roll, not eagerly at requestRoll()'s
+  // own top - specifically so it still includes the automatic Parkiller move and any Parkiller-kill
+  // reward chain, both of which resolve before offerMoves() is ever reached but are not the
+  // player's own white-dice choice: the existing "pawn+own-Parkiller barrier" test below relies on
+  // exactly this (the black die walks the Parkiller onto a pawn's square *this same roll*, and that
+  // pairing must still obligate the white dice, unlike a barrier the white dice create themselves).
+  private preRollBarrierLocation: BarrierLocation | null = null
+  private preRollBarrierCaptured = false
   // PK9.1's own "IMPORTANT!" qualifier: breaking a barrier with one half of a double forbids using
   // the double's *other* half to put the barrier's other original pawn right back onto the same
   // square, recreating it - confirmed directly in the client's own rulebook ("you cannot recreate
@@ -266,6 +286,12 @@ export class TurnManager {
   }
 
   requestRoll() {
+    // See preRollBarrierLocation's own doc comment - captured lazily, the first time offerMoves()
+    // runs this roll (see there), not here: the automatic Parkiller move and any Parkiller-kill
+    // reward chain both still count as "before this roll's own white-dice choices," per the
+    // existing pawn+own-Parkiller barrier test below.
+    this.preRollBarrierCaptured = false
+
     const dieA = this.dice.roll()
     const dieB = this.dice.roll()
     const blackDie = this.dice.roll()
@@ -646,7 +672,7 @@ export class TurnManager {
     // precedent, rather than adding a rule the client's own text never actually addresses.
     const ownBarrierTrack = ownBarrierTrackPosition(this.currentPlayer)
     const ownBarrierCorridor = ownBarrierTrack === null ? ownCorridorBarrierPosition(this.currentPlayer) : null
-    const barrierLocation: BarrierLocation | null =
+    const liveBarrierLocation: BarrierLocation | null =
       state.dieA !== state.dieB
         ? null
         : ownBarrierTrack !== null
@@ -654,6 +680,22 @@ export class TurnManager {
           : ownBarrierCorridor !== null
             ? { kind: 'corridor', position: ownBarrierCorridor }
             : null
+    // See preRollBarrierLocation's own doc comment - captured from this exact same live check, but
+    // only on the *first* offerMoves() call this roll (before any white-dice move has touched
+    // anything), then reused unchanged on every later call this same roll.
+    if (!this.preRollBarrierCaptured) {
+      this.preRollBarrierLocation = liveBarrierLocation
+      this.preRollBarrierCaptured = true
+    }
+    // Only a barrier that already existed before this roll's own white-dice choices is an
+    // obligation; one this roll's own earlier die just formed is not.
+    const barrierLocation: BarrierLocation | null =
+      liveBarrierLocation !== null &&
+      this.preRollBarrierLocation !== null &&
+      liveBarrierLocation.kind === this.preRollBarrierLocation.kind &&
+      liveBarrierLocation.position === this.preRollBarrierLocation.position
+        ? liveBarrierLocation
+        : null
     this.lastOfferedBarrierPosition = barrierLocation
     const pieceIsAtBarrier = (piece: Piece): boolean =>
       barrierLocation !== null &&

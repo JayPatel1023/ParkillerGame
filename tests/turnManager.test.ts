@@ -831,6 +831,38 @@ describe('TurnManager - mandatory barrier removal on doubles (PK9.1)', () => {
     expect(offered.some((m) => m.piece === red.pieces[2] && m.resultingTrackPosition === 3)).toBe(true)
   })
 
+  // Reported directly by the client, with a chat transcript: "cuando la barrera se crea con una
+  // tirada no hay obligación de abrirla con el valor del otro dado... tiene que haber la opción de
+  // mover otro peón" (when the barrier is created by this same roll, there's no obligation to open
+  // it with the other die - there has to be the option to move a different piece) - contrasted
+  // directly against "si ya hay una barrera formada y te sale un doble sí estás obligado" (if a
+  // barrier is *already* formed and you roll a double, yes you're obligated), which the tests above
+  // already cover.
+  it('does not obligate opening a barrier this same roll just created', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5 // alone at 5 before this roll - no barrier yet
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 0 // unrelated piece - must stay completely free
+    red.pieces[2].state = 'OnTrack'
+    red.pieces[2].trackPosition = 2 // 2 -> 5 with the first die, forming a brand-new barrier with pieces[0]
+
+    const dice = new ScriptedDice([3, 3, 1])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let offered: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((moves) => (offered = moves))
+
+    manager.requestRoll()
+    manager.submitMove(red.pieces[2]) // 2 -> 5, forms a fresh own-barrier with pieces[0] at 5
+
+    // The barrier at 5 was just created by this same roll's own first die - not an obligation.
+    // pieces[1] stays completely free to use the second die on something else entirely.
+    expect(offered.some((m) => m.piece === red.pieces[1] && m.resultingTrackPosition === 3)).toBe(true)
+  })
+
   it('waives the obligation when the barrier truly cannot be broken this roll ("unless movement is impossible")', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)
