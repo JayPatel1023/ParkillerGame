@@ -419,7 +419,7 @@ export default function OnlineLobbyScreen() {
                       <span style={{ ...seatDotStyle, background: getColor(color) }} />
                       <span style={{ fontWeight: 700, flex: 1 }}>{color}</span>
                       <span style={{ color: occupant ? '#bfe8bf' : '#a89a80', fontSize: 13 }}>
-                        {occupant ? (occupant.isLocal ? '(vos)' : 'jugador conectado') : 'esperando jugador...'}
+                        {occupant ? (occupant.isLocal ? '(usted)' : 'jugador conectado') : 'esperando jugador...'}
                       </span>
                     </div>
                   )

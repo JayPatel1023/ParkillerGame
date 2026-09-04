@@ -111,7 +111,7 @@ export function ColorSelector({
             padding: '0 12px',
           }}
         >
-          ¿Con qué color jugás?
+          ¿Con qué color juega?
         </h2>
         <div style={{ display: 'flex', gap: 'clamp(8px, 3vw, 18px)', padding: '0 12px', flexWrap: 'wrap', justifyContent: 'center' }}>
           {colors.map((color) => (

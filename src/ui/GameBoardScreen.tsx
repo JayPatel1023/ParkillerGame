@@ -322,14 +322,14 @@ export function GameBoardScreen({
           ? 'Barrera bloqueada: hace falta un dobles para abrirla'
           : 'Ningún movimiento posible con esta tirada'
         : pieceChoice
-          ? 'Elegí con qué dado moverla'
+          ? 'Elija con qué dado moverla'
           : visiblePendingReward
-            ? 'Elegí una ficha para tu recompensa'
+            ? 'Elija una ficha para su recompensa'
             : visiblePendingMoves.length > 0
-              ? 'Elegí una ficha para mover'
+              ? 'Elija una ficha para mover'
               : visibleRoll && !rolling
                 ? `Dados: ${visibleRoll.dieA} y ${visibleRoll.dieB}${isDouble ? ' (dobles)' : ''} · Parkiller: ${visibleRoll.blackDie}`
-                : 'Tirá los dados para empezar tu turno'
+                : 'Tire los dados para empezar su turno'
 
   return (
     <div className="game-screen-in" style={screenWrapperStyle}>
@@ -401,7 +401,7 @@ export function GameBoardScreen({
 
       {confirmingExit && (
         <div style={overlayStyle}>
-          <div style={{ fontSize: 18, fontWeight: 600, color: '#f2ede0' }}>¿Seguro que querés salir?</div>
+          <div style={{ fontSize: 18, fontWeight: 600, color: '#f2ede0' }}>¿Seguro que quiere salir?</div>
           <div style={{ ...hintTextStyle, marginBottom: 4 }}>Se perderá la partida en curso.</div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button className="chunky-btn" onClick={() => setConfirmingExit(false)} style={secondaryButtonStyle}>
@@ -497,7 +497,7 @@ function PlayerPill({ player, isCurrentTurn, isLocal }: { player: PlayerState; i
       <span style={{ fontSize: 'clamp(10px, 2.4vw, 12px)', color: '#d8d2c2' }}>
         ♟ {home}/{player.pieces.length}
       </span>
-      {isLocal && <span style={{ fontWeight: 800, fontSize: 'clamp(9px, 2.2vw, 11px)', color: '#f2d98c' }}>(vos)</span>}
+      {isLocal && <span style={{ fontWeight: 800, fontSize: 'clamp(9px, 2.2vw, 11px)', color: '#f2d98c' }}>(usted)</span>}
     </div>
   )
 }
