@@ -69,8 +69,25 @@ export class PhotonConnection implements RoomTransport {
    * maxPlayers off that argument specifically), not the second (joinRoomOptions, which only holds
    * createIfNotExists/rejoin/expectedUsers). Passing it as part of the second argument, as an
    * earlier version of this did, silently drops it - every room ends up with no player cap at all. */
+  // Reported directly, with a live two-player test: the room creator's own screen showed "X salió
+  // de la sala" and stopped the game, while X's own screen never showed any interruption at all -
+  // ruled out the earlier local-cleanup false positive (onActorLeft's own cleanup=false/true
+  // distinction was already confirmed live in production at the time this happened). Root cause:
+  // playerTTL was never set, and Photon's own server-side default for an unset room is 0 - meaning
+  // *zero* tolerance for any disconnect, even a few seconds a mobile network recovers from on its
+  // own before the affected player's own client ever notices anything wrong. With playerTTL unset,
+  // the server immediately, permanently evicts a actor on the very first missed ping and reports a
+  // genuine (not locally-caused) onActorLeave - which is correct behavior for *that* event, just
+  // firing far too eagerly. A real grace period (see the SDK source: a disconnect within playerTTL
+  // fires onActorSuspend instead of onActorLeave, and this app has no onActorSuspend handler at all,
+  // so nothing happens - the game just keeps going) absorbs exactly this kind of brief, self-healing
+  // network blip. 60s chosen as generous enough for a real mobile handoff/wifi drop, short enough
+  // that a genuinely departed player doesn't leave the other one waiting too long before the
+  // already-working onActorLeft path correctly ends the game.
+  private static readonly PLAYER_TTL_MS = 60_000
+
   createRoom(code: string, maxPlayers: number): Promise<void> {
-    return this.joinOrCreate(code, { createIfNotExists: true }, { maxPlayers })
+    return this.joinOrCreate(code, { createIfNotExists: true }, { maxPlayers, playerTTL: PhotonConnection.PLAYER_TTL_MS })
   }
 
   joinRoom(code: string): Promise<void> {

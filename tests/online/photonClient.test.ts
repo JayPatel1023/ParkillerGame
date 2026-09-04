@@ -11,6 +11,31 @@ import { PhotonConnection } from '../../src/online/photonClient'
 // Drives PhotonConnection's own client.onActorLeave field directly, exactly the shape the real SDK
 // itself invokes it with (see src/online/photon-realtime.d.ts's own onActorLeave signature) -
 // PhotonConnection's constructor never opens a real network connection on its own.
+// Reported directly, with a live two-player test: the room creator's screen showed "X salió de la
+// sala" and stopped the game while X's own screen never showed any interruption - traced to
+// playerTTL never being set (Photon's server-side default is 0, no reconnection grace period at
+// all). Confirms createRoom() actually passes a nonzero playerTTL through to the SDK's joinRoom
+// call - drives PhotonConnection's own private `client` field directly rather than opening a real
+// connection, same approach as the onActorLeft tests below.
+describe('PhotonConnection.createRoom', () => {
+  it('sets a nonzero playerTTL so a brief disconnect gets a reconnection grace period', () => {
+    const connection = new PhotonConnection('fake-app-id')
+    let capturedCreateOptions: { playerTTL?: number; maxPlayers?: number } | undefined
+    ;(connection as unknown as { client: { joinRoom: (code: string, joinOptions: unknown, createOptions: { playerTTL?: number; maxPlayers?: number }) => void } }).client.joinRoom = (
+      _code,
+      _joinOptions,
+      createOptions,
+    ) => {
+      capturedCreateOptions = createOptions
+    }
+
+    connection.createRoom('ABCDE', 4)
+
+    expect(capturedCreateOptions?.playerTTL).toBeGreaterThan(0)
+    expect(capturedCreateOptions?.maxPlayers).toBe(4)
+  })
+})
+
 describe('PhotonConnection.onActorLeft', () => {
   const fakeActor = { actorNr: 7, isLocal: false, name: '', customProperties: {} }
 

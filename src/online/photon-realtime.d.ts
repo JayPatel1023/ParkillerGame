@@ -18,6 +18,12 @@ declare module 'photon-realtime' {
     interface RoomOptions {
       createIfNotExists?: boolean
       maxPlayers?: number
+      /** Milliseconds a disconnected actor's seat is held open for reconnection before the SDK
+       * fires a real onActorLeave for them - confirmed in the SDK source
+       * (fillCreateRoomOptions: `void 0!==b.playerTTL&&a.push(...ParameterCode.PlayerTTL...)`).
+       * Left unset, Photon defaults to 0 (no grace period at all) - see photonClient.ts's own
+       * createRoom() comment for why that default is a real bug, not just an edge case. */
+      playerTTL?: number
     }
 
     interface Actor {
