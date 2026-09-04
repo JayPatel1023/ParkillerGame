@@ -153,13 +153,18 @@ export default function OnlineLobbyScreen() {
     if (!connection || phase !== 'lobby' || connection.isMasterClient()) return
     const props = connection.getRoomProperties()
     if (props.started) {
-      startAsRemote(connection, props.startedColors as PieceColor[], props.startedSeats as Record<number, PieceColor>)
+      startAsRemote(
+        connection,
+        props.startedColors as PieceColor[],
+        props.startedSeats as Record<number, PieceColor>,
+        (props.startedStartingPlayerRolls as number[]) ?? [],
+      )
       return
     }
     return connection.onMessage((data) => {
       const msg = data as GameMessage
       if (msg.type !== 'gameStarted') return
-      startAsRemote(connection, msg.colors, msg.seats)
+      startAsRemote(connection, msg.colors, msg.seats, msg.startingPlayerRolls)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
@@ -219,16 +224,21 @@ export default function OnlineLobbyScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
 
-  function startAsRemote(connection: PhotonConnection, colors: PieceColor[], seats: Record<number, PieceColor>) {
+  function startAsRemote(connection: PhotonConnection, colors: PieceColor[], seats: Record<number, PieceColor>, startingPlayerRolls: number[]) {
     const board = toBoardData(BOARD_DEFINITIONS[colors.length])
     const players = colors.map((color) => createPlayerState(color, board))
     const diceQueue = new QueueDice()
     const inner = new TurnManager(board, players, defaultRuleSettings(), diceQueue)
+    // See GameStartedMessage's own doc comment - replays the Master's exact roll-off against this
+    // client's own local `players` array before bridge.start(), same as every other broadcast here
+    // is replayed rather than trusted directly.
+    diceQueue.push(...startingPlayerRolls)
+    const startingPlayerResult = inner.determineStartingPlayer()
     const myColor = colorsByActorNr(connection.getActors().map((a) => a.actorNr), colors).get(connection.localActorNr)
     const bridge = new RemoteTurnManager(inner, diceQueue, players, connection, myColor ?? null)
     bridge.start()
     realSeatsRef.current = seats ?? {}
-    setSession({ turnManager: bridge, players })
+    setSession({ turnManager: bridge, players, startingPlayerResult })
     setPhase('game')
   }
 
@@ -284,6 +294,12 @@ export default function OnlineLobbyScreen() {
     const dice = new RecordingDice()
     const inner = new TurnManager(board, players, defaultRuleSettings(), dice)
 
+    // See GameStartedMessage's own doc comment - runs before bridge.start() so currentPlayerIndex
+    // is already correct the instant the very first turnStarted fires, and drains its own recorded
+    // rolls off the same `dice` HostTurnManagerBridge is about to take over broadcasting for.
+    const startingPlayerResult = inner.determineStartingPlayer()
+    const startingPlayerRolls = dice.drain()
+
     const actorColors = colorsByActorNr(connection.getActors().map((a) => a.actorNr), colors)
     const myColor = actorColors.get(connection.localActorNr) ?? null
     const bridge = new HostTurnManagerBridge(inner, dice, players, connection, actorColors, myColor)
@@ -303,13 +319,13 @@ export default function OnlineLobbyScreen() {
     // Mirrored into room properties (not just the broadcast below) so a client that joins or
     // re-renders after this point still sees the game already started - see the lobby-phase
     // effect above for why the broadcast alone isn't enough.
-    connection.setRoomProperties({ started: true, startedColors: colors, startedSeats: realSeatsRef.current })
-    connection.broadcast({ type: 'gameStarted', colors, seats: realSeatsRef.current })
+    connection.setRoomProperties({ started: true, startedColors: colors, startedSeats: realSeatsRef.current, startedStartingPlayerRolls: startingPlayerRolls })
+    connection.broadcast({ type: 'gameStarted', colors, seats: realSeatsRef.current, startingPlayerRolls })
     // botPieceHighlighted only ever comes from *this* client's own BotController - bots are only
     // ever driven by the Master (see this file's own doc comment on that), so a non-Master client
     // has no local BotController and its board simply never shows this specific extra cue, same as
     // every other host-only aspect of driving the bots themselves.
-    setSession({ turnManager: bridge, players, botPieceHighlighted: botControllerRef.current?.pieceHighlighted })
+    setSession({ turnManager: bridge, players, botPieceHighlighted: botControllerRef.current?.pieceHighlighted, startingPlayerResult })
     setPhase('game')
   }
 

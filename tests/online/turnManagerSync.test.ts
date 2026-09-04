@@ -75,6 +75,58 @@ function buildRemote(board: BoardData, network: FakeRoomNetwork) {
   return { players, bridge }
 }
 
+// Reported directly ("debe de haber una tirada inicial para ver quien empieza" - there should be
+// an initial roll to see who starts): online play never ran the pre-game starting-player roll-off
+// local play already has - the Master's own seat, always first in `colors`, silently always went
+// first. Mirrors OnlineLobbyScreen.tsx's own sequence exactly: the Master calls
+// determineStartingPlayer() through a RecordingDice and drains its own recorded rolls (this is what
+// gets broadcast in GameStartedMessage.startingPlayerRolls); every other client pushes those same
+// values into its own QueueDice and replays determineStartingPlayer() against its own independent
+// `players` array, rather than trusting a network-serialized result object directly.
+describe('online starting-player roll-off sync', () => {
+  it('a client replaying the same recorded rolls reaches the identical starting-player result', () => {
+    const board = buildTestBoard()
+    const hostPlayers = [createPlayerState('Red', board), createPlayerState('Blue', board)]
+    const hostDice = new RecordingDice(new ScriptedDice([2, 2, 6, 6])) // Red 4, Blue 12 - no tie
+    const hostInner = new TurnManager(board, hostPlayers, defaultRuleSettings(), hostDice)
+    const hostResult = hostInner.determineStartingPlayer()
+    const rolls = hostDice.drain()
+
+    const remotePlayers = [createPlayerState('Red', board), createPlayerState('Blue', board)]
+    const remoteDiceQueue = new QueueDice()
+    remoteDiceQueue.push(...rolls)
+    const remoteInner = new TurnManager(board, remotePlayers, defaultRuleSettings(), remoteDiceQueue)
+    const remoteResult = remoteInner.determineStartingPlayer()
+
+    expect(remoteResult).toEqual(hostResult)
+    // Blue rolled higher (12 vs 4) - the room's own Master seat (always Red, first in `colors`)
+    // does *not* automatically win, proving this is a genuine roll-off, not a relabeled default.
+    expect(hostResult.winnerIndex).toBe(1)
+    expect(hostInner.currentPlayer.color).toBe('Blue')
+    expect(remoteInner.currentPlayer.color).toBe('Blue')
+  })
+
+  it('replays correctly even when the roll-off needed an extra tie-break round', () => {
+    const board = buildTestBoard()
+    const hostPlayers = [createPlayerState('Red', board), createPlayerState('Blue', board)]
+    // Round 1: Red 3+3=6, Blue 1+5=6 - tied, re-roll. Round 2: Red 4+4=8, Blue 2+2=4 - Red wins.
+    const hostDice = new RecordingDice(new ScriptedDice([3, 3, 1, 5, 4, 4, 2, 2]))
+    const hostInner = new TurnManager(board, hostPlayers, defaultRuleSettings(), hostDice)
+    const hostResult = hostInner.determineStartingPlayer()
+    const rolls = hostDice.drain()
+
+    expect(hostResult.rounds).toHaveLength(2)
+
+    const remotePlayers = [createPlayerState('Red', board), createPlayerState('Blue', board)]
+    const remoteDiceQueue = new QueueDice()
+    remoteDiceQueue.push(...rolls)
+    const remoteInner = new TurnManager(board, remotePlayers, defaultRuleSettings(), remoteDiceQueue)
+    const remoteResult = remoteInner.determineStartingPlayer()
+
+    expect(remoteResult).toEqual(hostResult)
+  })
+})
+
 describe('HostTurnManagerBridge + RemoteTurnManager convergence', () => {
   it('a Master-initiated roll and move converge on both sides', () => {
     const board = buildTestBoard()
