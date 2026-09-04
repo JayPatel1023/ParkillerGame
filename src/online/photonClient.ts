@@ -266,10 +266,23 @@ export class PhotonConnection implements RoomTransport {
   // left, for as long as its caller cares to listen (including during an active game) - wraps
   // whatever onActorLeave handler is already set (checkMasterChanged, in the constructor) the same
   // way onActorsChanged does, rather than replacing it outright.
+  // Reported directly, with screenshots: one player's own screen was still mid-game while the
+  // *other* player's client displayed "X salió de la sala - la partida se detuvo" for a color that
+  // never actually left anything. Root cause, confirmed in the SDK source
+  // (photon-realtime-module.js): a genuine, individually server-reported departure fires
+  // onActorLeave(actor, cleanup=false) - but _cleanupGamePeerData(), which runs on *any* local drop
+  // of this client's own connection to the game server (a WiFi blip, a backgrounded mobile tab, a
+  // laptop sleep/wake, anything transient - not necessarily a real leave), iterates *every* actor
+  // this client currently has cached and fires the exact same onActorLeave(actor, cleanup=true) for
+  // each of them, including actors that are still fully connected server-side. The listener used to
+  // fire unconditionally either way, so a hiccup on *this* client's own network could blame a
+  // completely uninvolved, still-present opponent for having left. Only cleanup=false is a real,
+  // individually confirmed departure of that specific actor.
   onActorLeft(listener: (actorNr: number) => void): () => void {
     const prev = this.client.onActorLeave
     this.client.onActorLeave = (actor, cleanup) => {
       prev?.(actor, cleanup)
+      if (cleanup) return
       listener(actor.actorNr)
     }
     return () => {
