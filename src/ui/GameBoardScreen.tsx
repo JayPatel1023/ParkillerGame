@@ -9,6 +9,7 @@ import type { MoveOption } from '../core/rules/moveOption'
 import { useTurnManager } from '../hooks/useTurnManager'
 import { BoardScene } from '../scene/BoardScene'
 import { playCaptureSound, playFinishSound, playGameWonSound } from './celebrationSound'
+import { ColorDrawModal, type ColorDrawEntry } from './ColorDrawModal'
 import { Confetti } from './Confetti'
 import { EliminationToast } from './EliminationToast'
 import { HelpModal } from './HelpModal'
@@ -107,9 +108,15 @@ export interface GameSession {
    * decided to move, so it can carry the same selectable-piece indicator a human's own choosable
    * piece already gets (see BotController's own pieceHighlighted doc comment for why). */
   botPieceHighlighted?: Listenable<Piece | null>
-  /** Only set by local play (beginLocalGame always runs this pre-game roll-off - see
-   * startingPlayer.ts) - shown once via StartingPlayerModal on mount, undefined for online play. */
+  /** Set by local play (beginLocalGame always runs this pre-game roll-off - see startingPlayer.ts)
+   * and, since the online roll-off shipped, by online play too (OnlineLobbyScreen's own
+   * startGame()/startAsRemote()) - shown once via StartingPlayerModal on mount, after colorDraw's
+   * own modal (if present) is dismissed. */
   startingPlayerResult?: StartingPlayerResult
+  /** Only set for online games (OnlineLobbyScreen's own shuffleColorsByActorNr) - local play never
+   * randomizes color, see ColorSelector's own "the player must be able to choose" requirement.
+   * Shown once via ColorDrawModal on mount, before startingPlayerResult's own modal. */
+  colorDraw?: ColorDrawEntry[]
 }
 
 export function GameBoardScreen({
@@ -135,6 +142,11 @@ export function GameBoardScreen({
   // reference changes - a fresh game always remounts this whole screen (App.tsx's own key/session
   // rebuild on playerCount/humanColor change), so there's no case where this needs to fire twice
   // for the same still-mounted screen.
+  // See GameSession's own colorDraw doc comment - shown before showingStartingPlayer's own modal
+  // (below), only ever true for an online game. Undefined session.colorDraw (local play) just
+  // means this never becomes true, so showingStartingPlayer's own modal (if any) shows immediately
+  // instead, exactly the pre-existing local-play behavior.
+  const [showingColorDraw, setShowingColorDraw] = useState(session.colorDraw !== undefined)
   const [showingStartingPlayer, setShowingStartingPlayer] = useState(session.startingPlayerResult !== undefined)
   const {
     currentPlayer,
@@ -395,7 +407,15 @@ export function GameBoardScreen({
 
       {showingHelp && <HelpModal onClose={() => setShowingHelp(false)} />}
 
-      {showingStartingPlayer && session.startingPlayerResult && (
+      {showingColorDraw && session.colorDraw && (
+        <ColorDrawModal
+          assignments={session.colorDraw}
+          localPlayerColor={session.turnManager.localPlayerColor ?? null}
+          onDone={() => setShowingColorDraw(false)}
+        />
+      )}
+
+      {!showingColorDraw && showingStartingPlayer && session.startingPlayerResult && (
         <StartingPlayerModal result={session.startingPlayerResult} onDone={() => setShowingStartingPlayer(false)} />
       )}
 

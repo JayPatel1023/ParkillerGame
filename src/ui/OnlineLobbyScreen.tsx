@@ -23,6 +23,7 @@ import { HostTurnManagerBridge } from '../online/HostTurnManagerBridge'
 import { PhotonConnection, type ActorInfo } from '../online/photonClient'
 import type { GameMessage } from '../online/protocol'
 import { RemoteTurnManager } from '../online/RemoteTurnManager'
+import type { ColorDrawEntry } from './ColorDrawModal'
 import { GameBoardScreen, type GameSession } from './GameBoardScreen'
 
 // Milestone 2 - reachable via the #online hash (see App.tsx), linked from StartScreen's "Jugar
@@ -69,6 +70,29 @@ function colorsByActorNr(actorNrs: readonly number[], colors: readonly PieceColo
   const sorted = [...actorNrs].sort((a, b) => a - b)
   const map = new Map<number, PieceColor>()
   sorted.forEach((actorNr, rank) => map.set(actorNr, colors[rank] ?? colors[colors.length - 1]))
+  return map
+}
+
+// Reported directly ("un carrusel para sortear el color de cada jugador" - a carousel to draw each
+// player's color): unlike local play's own ColorSelector (a real, explicit "EL JUGADOR... DEBE
+// PODER ELEGIR EL COLOR" choice - see that file's own comment - left untouched here), online play
+// never had a color *choice* to begin with - colorsByActorNr above is a silent, deterministic
+// function of join order (the room creator's own seat always lands on colors[0]). Drawing an
+// actual random assignment instead, once, right when the game starts (not continuously as people
+// join the lobby - see startGame()'s own call site) is a pure addition, nothing to reconcile with
+// that other requirement. `colors` itself (the fixed turn-order list, e.g. TURN_ORDER_BY_COUNT)
+// stays untouched - only *which seat* lands on which of those colors is shuffled, so every other
+// piece of code that indexes into the original `colors` array for turn order keeps working
+// unmodified.
+function shuffleColorsByActorNr(actorNrs: readonly number[], colors: readonly PieceColor[]): Map<number, PieceColor> {
+  const sorted = [...actorNrs].sort((a, b) => a - b)
+  const shuffled = [...colors]
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  }
+  const map = new Map<number, PieceColor>()
+  sorted.forEach((actorNr, rank) => map.set(actorNr, shuffled[rank] ?? shuffled[shuffled.length - 1]))
   return map
 }
 
@@ -234,11 +258,21 @@ export default function OnlineLobbyScreen() {
     // is replayed rather than trusted directly.
     diceQueue.push(...startingPlayerRolls)
     const startingPlayerResult = inner.determineStartingPlayer()
-    const myColor = colorsByActorNr(connection.getActors().map((a) => a.actorNr), colors).get(connection.localActorNr)
+    // Reported directly, found while wiring up the color carousel: recomputing colorsByActorNr
+    // independently here was harmless while it was a pure, deterministic function of join order
+    // (every client's own recompute always agreed) - but now that startGame() draws a *random*
+    // assignment, a client independently recomputing its own random draw would diverge from the
+    // Master's. `seats` is the Master's own already-decided mapping, broadcast for exactly this -
+    // read from it directly instead, same as every other piece of Master-decided state here.
+    const myColor = seats[connection.localActorNr] ?? null
     const bridge = new RemoteTurnManager(inner, diceQueue, players, connection, myColor ?? null)
     bridge.start()
     realSeatsRef.current = seats ?? {}
-    setSession({ turnManager: bridge, players, startingPlayerResult })
+    // See ColorDrawModal's own doc comment - a color with no entry in `seats` (the Master's own
+    // decided actorNr->color mapping) went to a bot.
+    const claimedColors = new Set(Object.values(seats ?? {}))
+    const colorDraw: ColorDrawEntry[] = colors.map((color) => ({ color, isBot: !claimedColors.has(color) }))
+    setSession({ turnManager: bridge, players, startingPlayerResult, colorDraw })
     setPhase('game')
   }
 
@@ -300,7 +334,10 @@ export default function OnlineLobbyScreen() {
     const startingPlayerResult = inner.determineStartingPlayer()
     const startingPlayerRolls = dice.drain()
 
-    const actorColors = colorsByActorNr(connection.getActors().map((a) => a.actorNr), colors)
+    // See shuffleColorsByActorNr's own doc comment - drawn once, right here, not as seats fill in
+    // the lobby (the lobby's own seat-list preview below still shows the plain join-order mapping
+    // right up until this point, matching "you don't know your color until the draw happens").
+    const actorColors = shuffleColorsByActorNr(connection.getActors().map((a) => a.actorNr), colors)
     const myColor = actorColors.get(connection.localActorNr) ?? null
     const bridge = new HostTurnManagerBridge(inner, dice, players, connection, actorColors, myColor)
 
@@ -308,6 +345,7 @@ export default function OnlineLobbyScreen() {
     const claimedColors = new Set(actorColors.values())
     const botColors = new Set(colors.filter((c) => !claimedColors.has(c)))
     if (botColors.size > 0) botControllerRef.current = new BotController(bridge, botColors)
+    const colorDraw: ColorDrawEntry[] = colors.map((color) => ({ color, isBot: botColors.has(color) }))
 
     bridge.start()
     // Reported directly: a friend who joined the room code after this point still connected
@@ -325,7 +363,7 @@ export default function OnlineLobbyScreen() {
     // ever driven by the Master (see this file's own doc comment on that), so a non-Master client
     // has no local BotController and its board simply never shows this specific extra cue, same as
     // every other host-only aspect of driving the bots themselves.
-    setSession({ turnManager: bridge, players, botPieceHighlighted: botControllerRef.current?.pieceHighlighted, startingPlayerResult })
+    setSession({ turnManager: bridge, players, botPieceHighlighted: botControllerRef.current?.pieceHighlighted, startingPlayerResult, colorDraw })
     setPhase('game')
   }
 
