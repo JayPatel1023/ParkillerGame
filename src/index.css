@@ -180,7 +180,7 @@ button {
     display: none !important;
   }
   .menu-mascot {
-    height: 68px !important;
+    height: 84px !important;
   }
   .menu-card {
     padding-top: 38px !important;
@@ -204,12 +204,12 @@ button {
     display: none !important;
   }
   .menu-mascot {
-    height: 42px !important;
+    height: 50px !important;
   }
   .menu-card {
-    padding-top: 30px !important;
-    padding-bottom: 8px !important;
-    gap: 3px !important;
+    padding-top: 24px !important;
+    padding-bottom: 6px !important;
+    gap: 2px !important;
   }
   .menu-card-title {
     font-size: 15px !important;

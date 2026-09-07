@@ -575,7 +575,12 @@ export default function OnlineLobbyScreen() {
                 GroupIcon/LinkIcon, the plain gradient+border card recipe) are all baked into
                 these images already, so the coded versions are dropped in favor of the real
                 artwork; only the badge's own blank space below it still needs paddingTop to clear. */}
-            <div className="menu-card" style={menuCardStyle('/backgrounds/leftbg.png')}>
+            {/* Reported directly, with diagonal lines drawn across both cards: tilt them slightly
+                away from each other - two flat parallel rectangles read as a plain grid, a small
+                opposing rotation on each (same trick as this file's own doodle text elsewhere)
+                reads as cards fanned out on a table instead, a lot more "3D" for a two-line CSS
+                transform. */}
+            <div className="menu-card" style={{ ...menuCardStyle('/backgrounds/leftbg.png'), transform: 'rotate(-3deg)' }}>
               <h3 className="menu-card-title" style={menuCardTitleStyle}>
                 Crear <span style={{ color: '#79e39a' }}>sala</span>
               </h3>
@@ -599,7 +604,7 @@ export default function OnlineLobbyScreen() {
               </button>
             </div>
 
-            <div className="menu-card" style={menuCardStyle('/backgrounds/bluebg.png')}>
+            <div className="menu-card" style={{ ...menuCardStyle('/backgrounds/bluebg.png'), transform: 'rotate(3deg)' }}>
               <h3 className="menu-card-title" style={menuCardTitleStyle}>
                 Unirse <span style={{ color: '#8ec4f5' }}>a sala</span>
               </h3>
@@ -1002,7 +1007,7 @@ const menuMascotStyle: React.CSSProperties = {
   display: 'block',
   alignSelf: 'center',
   width: 'auto',
-  height: 'clamp(68px, 17vh, 180px)',
+  height: 'clamp(80px, 21vh, 230px)',
 }
 
 // Caveat (a handwritten-style Google Font, loaded in index.html for exactly this) for the
