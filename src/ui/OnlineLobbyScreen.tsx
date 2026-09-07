@@ -478,18 +478,11 @@ export default function OnlineLobbyScreen() {
           }}
         />
         <div style={menuPanelStyle}>
+          {/* Reported directly, with a screenshot circling this exact block: the badge/wordmark/
+              tagline header was asked to be removed outright, not just resized - see the earlier
+              size-fix commit for the same block, still shrunk down at the time this went. Only
+              the close button survives, now alone at top-right. */}
           <div style={menuHeaderRowStyle}>
-            <div style={menuHeaderLeftStyle}>
-              <img
-                src="/logo-badge.png"
-                alt="Parkiller"
-                style={{ width: 'clamp(32px, 8vw, 40px)', height: 'clamp(32px, 8vw, 40px)', filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.5))', flexShrink: 0 }}
-              />
-              <div>
-                <div style={menuWordmarkStyle}>PARKILLER</div>
-                <div style={menuTaglineStyle}>Tradición · Estrategia · Supervivencia</div>
-              </div>
-            </div>
             <button
               className="chunky-btn"
               onClick={() => (window.location.hash = '')}
@@ -915,32 +908,7 @@ const menuPanelStyle: React.CSSProperties = {
 const menuHeaderRowStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
-  justifyContent: 'space-between',
-  gap: 12,
-}
-
-const menuHeaderLeftStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 14,
-}
-
-const menuWordmarkStyle: React.CSSProperties = {
-  fontFamily: "'Baloo 2', system-ui, sans-serif",
-  fontSize: 'clamp(18px, 4.5vw, 24px)',
-  fontWeight: 800,
-  letterSpacing: 1.5,
-  color: '#e8cf8a',
-  textShadow: '0 2px 0 #7a5f26, 0 3px 8px rgba(0,0,0,0.5)',
-  lineHeight: 1.15,
-}
-
-const menuTaglineStyle: React.CSSProperties = {
-  fontSize: 'clamp(9px, 2.2vw, 11px)',
-  letterSpacing: 1.5,
-  fontWeight: 700,
-  color: '#c9a24b',
-  textTransform: 'uppercase',
+  justifyContent: 'flex-end',
 }
 
 const menuCloseButtonStyle: React.CSSProperties = {
