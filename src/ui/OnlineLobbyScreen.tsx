@@ -1002,7 +1002,7 @@ const menuMascotStyle: React.CSSProperties = {
   display: 'block',
   alignSelf: 'center',
   width: 'auto',
-  height: 'clamp(56px, 13vh, 130px)',
+  height: 'clamp(68px, 17vh, 180px)',
 }
 
 // Caveat (a handwritten-style Google Font, loaded in index.html for exactly this) for the
