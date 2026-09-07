@@ -566,23 +566,18 @@ export default function OnlineLobbyScreen() {
             </button>
           </div>
 
-          {/* Reported directly: the first version of this (auto-cropped + manually feathered out
-              of the mockup screenshot itself, backbutton.png) was "vaguely" done and needed
-              swapping - the client supplied their own, better-isolated cutout instead
-              (public/icons/parkiBagk.png, already alpha-faded on a clean radial glow, no busy
-              photo background to fight with) and this is a straight crop of just the hooded
-              figure out of THAT, cropped tighter to drop its own wooden sign/dice so this app's
-              own coded "Jugar online" plaque right below isn't duplicated. */}
+          {/* Reported directly: "don't crop it - use the file exactly as it is, the one with the
+              dice and the text." The earlier crops (first the mockup screenshot itself, then a
+              tighter crop of the client's own better-isolated cutout) were each trimmed down to
+              just the hooded figure so this app's own coded "Jugar online" plaque underneath
+              wouldn't duplicate its baked-in text - now dropped entirely in favor of showing that
+              whole image (mascot, wooden "Jugar online" sign with its own subtitle/description,
+              and the dice) untouched, exactly as supplied. */}
           <img
             src="/parkiller-mascot.png"
-            alt=""
+            alt="Jugar online - Creá una sala o unite con un código"
             style={menuMascotStyle}
           />
-
-          <div style={menuPlaqueStyle}>
-            <h1 style={menuTitleStyle}>Jugar online</h1>
-            <p style={menuSubtitleStyle}>Creá una sala nueva o unite con un código</p>
-          </div>
 
           <div style={{ ...menuDoodleStyle, alignSelf: 'flex-end', marginRight: 'clamp(4px, 4vw, 24px)', display: 'flex', alignItems: 'center', gap: 6 }}>
             ¡Vamos a jugar! <PencilIcon size={17} />
@@ -1011,46 +1006,14 @@ const menuCloseButtonStyle: React.CSSProperties = {
   flexShrink: 0,
 }
 
-// Sized/positioned so the mascot's own hands (resting near the bottom of the crop - see
-// parkiller-mascot.png's own doc comment at its usage site) visually rest on top of
-// menuPlaqueStyle's own top edge just below it, same composition as the reference mockup (the
-// mascot peeking up from behind the "Jugar online" sign it's holding).
+// Full width of the panel's own content area rather than a small fixed footprint - the whole
+// image (mascot, its wooden "Jugar online" sign, and the dice) is the header now, not just a
+// small accent above a separate coded plaque, so it needs to actually read at a glance.
 const menuMascotStyle: React.CSSProperties = {
   display: 'block',
   alignSelf: 'center',
-  width: 'auto',
-  height: 'clamp(78px, 16vw, 104px)',
-  marginBottom: -14,
-  position: 'relative',
-  zIndex: 1,
-  filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.5))',
-}
-
-const menuPlaqueStyle: React.CSSProperties = {
-  alignSelf: 'center',
-  textAlign: 'center',
-  padding: '14px 28px 10px',
-  borderRadius: 14,
-  background: 'rgba(0,0,0,0.22)',
-  border: '2px solid rgba(201,162,75,0.5)',
-  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
-  transform: 'rotate(-1deg)',
-  position: 'relative',
-}
-
-const menuTitleStyle: React.CSSProperties = {
-  margin: 0,
-  fontFamily: "'Baloo 2', system-ui, sans-serif",
-  fontSize: 'clamp(22px, 5.5vw, 32px)',
-  fontWeight: 800,
-  color: '#e8cf8a',
-  textShadow: '0 2px 0 #7a5f26, 0 4px 10px rgba(0,0,0,0.5)',
-}
-
-const menuSubtitleStyle: React.CSSProperties = {
-  margin: '3px 0 0',
-  fontSize: 13,
-  color: '#d8d2c2',
+  width: 'min(360px, 88%)',
+  height: 'auto',
 }
 
 // Caveat (a handwritten-style Google Font, loaded in index.html for exactly this) for the
