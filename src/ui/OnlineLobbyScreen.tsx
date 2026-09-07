@@ -483,7 +483,7 @@ export default function OnlineLobbyScreen() {
               <img
                 src="/logo-badge.png"
                 alt="Parkiller"
-                style={{ width: 'clamp(46px, 12vw, 60px)', height: 'clamp(46px, 12vw, 60px)', filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.5))', flexShrink: 0 }}
+                style={{ width: 'clamp(32px, 8vw, 40px)', height: 'clamp(32px, 8vw, 40px)', filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.5))', flexShrink: 0 }}
               />
               <div>
                 <div style={menuWordmarkStyle}>PARKILLER</div>
@@ -900,8 +900,8 @@ const menuPanelStyle: React.CSSProperties = {
   position: 'relative',
   display: 'flex',
   flexDirection: 'column',
-  gap: 20,
-  padding: 'clamp(20px, 4vh, 32px) clamp(18px, 5vw, 36px)',
+  gap: 14,
+  padding: 'clamp(14px, 2.5vh, 24px) clamp(16px, 4.5vw, 32px)',
   borderRadius: 28,
   background: 'linear-gradient(180deg, rgba(255,255,255,0.05), transparent 25%), linear-gradient(165deg, rgba(58, 46, 30, 0.85), rgba(30, 23, 14, 0.85))',
   border: '2px solid #7a5f26',
@@ -968,9 +968,9 @@ const menuCloseButtonStyle: React.CSSProperties = {
 const menuMascotStyle: React.CSSProperties = {
   display: 'block',
   alignSelf: 'center',
-  width: 'clamp(130px, 30vw, 190px)',
+  width: 'clamp(84px, 17vw, 112px)',
   height: 'auto',
-  marginBottom: -26,
+  marginBottom: -16,
   position: 'relative',
   zIndex: 1,
   filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.5))',
@@ -979,7 +979,7 @@ const menuMascotStyle: React.CSSProperties = {
 const menuPlaqueStyle: React.CSSProperties = {
   alignSelf: 'center',
   textAlign: 'center',
-  padding: '20px 32px 14px',
+  padding: '14px 28px 10px',
   borderRadius: 14,
   background: 'rgba(0,0,0,0.22)',
   border: '2px solid rgba(201,162,75,0.5)',
@@ -991,15 +991,15 @@ const menuPlaqueStyle: React.CSSProperties = {
 const menuTitleStyle: React.CSSProperties = {
   margin: 0,
   fontFamily: "'Baloo 2', system-ui, sans-serif",
-  fontSize: 'clamp(26px, 6.5vw, 38px)',
+  fontSize: 'clamp(22px, 5.5vw, 32px)',
   fontWeight: 800,
   color: '#e8cf8a',
   textShadow: '0 2px 0 #7a5f26, 0 4px 10px rgba(0,0,0,0.5)',
 }
 
 const menuSubtitleStyle: React.CSSProperties = {
-  margin: '4px 0 0',
-  fontSize: 14,
+  margin: '3px 0 0',
+  fontSize: 13,
   color: '#d8d2c2',
 }
 
@@ -1017,7 +1017,7 @@ const menuDoodleStyle: React.CSSProperties = {
 
 const menuCardsRowStyle: React.CSSProperties = {
   display: 'flex',
-  gap: 18,
+  gap: 14,
   flexWrap: 'wrap',
 }
 
@@ -1033,9 +1033,9 @@ function menuCardStyle(hex: string): React.CSSProperties {
     minWidth: 240,
     display: 'flex',
     flexDirection: 'column',
-    gap: 14,
-    padding: '20px 20px 22px',
-    borderRadius: 22,
+    gap: 10,
+    padding: '14px 16px 16px',
+    borderRadius: 20,
     background: `linear-gradient(180deg, rgba(255,255,255,0.06), transparent 30%), linear-gradient(165deg, ${dark}, ${darker})`,
     border: `2px solid ${edge}`,
     boxShadow: `0 10px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.08), 0 0 0 3px ${hex}33`,
@@ -1060,8 +1060,8 @@ function coloredButtonStyle(enabled: boolean, hex: string): React.CSSProperties 
   return {
     width: '100%',
     boxSizing: 'border-box',
-    padding: '14px 24px',
-    fontSize: 17,
+    padding: '11px 24px',
+    fontSize: 16,
     fontWeight: 800,
     letterSpacing: 0.3,
     fontFamily: "'Baloo 2', system-ui, sans-serif",
@@ -1083,7 +1083,7 @@ const menuTipBannerStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 10,
-  padding: '12px 16px',
+  padding: '9px 14px',
   borderRadius: 14,
   border: '2px dashed rgba(232,207,138,0.5)',
   background: 'rgba(0,0,0,0.2)',
