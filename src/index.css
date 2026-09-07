@@ -216,16 +216,20 @@ button {
     display: none !important;
   }
   .menu-mascot {
-    height: 50px !important;
+    height: 42px !important;
   }
   .menu-card {
-    /* Kept as a fixed override here (unlike the width breakpoint above) - this is the genuinely
-       tight case vertical-budget-wise (a landscape phone, side-by-side cards fairly wide under
-       cover's own width-driven scale); a modest fixed value trades a little badge clearance for
-       actually fitting without a scrollbar, on what's already the least common orientation to hit
-       this in - the base clamp's own min (54px) undershoots the badge slightly more than this. */
-    padding-top: 32px !important;
-    padding-bottom: 4px !important;
+    /* Reported directly, with screenshots of the title text landing right on top of the badge -
+       32px here was a bug, not a tradeoff: this rule's own cards are NOT meaningfully narrower
+       than the width breakpoint's own (the panel's own max-width caps every realistic layout,
+       side-by-side or stacked, to roughly the same ~300-380px card width), so the badge needs
+       essentially the *same* clearance here as there - matching the width breakpoint's own 74px
+       instead of a much smaller value that undershot it on every window this rule actually fires
+       for, not just the rare landscape-phone case it was written for. The extra space that
+       clearance now costs is clawed back from the mascot and gaps below instead, which don't
+       carry the same correctness risk when shrunk. */
+    padding-top: 74px !important;
+    padding-bottom: 2px !important;
     gap: 2px !important;
   }
   .menu-card-title {
@@ -241,11 +245,11 @@ button {
     font-size: 13px !important;
   }
   .menu-panel {
-    gap: 4px !important;
+    gap: 3px !important;
   }
   .menu-tip-banner {
-    padding-top: 2px !important;
-    padding-bottom: 2px !important;
+    padding-top: 1px !important;
+    padding-bottom: 1px !important;
     font-size: 13px !important;
   }
   /* The outermost centering wrapper's own 16px-top+bottom padding (shared with every other phase
