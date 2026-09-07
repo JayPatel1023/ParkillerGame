@@ -122,22 +122,6 @@ function shuffleColorsByActorNr(actorNrs: readonly number[], colors: readonly Pi
 // colored/sized to match a button's own text. Plain inline SVGs, scoped to this file only (the
 // "each screen owns its own style objects" convention - see this file's own comment on it
 // elsewhere - extends to these too, since nothing else in the app had an icon set to share yet).
-function GroupIcon({ size = 24 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />
-    </svg>
-  )
-}
-
-function LinkIcon({ size = 24 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z" />
-    </svg>
-  )
-}
-
 function PersonIcon({ size = 14 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -540,16 +524,12 @@ export default function OnlineLobbyScreen() {
   if (phase === 'menu') {
     return (
       <div style={wrapperStyle}>
-        <div style={{ position: 'absolute', inset: 0, backgroundColor: '#05070c' }}>
-          <StartScreenBackground />
-        </div>
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'radial-gradient(ellipse at center, rgba(10,8,4,0.15) 0%, rgba(6,8,14,0.7) 100%)',
-          }}
-        />
+        {/* Reported directly, with a screenshot circling it: the blurred 3D board scene showing
+            through/around the panel (StartScreenBackground, shared with every other phase below)
+            read as a leftover "yellowish" backdrop clashing with this phase's own colorful cards
+            - dropped in favor of a plain flat fill, scoped to 'menu' only like the rest of this
+            redesign. */}
+        <div style={{ position: 'absolute', inset: 0, backgroundColor: '#05070c' }} />
         <div style={menuPanelStyle}>
           {/* Reported directly, with a screenshot circling this exact block: the badge/wordmark/
               tagline header was asked to be removed outright, not just resized - see the earlier
@@ -584,10 +564,14 @@ export default function OnlineLobbyScreen() {
           </div>
 
           <div style={menuCardsRowStyle}>
-            <div style={menuCardStyle('#3fae66')}>
-              <div style={menuCardBadgeStyle('#3fae66')}>
-                <GroupIcon size={26} />
-              </div>
+            {/* Reported directly, with the client's own two card-frame art files saved into
+                public/backgrounds/ (leftbg.png for this "Crear sala" card, bluebg.png for
+                "Unirse a sala" below) - the glossy glow border, corner crown/star decorations,
+                and icon badge that this file previously hand-coded in CSS (menuCardBadgeStyle,
+                GroupIcon/LinkIcon, the plain gradient+border card recipe) are all baked into
+                these images already, so the coded versions are dropped in favor of the real
+                artwork; only the badge's own blank space below it still needs paddingTop to clear. */}
+            <div style={menuCardStyle('/backgrounds/leftbg.png')}>
               <h3 style={menuCardTitleStyle}>
                 Crear <span style={{ color: '#79e39a' }}>sala</span>
               </h3>
@@ -611,10 +595,7 @@ export default function OnlineLobbyScreen() {
               </button>
             </div>
 
-            <div style={menuCardStyle('#3f8ee0')}>
-              <div style={menuCardBadgeStyle('#3f8ee0')}>
-                <LinkIcon size={26} />
-              </div>
+            <div style={menuCardStyle('/backgrounds/bluebg.png')}>
               <h3 style={menuCardTitleStyle}>
                 Unirse <span style={{ color: '#8ec4f5' }}>a sala</span>
               </h3>
@@ -1034,13 +1015,15 @@ const menuCardsRowStyle: React.CSSProperties = {
   flexWrap: 'wrap',
 }
 
-// Parameterized by hue (green for "Crear sala", blue for "Unirse a sala" - see the mockup's own
-// two-card color coding) rather than another exact style-object duplicate, since these two cards
-// are the same shape and only ever differ by which color they're themed in.
-function menuCardStyle(hex: string): React.CSSProperties {
-  const dark = lighten(hex, -0.55)
-  const darker = lighten(hex, -0.68)
-  const edge = lighten(hex, -0.15)
+// The client's own card-frame art (leftbg.png/bluebg.png) already bakes in the glow border,
+// corner crown/star decorations, the icon badge, and the bottom wave - this file's own earlier
+// hand-coded gradient+border card recipe and separate circular icon badge (menuCardBadgeStyle,
+// GroupIcon/LinkIcon) are dropped entirely in favor of it. backgroundSize '100% 100%' stretches
+// the art to match this card's own actual (content-driven) height exactly, since the two rarely
+// match the source image's own fixed aspect ratio pixel-for-pixel; overflow hidden is a safety
+// clip in case any real height still spills past the image's own rounded corners. paddingTop
+// clears the image's own baked-in badge before this card's real title/content starts.
+function menuCardStyle(imageUrl: string): React.CSSProperties {
   return {
     flex: '1 1 260px',
     minWidth: 240,
@@ -1049,32 +1032,13 @@ function menuCardStyle(hex: string): React.CSSProperties {
     alignItems: 'center',
     textAlign: 'center',
     gap: 10,
-    padding: '18px 16px 16px',
-    borderRadius: 20,
-    background: `linear-gradient(180deg, rgba(255,255,255,0.06), transparent 30%), linear-gradient(165deg, ${dark}, ${darker})`,
-    border: `2px solid ${edge}`,
-    boxShadow: `0 10px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.08), 0 0 0 3px ${hex}33`,
-  }
-}
-
-// Circular badge behind each card's own icon (people for "Crear sala", link for "Unirse a sala")
-// - the mockup's own centered-badge-then-title layout, replacing this card's earlier inline
-// emoji+title row entirely.
-function menuCardBadgeStyle(hex: string): React.CSSProperties {
-  const light = lighten(hex, 0.3)
-  const dark = lighten(hex, -0.3)
-  return {
-    width: 52,
-    height: 52,
-    borderRadius: '50%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: '#fff',
-    background: `radial-gradient(circle at 34% 30%, ${light} 0%, ${hex} 55%, ${dark} 100%)`,
-    border: `2px solid rgba(255,255,255,0.35)`,
-    boxShadow: `0 4px 10px rgba(0,0,0,0.35), inset 0 1px 1px rgba(255,255,255,0.4)`,
-    flexShrink: 0,
+    padding: '88px 18px 20px',
+    borderRadius: 30,
+    overflow: 'hidden',
+    backgroundImage: `url(${imageUrl})`,
+    backgroundSize: '100% 100%',
+    backgroundRepeat: 'no-repeat',
+    boxShadow: '0 10px 24px rgba(0,0,0,0.35)',
   }
 }
 
