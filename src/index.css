@@ -180,7 +180,7 @@ button {
     display: none !important;
   }
   .menu-mascot {
-    height: 84px !important;
+    height: 100px !important;
   }
   .menu-card {
     /* Back to a smaller override now that menuCardStyle itself is back on backgroundSize:'100%
@@ -213,7 +213,7 @@ button {
     display: none !important;
   }
   .menu-mascot {
-    height: 42px !important;
+    height: 50px !important;
   }
   .menu-card {
     /* Back to a smaller override now that menuCardStyle itself is back on backgroundSize:'100%
@@ -237,11 +237,6 @@ button {
   }
   .menu-panel {
     gap: 3px !important;
-  }
-  .menu-tip-banner {
-    padding-top: 1px !important;
-    padding-bottom: 1px !important;
-    font-size: 13px !important;
   }
   /* The outermost centering wrapper's own 16px-top+bottom padding (shared with every other phase
      - see wrapperStyle's own definition - so scoped here to .menu-wrapper specifically, the

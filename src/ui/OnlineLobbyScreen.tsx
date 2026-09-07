@@ -156,14 +156,6 @@ function CloseIcon({ size = 16 }: { size?: number }) {
   )
 }
 
-function BulbIcon({ size = 18 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M9 21h6v-1H9v1zm3-19C7.48 2 4 5.48 4 10c0 2.89 1.64 5.42 4 6.86V19h8v-2.14c2.36-1.44 4-3.97 4-6.86 0-4.52-3.48-8-8-8zm2 13.86V17h-4v-1.14c-2.36-1.02-4-3.28-4-5.86 0-3.31 2.69-6 6-6s6 2.69 6 6c0 2.58-1.64 4.84-4 5.86z" />
-    </svg>
-  )
-}
-
 function PencilIcon({ size = 18 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -524,21 +516,10 @@ export default function OnlineLobbyScreen() {
   if (phase === 'menu') {
     return (
       <div className="menu-wrapper" style={wrapperStyle}>
-        {/* Reported directly (twice now, in opposite directions): first asked to drop the blurred
-            3D board scene entirely since it read as a leftover "yellowish" backdrop clashing with
-            this phase's own colorful cards, then asked to bring it back exactly as it was -
-            restored to the same StartScreenBackground+radial-gradient treatment every other phase
-            below still uses, unchanged from before that first request. */}
-        <div style={{ position: 'absolute', inset: 0, backgroundColor: '#05070c' }}>
-          <StartScreenBackground />
-        </div>
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'radial-gradient(ellipse at center, rgba(10,8,4,0.15) 0%, rgba(6,8,14,0.7) 100%)',
-          }}
-        />
+        {/* Reported directly (three times now, back and forth): dropped, restored, now dropped
+            again - the "yellowish" blurred 3D board scene (StartScreenBackground, still used
+            unchanged by every other phase below) is back to a plain flat fill for this phase. */}
+        <div style={{ position: 'absolute', inset: 0, backgroundColor: '#05070c' }} />
         <div className="menu-panel" style={menuPanelStyle}>
           {/* Reported directly, with a screenshot circling this exact block: the badge/wordmark/
               tagline header was asked to be removed outright, not just resized - see the earlier
@@ -634,11 +615,6 @@ export default function OnlineLobbyScreen() {
                 <ArrowRightIcon size={17} />
               </button>
             </div>
-          </div>
-
-          <div className="menu-tip-banner" style={menuTipBannerStyle}>
-            <BulbIcon size={19} />
-            <span>Tip: compartí el código de sala con tus amigos para armarla juntos</span>
           </div>
 
           <button className="chunky-btn" onClick={() => (window.location.hash = '')} style={menuBackButtonStyle}>
@@ -1014,7 +990,7 @@ const menuMascotStyle: React.CSSProperties = {
   display: 'block',
   alignSelf: 'center',
   width: 'auto',
-  height: 'clamp(80px, 21vh, 230px)',
+  height: 'clamp(92px, 25vh, 270px)',
 }
 
 // Caveat (a handwritten-style Google Font, loaded in index.html for exactly this) for the
@@ -1052,14 +1028,14 @@ const menuCardsRowStyle: React.CSSProperties = {
 // tuned against, not width the way it briefly needed to be under cover.
 function menuCardStyle(imageUrl: string): React.CSSProperties {
   return {
-    flex: '1 1 260px',
-    minWidth: 240,
+    flex: '1 1 220px',
+    minWidth: 210,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     textAlign: 'center',
     gap: 'clamp(4px, 1vh, 10px)',
-    padding: 'clamp(46px, 9vh, 76px) clamp(14px, 3vw, 18px) clamp(12px, 2vh, 18px)',
+    padding: 'clamp(46px, 9vh, 76px) clamp(12px, 2.5vw, 16px) clamp(10px, 1.8vh, 16px)',
     borderRadius: 30,
     overflow: 'hidden',
     backgroundImage: `url(${imageUrl})`,
@@ -1072,7 +1048,7 @@ function menuCardStyle(imageUrl: string): React.CSSProperties {
 const menuCardTitleStyle: React.CSSProperties = {
   margin: 0,
   fontFamily: "'Baloo 2', system-ui, sans-serif",
-  fontSize: 'clamp(16px, 2.6vh, 20px)',
+  fontSize: 'clamp(15px, 2.3vh, 18px)',
   fontWeight: 800,
   color: '#fff6e0',
   textShadow: '0 2px 4px rgba(0,0,0,0.4)',
@@ -1080,10 +1056,10 @@ const menuCardTitleStyle: React.CSSProperties = {
 
 const menuCardSubtitleStyle: React.CSSProperties = {
   margin: '-4px 0 2px',
-  fontSize: 'clamp(10.5px, 1.7vh, 12.5px)',
+  fontSize: 'clamp(10px, 1.5vh, 11.5px)',
   lineHeight: 1.4,
   color: 'rgba(242,237,224,0.75)',
-  maxWidth: 220,
+  maxWidth: 200,
 }
 
 // Same carved-3D recipe as chunkyButtonStyle above, parameterized by hue instead of the fixed
@@ -1115,20 +1091,6 @@ function coloredButtonStyle(enabled: boolean, hex: string): React.CSSProperties 
     textShadow: enabled ? '0 1px 2px rgba(0,0,0,0.35)' : 'none',
     cursor: enabled ? 'pointer' : 'default',
   }
-}
-
-const menuTipBannerStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 10,
-  padding: 'clamp(6px, 1.2vh, 9px) 14px',
-  borderRadius: 14,
-  border: '2px dashed rgba(232,207,138,0.5)',
-  background: 'rgba(0,0,0,0.2)',
-  fontFamily: "'Caveat', cursive",
-  fontWeight: 700,
-  fontSize: 'clamp(14px, 2.6vh, 19px)',
-  color: '#f5e2a8',
 }
 
 const menuBackButtonStyle: React.CSSProperties = {
