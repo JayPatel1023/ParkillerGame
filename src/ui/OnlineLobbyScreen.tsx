@@ -500,6 +500,19 @@ export default function OnlineLobbyScreen() {
             </button>
           </div>
 
+          {/* Cropped straight from the reference mockup image itself (backbutton.png, saved into
+              the project root) - a real illustrated mascot asset didn't exist anywhere else in
+              the project, and "extract it out of the mockup if you have to" is exactly what was
+              asked for. A tight crop around just the hooded figure, radial+bottom alpha-feathered
+              (see the scratchpad script that produced public/parkiller-mascot.png) so the
+              mockup's own busy photo background fades to transparent at the edges instead of
+              showing as a hard rectangle against this app's own dark board background. */}
+          <img
+            src="/parkiller-mascot.png"
+            alt=""
+            style={menuMascotStyle}
+          />
+
           <div style={menuPlaqueStyle}>
             <h1 style={menuTitleStyle}>Jugar online</h1>
             <p style={menuSubtitleStyle}>Creá una sala nueva o unite con un código</p>
@@ -948,15 +961,31 @@ const menuCloseButtonStyle: React.CSSProperties = {
   flexShrink: 0,
 }
 
+// Sized/positioned so the mascot's own hands (resting near the bottom of the crop - see
+// parkiller-mascot.png's own doc comment at its usage site) visually rest on top of
+// menuPlaqueStyle's own top edge just below it, same composition as the reference mockup (the
+// mascot peeking up from behind the "Jugar online" sign it's holding).
+const menuMascotStyle: React.CSSProperties = {
+  display: 'block',
+  alignSelf: 'center',
+  width: 'clamp(130px, 30vw, 190px)',
+  height: 'auto',
+  marginBottom: -26,
+  position: 'relative',
+  zIndex: 1,
+  filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.5))',
+}
+
 const menuPlaqueStyle: React.CSSProperties = {
   alignSelf: 'center',
   textAlign: 'center',
-  padding: '14px 32px',
+  padding: '20px 32px 14px',
   borderRadius: 14,
   background: 'rgba(0,0,0,0.22)',
   border: '2px solid rgba(201,162,75,0.5)',
   boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
   transform: 'rotate(-1deg)',
+  position: 'relative',
 }
 
 const menuTitleStyle: React.CSSProperties = {
