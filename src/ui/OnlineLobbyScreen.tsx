@@ -524,12 +524,21 @@ export default function OnlineLobbyScreen() {
   if (phase === 'menu') {
     return (
       <div className="menu-wrapper" style={wrapperStyle}>
-        {/* Reported directly, with a screenshot circling it: the blurred 3D board scene showing
-            through/around the panel (StartScreenBackground, shared with every other phase below)
-            read as a leftover "yellowish" backdrop clashing with this phase's own colorful cards
-            - dropped in favor of a plain flat fill, scoped to 'menu' only like the rest of this
-            redesign. */}
-        <div style={{ position: 'absolute', inset: 0, backgroundColor: '#05070c' }} />
+        {/* Reported directly (twice now, in opposite directions): first asked to drop the blurred
+            3D board scene entirely since it read as a leftover "yellowish" backdrop clashing with
+            this phase's own colorful cards, then asked to bring it back exactly as it was -
+            restored to the same StartScreenBackground+radial-gradient treatment every other phase
+            below still uses, unchanged from before that first request. */}
+        <div style={{ position: 'absolute', inset: 0, backgroundColor: '#05070c' }}>
+          <StartScreenBackground />
+        </div>
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'radial-gradient(ellipse at center, rgba(10,8,4,0.15) 0%, rgba(6,8,14,0.7) 100%)',
+          }}
+        />
         <div className="menu-panel" style={menuPanelStyle}>
           {/* Reported directly, with a screenshot circling this exact block: the badge/wordmark/
               tagline header was asked to be removed outright, not just resized - see the earlier
