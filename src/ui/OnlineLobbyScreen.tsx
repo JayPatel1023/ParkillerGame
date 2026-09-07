@@ -584,12 +584,10 @@ export default function OnlineLobbyScreen() {
                 GroupIcon/LinkIcon, the plain gradient+border card recipe) are all baked into
                 these images already, so the coded versions are dropped in favor of the real
                 artwork; only the badge's own blank space below it still needs paddingTop to clear. */}
-            {/* Reported directly, with diagonal lines drawn across both cards: tilt them slightly
-                away from each other - two flat parallel rectangles read as a plain grid, a small
-                opposing rotation on each (same trick as this file's own doodle text elsewhere)
-                reads as cards fanned out on a table instead, a lot more "3D" for a two-line CSS
-                transform. */}
-            <div className="menu-card" style={{ ...menuCardStyle('/backgrounds/leftbg.png'), transform: 'rotate(-3deg)' }}>
+            {/* Reported directly: the fanned-out tilt from an earlier pass (each card rotated a
+                few degrees away from the other, "diagonal lines drawn across both cards") is
+                reverted here - back to straight/level, no transform, as it originally was. */}
+            <div className="menu-card" style={menuCardStyle('/backgrounds/leftbg.png')}>
               <h3 className="menu-card-title" style={menuCardTitleStyle}>
                 Crear <span style={{ color: '#79e39a' }}>sala</span>
               </h3>
@@ -613,7 +611,7 @@ export default function OnlineLobbyScreen() {
               </button>
             </div>
 
-            <div className="menu-card" style={{ ...menuCardStyle('/backgrounds/bluebg.png'), transform: 'rotate(3deg)' }}>
+            <div className="menu-card" style={menuCardStyle('/backgrounds/bluebg.png')}>
               <h3 className="menu-card-title" style={menuCardTitleStyle}>
                 Unirse <span style={{ color: '#8ec4f5' }}>a sala</span>
               </h3>
@@ -1042,31 +1040,16 @@ const menuCardsRowStyle: React.CSSProperties = {
 // hand-coded gradient+border card recipe and separate circular icon badge (menuCardBadgeStyle,
 // GroupIcon/LinkIcon) are dropped entirely in favor of it.
 //
-// Reported directly, after the card-tilt pass: "rotate these on the Z axis, not the Y axis" - the
-// card wasn't actually ever on a Y-axis/3D transform (rotate() is always flat, in-plane Z-axis
-// rotation in CSS), but backgroundSize '100% 100%' HERE was non-uniformly stretching the art to
-// match this card's own content-driven box exactly, since the two rarely match the source image's
-// own fixed aspect pixel-for-pixel - stretching the image's own perfectly round badge circle into
-// an ellipse *before* the card's own flat rotation is even applied. An ellipse that's also tilted
-// reads exactly like a disc genuinely leaning away in 3D space, not a flat circle spun flat on a
-// table - close enough to "looks like it's rotating in 3D" to read as a real Y-axis rotation even
-// though no 3D transform was ever involved. 'cover' preserves the art's own aspect ratio (cropping
-// overflow instead of distorting it) so the badge stays a true circle - the rotation on top of it
-// now reads unambiguously as the flat Z-axis tilt it actually always was. overflow hidden is a
-// safety clip in case any real height still spills past the image's own rounded corners.
-//
-// paddingTop clears the image's own baked-in badge before this card's real title/content starts.
-// 'cover' means the image's own rendered scale tracks this box's own WIDTH (source images are
-// 1202px wide, taller than most of this card's own realistic aspect ratios, so width ends up
-// being the covering dimension) - a *percentage* padding-top would track that exactly (the CSS
-// spec resolves vertical padding percentages against the containing block's own width, the same
-// basis cover's width-scaling uses), but at this card's realistic width range that number is
-// bigger than it looks (a badge that reads modest at typical widths needs ~70-90px of clearance
-// once scaled) and reintroduces the exact vertical-budget overflow the earlier no-scroll pass
-// fixed, on ordinary desktop windows this time, not just short/narrow ones. Landed on the same
-// vh-based clamp as before instead, nudged up slightly - not pixel-exact at every width the way a
-// percentage would be, but close enough in practice not to visibly overlap, and it stays within
-// the vertical budget this screen has actually been built and re-verified against.
+// Reported directly: back to straight/level cards (the fanned-out tilt from an earlier pass is
+// reverted at each call site below) and "show every part of the image" - backgroundSize '100%
+// 100%' stretches the art to exactly fill this card's own box, so nothing is cropped out the way
+// 'cover' would (cover was only ever introduced to stop the tilt from making the badge read as a
+// disc leaning in 3D once ellipse-distorted by this same stretch - with the tilt gone, that's no
+// longer a concern, and showing the whole image plainly matters more). paddingTop clears the
+// image's own baked-in badge before this card's real title/content starts - tracks this card's
+// own HEIGHT under 100%/100% (the badge's fraction of the source image's own height maps directly
+// to the same fraction of this box once stretched), which is what the vh-based clamp below is
+// tuned against, not width the way it briefly needed to be under cover.
 function menuCardStyle(imageUrl: string): React.CSSProperties {
   return {
     flex: '1 1 260px',
@@ -1076,12 +1059,11 @@ function menuCardStyle(imageUrl: string): React.CSSProperties {
     alignItems: 'center',
     textAlign: 'center',
     gap: 'clamp(4px, 1vh, 10px)',
-    padding: 'clamp(54px, 11vh, 84px) clamp(14px, 3vw, 18px) clamp(12px, 2vh, 18px)',
+    padding: 'clamp(46px, 9vh, 76px) clamp(14px, 3vw, 18px) clamp(12px, 2vh, 18px)',
     borderRadius: 30,
     overflow: 'hidden',
     backgroundImage: `url(${imageUrl})`,
-    backgroundSize: 'cover',
-    backgroundPosition: 'center top',
+    backgroundSize: '100% 100%',
     backgroundRepeat: 'no-repeat',
     boxShadow: '0 10px 24px rgba(0,0,0,0.35)',
   }

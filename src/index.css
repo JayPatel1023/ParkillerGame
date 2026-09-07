@@ -183,13 +183,10 @@ button {
     height: 84px !important;
   }
   .menu-card {
-    /* The base clamp's own max (84px, in menuCardStyle) is tuned for badge clearance at a mobile
-       card's own realistic width, not for how much room a tall phone (e.g. iPhone 12, 390x844)
-       actually has to spare - 74px still clears that same badge at this breakpoint's own width
-       range (measured directly, ~72px needed) with a few px to give back to the overall budget.
-       A fixed override *smaller* than what the badge needs is what caused the original reported
-       overlap here (tuned for the pre-cover behavior) - this one stays above that line. */
-    padding-top: 74px !important;
+    /* Back to a smaller override now that menuCardStyle itself is back on backgroundSize:'100%
+       100%' (badge clearance tracks this card's own HEIGHT under that, not width the way it did
+       under 'cover') - see that function's own doc comment. */
+    padding-top: 38px !important;
     gap: 4px !important;
   }
   .menu-count-btn {
@@ -219,17 +216,11 @@ button {
     height: 42px !important;
   }
   .menu-card {
-    /* Reported directly, with screenshots of the title text landing right on top of the badge -
-       32px here was a bug, not a tradeoff: this rule's own cards are NOT meaningfully narrower
-       than the width breakpoint's own (the panel's own max-width caps every realistic layout,
-       side-by-side or stacked, to roughly the same ~300-380px card width), so the badge needs
-       essentially the *same* clearance here as there - matching the width breakpoint's own 74px
-       instead of a much smaller value that undershot it on every window this rule actually fires
-       for, not just the rare landscape-phone case it was written for. The extra space that
-       clearance now costs is clawed back from the mascot and gaps below instead, which don't
-       carry the same correctness risk when shrunk. */
-    padding-top: 74px !important;
-    padding-bottom: 2px !important;
+    /* Back to a smaller override now that menuCardStyle itself is back on backgroundSize:'100%
+       100%' - see that function's own doc comment and the width breakpoint's own matching note
+       above. */
+    padding-top: 30px !important;
+    padding-bottom: 6px !important;
     gap: 2px !important;
   }
   .menu-card-title {
