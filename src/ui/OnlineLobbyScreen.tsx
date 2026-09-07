@@ -523,14 +523,14 @@ export default function OnlineLobbyScreen() {
   // lockup until that asset is dropped into the project - swap the header badge's src once it is.
   if (phase === 'menu') {
     return (
-      <div style={wrapperStyle}>
+      <div className="menu-wrapper" style={wrapperStyle}>
         {/* Reported directly, with a screenshot circling it: the blurred 3D board scene showing
             through/around the panel (StartScreenBackground, shared with every other phase below)
             read as a leftover "yellowish" backdrop clashing with this phase's own colorful cards
             - dropped in favor of a plain flat fill, scoped to 'menu' only like the rest of this
             redesign. */}
         <div style={{ position: 'absolute', inset: 0, backgroundColor: '#05070c' }} />
-        <div style={menuPanelStyle}>
+        <div className="menu-panel" style={menuPanelStyle}>
           {/* Reported directly, with a screenshot circling this exact block: the badge/wordmark/
               tagline header was asked to be removed outright, not just resized - see the earlier
               size-fix commit for the same block, still shrunk down at the time this went. Only
@@ -556,10 +556,14 @@ export default function OnlineLobbyScreen() {
           <img
             src="/parkiller-mascot.png"
             alt="Jugar online - Creá una sala o unite con un código"
+            className="menu-mascot"
             style={menuMascotStyle}
           />
 
-          <div style={{ ...menuDoodleStyle, alignSelf: 'flex-end', marginRight: 'clamp(4px, 4vw, 24px)', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div
+            className="menu-doodle"
+            style={{ ...menuDoodleStyle, alignSelf: 'flex-end', marginRight: 'clamp(4px, 4vw, 24px)', display: 'flex', alignItems: 'center', gap: 6 }}
+          >
             ¡Vamos a jugar! <PencilIcon size={17} />
           </div>
 
@@ -571,16 +575,16 @@ export default function OnlineLobbyScreen() {
                 GroupIcon/LinkIcon, the plain gradient+border card recipe) are all baked into
                 these images already, so the coded versions are dropped in favor of the real
                 artwork; only the badge's own blank space below it still needs paddingTop to clear. */}
-            <div style={menuCardStyle('/backgrounds/leftbg.png')}>
-              <h3 style={menuCardTitleStyle}>
+            <div className="menu-card" style={menuCardStyle('/backgrounds/leftbg.png')}>
+              <h3 className="menu-card-title" style={menuCardTitleStyle}>
                 Crear <span style={{ color: '#79e39a' }}>sala</span>
               </h3>
-              <p style={menuCardSubtitleStyle}>Elige el número de jugadores y crea tu propia sala.</p>
+              <p className="menu-card-subtitle" style={menuCardSubtitleStyle}>Elige el número de jugadores y crea tu propia sala.</p>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
                 {[2, 3, 4, 5, 6].map((n) => (
                   <button
                     key={n}
-                    className="chunky-btn"
+                    className="chunky-btn menu-count-btn"
                     onClick={() => setPlayerCount(n)}
                     style={menuCountButtonStyle(n === playerCount, '#3fae66')}
                   >
@@ -589,17 +593,17 @@ export default function OnlineLobbyScreen() {
                   </button>
                 ))}
               </div>
-              <button className="chunky-btn" onClick={createRoom} style={coloredButtonStyle(true, '#3fae66')}>
+              <button className="chunky-btn menu-card-button" onClick={createRoom} style={coloredButtonStyle(true, '#3fae66')}>
                 Crear sala
                 <ArrowRightIcon size={17} />
               </button>
             </div>
 
-            <div style={menuCardStyle('/backgrounds/bluebg.png')}>
-              <h3 style={menuCardTitleStyle}>
+            <div className="menu-card" style={menuCardStyle('/backgrounds/bluebg.png')}>
+              <h3 className="menu-card-title" style={menuCardTitleStyle}>
                 Unirse <span style={{ color: '#8ec4f5' }}>a sala</span>
               </h3>
-              <p style={menuCardSubtitleStyle}>Ingresa el código de la sala para unirte a la partida.</p>
+              <p className="menu-card-subtitle" style={menuCardSubtitleStyle}>Ingresa el código de la sala para unirte a la partida.</p>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 12 }}>
                 <input
                   value={roomCodeInput}
@@ -609,7 +613,7 @@ export default function OnlineLobbyScreen() {
                 />
               </div>
               <button
-                className="chunky-btn"
+                className="chunky-btn menu-card-button"
                 onClick={joinRoom}
                 disabled={!roomCodeInput.trim()}
                 style={coloredButtonStyle(Boolean(roomCodeInput.trim()), '#3f8ee0')}
@@ -620,7 +624,7 @@ export default function OnlineLobbyScreen() {
             </div>
           </div>
 
-          <div style={menuTipBannerStyle}>
+          <div className="menu-tip-banner" style={menuTipBannerStyle}>
             <BulbIcon size={19} />
             <span>Tip: compartí el código de sala con tus amigos para armarla juntos</span>
           </div>
@@ -920,8 +924,8 @@ function menuCountButtonStyle(selected: boolean, hex: string): React.CSSProperti
   const dark = lighten(hex, -0.62)
   const darker = lighten(hex, -0.72)
   return {
-    width: 42,
-    height: 42,
+    width: 'clamp(32px, 6vh, 42px)',
+    height: 'clamp(32px, 6vh, 42px)',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -929,7 +933,7 @@ function menuCountButtonStyle(selected: boolean, hex: string): React.CSSProperti
     gap: 1,
     flexShrink: 0,
     fontFamily: "'Baloo 2', system-ui, sans-serif",
-    fontSize: 14,
+    fontSize: 'clamp(12px, 1.8vh, 14px)',
     fontWeight: 800,
     color: selected ? '#fff' : 'rgba(255,255,255,0.65)',
     background: selected
@@ -951,8 +955,8 @@ const menuPanelStyle: React.CSSProperties = {
   position: 'relative',
   display: 'flex',
   flexDirection: 'column',
-  gap: 14,
-  padding: 'clamp(14px, 2.5vh, 24px) clamp(16px, 4.5vw, 32px)',
+  gap: 'clamp(8px, 1.6vh, 14px)',
+  padding: 'clamp(10px, 2vh, 20px) clamp(14px, 4vw, 28px)',
   borderRadius: 28,
   background: 'linear-gradient(180deg, rgba(255,255,255,0.05), transparent 25%), linear-gradient(165deg, rgba(58, 46, 30, 0.85), rgba(30, 23, 14, 0.85))',
   border: '2px solid #7a5f26',
@@ -970,9 +974,9 @@ const menuHeaderRowStyle: React.CSSProperties = {
 }
 
 const menuCloseButtonStyle: React.CSSProperties = {
-  width: 40,
-  height: 40,
-  minWidth: 40,
+  width: 'clamp(32px, 6vh, 40px)',
+  height: 'clamp(32px, 6vh, 40px)',
+  minWidth: 32,
   borderRadius: '50%',
   display: 'flex',
   alignItems: 'center',
@@ -987,14 +991,18 @@ const menuCloseButtonStyle: React.CSSProperties = {
   flexShrink: 0,
 }
 
-// Full width of the panel's own content area rather than a small fixed footprint - the whole
-// image (mascot, its wooden "Jugar online" sign, and the dice) is the header now, not just a
-// small accent above a separate coded plaque, so it needs to actually read at a glance.
+// Reported directly, with a screenshot of the panel's own scrollbar: sized by *width* before
+// (min(360px, 88%)), which tracks a narrow phone screen fine but has no idea a short/wide desktop
+// window even exists - on a short window this stayed full-width-sized and simply pushed the rest
+// of the panel below the fold. Driven by *height* instead (vh, the actual scarce dimension on a
+// short window), width following automatically via the image's own aspect ratio - shrinks exactly
+// when vertical room is tight, on any device, not just a narrow one; the low max keeps it from
+// ballooning on a merely-wide (not short) window either, per "don't make it too big" either way.
 const menuMascotStyle: React.CSSProperties = {
   display: 'block',
   alignSelf: 'center',
-  width: 'min(360px, 88%)',
-  height: 'auto',
+  width: 'auto',
+  height: 'clamp(56px, 13vh, 130px)',
 }
 
 // Caveat (a handwritten-style Google Font, loaded in index.html for exactly this) for the
@@ -1003,7 +1011,7 @@ const menuMascotStyle: React.CSSProperties = {
 const menuDoodleStyle: React.CSSProperties = {
   fontFamily: "'Caveat', cursive",
   fontWeight: 700,
-  fontSize: 'clamp(20px, 4.5vw, 26px)',
+  fontSize: 'clamp(15px, 2.6vh, 24px)',
   color: '#f5e2a8',
   transform: 'rotate(-4deg)',
   textShadow: '0 2px 6px rgba(0,0,0,0.4)',
@@ -1011,7 +1019,7 @@ const menuDoodleStyle: React.CSSProperties = {
 
 const menuCardsRowStyle: React.CSSProperties = {
   display: 'flex',
-  gap: 14,
+  gap: 'clamp(8px, 1.4vh, 14px)',
   flexWrap: 'wrap',
 }
 
@@ -1031,8 +1039,8 @@ function menuCardStyle(imageUrl: string): React.CSSProperties {
     flexDirection: 'column',
     alignItems: 'center',
     textAlign: 'center',
-    gap: 10,
-    padding: '88px 18px 20px',
+    gap: 'clamp(4px, 1vh, 10px)',
+    padding: 'clamp(46px, 9vh, 76px) clamp(14px, 3vw, 18px) clamp(12px, 2vh, 18px)',
     borderRadius: 30,
     overflow: 'hidden',
     backgroundImage: `url(${imageUrl})`,
@@ -1045,7 +1053,7 @@ function menuCardStyle(imageUrl: string): React.CSSProperties {
 const menuCardTitleStyle: React.CSSProperties = {
   margin: 0,
   fontFamily: "'Baloo 2', system-ui, sans-serif",
-  fontSize: 21,
+  fontSize: 'clamp(16px, 2.6vh, 20px)',
   fontWeight: 800,
   color: '#fff6e0',
   textShadow: '0 2px 4px rgba(0,0,0,0.4)',
@@ -1053,7 +1061,7 @@ const menuCardTitleStyle: React.CSSProperties = {
 
 const menuCardSubtitleStyle: React.CSSProperties = {
   margin: '-4px 0 2px',
-  fontSize: 12.5,
+  fontSize: 'clamp(10.5px, 1.7vh, 12.5px)',
   lineHeight: 1.4,
   color: 'rgba(242,237,224,0.75)',
   maxWidth: 220,
@@ -1071,8 +1079,8 @@ function coloredButtonStyle(enabled: boolean, hex: string): React.CSSProperties 
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '11px 22px',
-    fontSize: 16,
+    padding: 'clamp(8px, 1.6vh, 11px) 22px',
+    fontSize: 'clamp(14px, 2.2vh, 16px)',
     fontWeight: 800,
     letterSpacing: 0.3,
     fontFamily: "'Baloo 2', system-ui, sans-serif",
@@ -1094,13 +1102,13 @@ const menuTipBannerStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 10,
-  padding: '9px 14px',
+  padding: 'clamp(6px, 1.2vh, 9px) 14px',
   borderRadius: 14,
   border: '2px dashed rgba(232,207,138,0.5)',
   background: 'rgba(0,0,0,0.2)',
   fontFamily: "'Caveat', cursive",
   fontWeight: 700,
-  fontSize: 'clamp(16px, 3.5vw, 19px)',
+  fontSize: 'clamp(14px, 2.6vh, 19px)',
   color: '#f5e2a8',
 }
 
@@ -1111,6 +1119,6 @@ const menuBackButtonStyle: React.CSSProperties = {
   gap: 8,
   alignSelf: 'center',
   width: 'auto',
-  padding: '10px 26px',
+  padding: 'clamp(7px, 1.4vh, 10px) 24px',
 }
 

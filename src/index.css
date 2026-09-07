@@ -161,6 +161,86 @@ button {
   }
 }
 
+/* OnlineLobbyScreen's own 'menu' phase, its two-card layout specifically - reported directly,
+   with screenshots across several phone sizes, all still showing a scrollbar despite that same
+   report's own vh-based sizing fix on the surrounding inline styles (see that file's own
+   menuMascotStyle/menuCardStyle comments). vh-driven sizing alone can't fix this case: below
+   ~520px wide, menuCardsRowStyle's flexWrap stacks the two cards into one column instead of
+   side-by-side, roughly *doubling* the vertical space they need - on a typical tall-but-narrow
+   phone (e.g. 390x844) there's plenty of vh to go around, so those clamps sit near their own max
+   the whole time; the actual problem is width-triggered, not height-scarce, which vh alone has no
+   way to see. Needs an actual width breakpoint - overriding a few of that file's own inline
+   styles (!important is the only way to win against an inline style attribute's own specificity;
+   scoped to just this one breakpoint, not used anywhere else in this file). Card subtitles and
+   the hand-drawn doodle are dropped first (the least essential content, once real space runs
+   short) rather than shrinking every element into illegibly small text. */
+@media (max-width: 520px) {
+  .menu-doodle,
+  .menu-card-subtitle {
+    display: none !important;
+  }
+  .menu-mascot {
+    height: 56px !important;
+  }
+  .menu-card {
+    padding-top: 38px !important;
+    gap: 4px !important;
+  }
+  .menu-count-btn {
+    width: 30px !important;
+    height: 30px !important;
+  }
+}
+
+/* A second, independent axis from the width breakpoint above - a short-but-WIDE window (a phone
+   held sideways, e.g. 844x390) never triggers the stacked-cards case at all (side-by-side already
+   fits comfortably at that width), so it doesn't need the doodle/subtitle dropped - it just needs
+   the same handful of elements physically shorter, the same problem this file's own vh clamps
+   were meant to solve, pushed slightly further for the shortest realistic windows still measured
+   overflowing (a real phone's own landscape height, ~390-430px) even after that first pass. */
+@media (max-height: 700px) {
+  .menu-doodle,
+  .menu-card-subtitle {
+    display: none !important;
+  }
+  .menu-mascot {
+    height: 40px !important;
+  }
+  .menu-card {
+    padding-top: 30px !important;
+    padding-bottom: 8px !important;
+    gap: 3px !important;
+  }
+  .menu-card-title {
+    font-size: 15px !important;
+  }
+  .menu-count-btn {
+    width: 26px !important;
+    height: 26px !important;
+  }
+  .menu-card-button {
+    padding-top: 5px !important;
+    padding-bottom: 5px !important;
+    font-size: 13px !important;
+  }
+  .menu-panel {
+    gap: 4px !important;
+  }
+  .menu-tip-banner {
+    padding-top: 2px !important;
+    padding-bottom: 2px !important;
+    font-size: 13px !important;
+  }
+  /* The outermost centering wrapper's own 16px-top+bottom padding (shared with every other phase
+     - see wrapperStyle's own definition - so scoped here to .menu-wrapper specifically, the
+     'menu' phase's own instance of it, rather than trimming it for every phase) was standing
+     between a real phone held sideways (e.g. 844x390) and fitting with zero scroll. */
+  .menu-wrapper {
+    padding-top: 4px !important;
+    padding-bottom: 4px !important;
+  }
+}
+
 /* StartScreen's background photo - firstbag.jpg (supplied directly): a candlelit wood desk with
    the physical board laid flat and centered, "PARKILLER"/"RULES" books framing it. Unlike the
    earlier start.png/start-mobile.png pair, this one photo's own composition is already centered
