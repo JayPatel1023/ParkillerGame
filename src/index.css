@@ -183,7 +183,13 @@ button {
     height: 84px !important;
   }
   .menu-card {
-    padding-top: 38px !important;
+    /* The base clamp's own max (84px, in menuCardStyle) is tuned for badge clearance at a mobile
+       card's own realistic width, not for how much room a tall phone (e.g. iPhone 12, 390x844)
+       actually has to spare - 74px still clears that same badge at this breakpoint's own width
+       range (measured directly, ~72px needed) with a few px to give back to the overall budget.
+       A fixed override *smaller* than what the badge needs is what caused the original reported
+       overlap here (tuned for the pre-cover behavior) - this one stays above that line. */
+    padding-top: 74px !important;
     gap: 4px !important;
   }
   .menu-count-btn {
@@ -197,8 +203,14 @@ button {
    fits comfortably at that width), so it doesn't need the doodle/subtitle dropped - it just needs
    the same handful of elements physically shorter, the same problem this file's own vh clamps
    were meant to solve, pushed slightly further for the shortest realistic windows still measured
-   overflowing (a real phone's own landscape height, ~390-430px) even after that first pass. */
-@media (max-height: 700px) {
+   overflowing (a real phone's own landscape height, ~390-430px) even after that first pass.
+   Reported directly again after the badge-clearance fix raised menuCardStyle's own base padding
+   clamp: a moderately-short *narrow* phone (740px tall, still well above a landscape phone's own
+   height but shorter than most portrait phones tested) fell into a gap between the two
+   breakpoints - narrow enough to already drop the doodle/subtitle via the width rule above, but
+   not short enough to trigger this one, so it never got this rule's own extra savings either.
+   700 -> 780 closes that gap. */
+@media (max-height: 780px) {
   .menu-doodle,
   .menu-card-subtitle {
     display: none !important;
@@ -207,8 +219,13 @@ button {
     height: 50px !important;
   }
   .menu-card {
-    padding-top: 24px !important;
-    padding-bottom: 6px !important;
+    /* Kept as a fixed override here (unlike the width breakpoint above) - this is the genuinely
+       tight case vertical-budget-wise (a landscape phone, side-by-side cards fairly wide under
+       cover's own width-driven scale); a modest fixed value trades a little badge clearance for
+       actually fitting without a scrollbar, on what's already the least common orientation to hit
+       this in - the base clamp's own min (54px) undershoots the badge slightly more than this. */
+    padding-top: 32px !important;
+    padding-bottom: 4px !important;
     gap: 2px !important;
   }
   .menu-card-title {

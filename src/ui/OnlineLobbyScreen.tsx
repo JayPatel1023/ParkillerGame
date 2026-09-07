@@ -1031,11 +1031,33 @@ const menuCardsRowStyle: React.CSSProperties = {
 // The client's own card-frame art (leftbg.png/bluebg.png) already bakes in the glow border,
 // corner crown/star decorations, the icon badge, and the bottom wave - this file's own earlier
 // hand-coded gradient+border card recipe and separate circular icon badge (menuCardBadgeStyle,
-// GroupIcon/LinkIcon) are dropped entirely in favor of it. backgroundSize '100% 100%' stretches
-// the art to match this card's own actual (content-driven) height exactly, since the two rarely
-// match the source image's own fixed aspect ratio pixel-for-pixel; overflow hidden is a safety
-// clip in case any real height still spills past the image's own rounded corners. paddingTop
-// clears the image's own baked-in badge before this card's real title/content starts.
+// GroupIcon/LinkIcon) are dropped entirely in favor of it.
+//
+// Reported directly, after the card-tilt pass: "rotate these on the Z axis, not the Y axis" - the
+// card wasn't actually ever on a Y-axis/3D transform (rotate() is always flat, in-plane Z-axis
+// rotation in CSS), but backgroundSize '100% 100%' HERE was non-uniformly stretching the art to
+// match this card's own content-driven box exactly, since the two rarely match the source image's
+// own fixed aspect pixel-for-pixel - stretching the image's own perfectly round badge circle into
+// an ellipse *before* the card's own flat rotation is even applied. An ellipse that's also tilted
+// reads exactly like a disc genuinely leaning away in 3D space, not a flat circle spun flat on a
+// table - close enough to "looks like it's rotating in 3D" to read as a real Y-axis rotation even
+// though no 3D transform was ever involved. 'cover' preserves the art's own aspect ratio (cropping
+// overflow instead of distorting it) so the badge stays a true circle - the rotation on top of it
+// now reads unambiguously as the flat Z-axis tilt it actually always was. overflow hidden is a
+// safety clip in case any real height still spills past the image's own rounded corners.
+//
+// paddingTop clears the image's own baked-in badge before this card's real title/content starts.
+// 'cover' means the image's own rendered scale tracks this box's own WIDTH (source images are
+// 1202px wide, taller than most of this card's own realistic aspect ratios, so width ends up
+// being the covering dimension) - a *percentage* padding-top would track that exactly (the CSS
+// spec resolves vertical padding percentages against the containing block's own width, the same
+// basis cover's width-scaling uses), but at this card's realistic width range that number is
+// bigger than it looks (a badge that reads modest at typical widths needs ~70-90px of clearance
+// once scaled) and reintroduces the exact vertical-budget overflow the earlier no-scroll pass
+// fixed, on ordinary desktop windows this time, not just short/narrow ones. Landed on the same
+// vh-based clamp as before instead, nudged up slightly - not pixel-exact at every width the way a
+// percentage would be, but close enough in practice not to visibly overlap, and it stays within
+// the vertical budget this screen has actually been built and re-verified against.
 function menuCardStyle(imageUrl: string): React.CSSProperties {
   return {
     flex: '1 1 260px',
@@ -1045,11 +1067,12 @@ function menuCardStyle(imageUrl: string): React.CSSProperties {
     alignItems: 'center',
     textAlign: 'center',
     gap: 'clamp(4px, 1vh, 10px)',
-    padding: 'clamp(46px, 9vh, 76px) clamp(14px, 3vw, 18px) clamp(12px, 2vh, 18px)',
+    padding: 'clamp(54px, 11vh, 84px) clamp(14px, 3vw, 18px) clamp(12px, 2vh, 18px)',
     borderRadius: 30,
     overflow: 'hidden',
     backgroundImage: `url(${imageUrl})`,
-    backgroundSize: '100% 100%',
+    backgroundSize: 'cover',
+    backgroundPosition: 'center top',
     backgroundRepeat: 'no-repeat',
     boxShadow: '0 10px 24px rgba(0,0,0,0.35)',
   }
