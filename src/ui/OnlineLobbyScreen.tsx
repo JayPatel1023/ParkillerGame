@@ -516,10 +516,19 @@ export default function OnlineLobbyScreen() {
   if (phase === 'menu') {
     return (
       <div className="menu-wrapper" style={wrapperStyle}>
-        {/* Reported directly (three times now, back and forth): dropped, restored, now dropped
-            again - the "yellowish" blurred 3D board scene (StartScreenBackground, still used
-            unchanged by every other phase below) is back to a plain flat fill for this phase. */}
-        <div style={{ position: 'absolute', inset: 0, backgroundColor: '#05070c' }} />
+        {/* Reported directly, back and forth several times now: dropped, restored, dropped again,
+            now restored again - the rotating 3D board scene (StartScreenBackground, same as every
+            other phase below) stays. Not touching this again without an explicit new request. */}
+        <div style={{ position: 'absolute', inset: 0, backgroundColor: '#05070c' }}>
+          <StartScreenBackground />
+        </div>
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'radial-gradient(ellipse at center, rgba(10,8,4,0.15) 0%, rgba(6,8,14,0.7) 100%)',
+          }}
+        />
         <div className="menu-panel" style={menuPanelStyle}>
           {/* Reported directly, with a screenshot circling this exact block: the badge/wordmark/
               tagline header was asked to be removed outright, not just resized - see the earlier
