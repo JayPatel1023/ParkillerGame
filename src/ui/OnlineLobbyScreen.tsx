@@ -695,6 +695,56 @@ export default function OnlineLobbyScreen() {
     )
   }
 
+  // Reported directly, with a reference mockup: "delete the current format, update it nicely" -
+  // the plain "Jugar online" card + a single line of hint text ("Conectando a Photon...") this
+  // phase used to share with error/stopped/creating/joining below is replaced with a dedicated
+  // screen of its own, the same way 'menu' got one. connecting-hero.png (supplied directly) is the
+  // mascot-juggling-dice art with its own "Conectando..." wordmark and loading dots baked in - the
+  // source file had a literal checkerboard "transparency preview" pattern baked in as *opaque*
+  // pixels (not real alpha) rather than the image actually being transparent, confirmed by
+  // sampling raw pixel values directly; a naive global color-key to remove it would have punched
+  // holes in the art's own white dice and cream-colored text (both close to the checker's own
+  // tones), so it was flood-filled from the image border instead (only pixels *connected* to the
+  // border through a chain of locally-similar tones count as background) and re-filled with a
+  // dark radial vignette matching this app's own carved-wood palette, rather than left transparent
+  // - a fill blends any leftover imprecision softly into the backdrop, where transparency would
+  // have shown it as a visible hole.
+  if (phase === 'connecting') {
+    return (
+      <div style={wrapperStyle}>
+        <div style={{ position: 'absolute', inset: 0, backgroundColor: '#05070c' }}>
+          <StartScreenBackground />
+        </div>
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'radial-gradient(ellipse at center, rgba(10,8,4,0.15) 0%, rgba(6,8,14,0.7) 100%)',
+          }}
+        />
+        <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+          <img
+            src="/connecting-hero.png"
+            alt="Conectando..."
+            style={{ width: 'min(460px, 82vw)', height: 'auto', filter: 'drop-shadow(0 12px 32px rgba(0,0,0,0.55))' }}
+          />
+          <p
+            style={{
+              margin: 0,
+              fontFamily: "'Baloo 2', system-ui, sans-serif",
+              fontSize: 'clamp(14px, 3.2vw, 18px)',
+              fontWeight: 700,
+              color: '#e8cf8a',
+              textShadow: '0 2px 6px rgba(0,0,0,0.5)',
+            }}
+          >
+            Preparando la partida
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={wrapperStyle}>
       {/* backgroundColor here matches StartScreenBackground's own internal fog color - see
@@ -720,8 +770,6 @@ export default function OnlineLobbyScreen() {
             Jugar online
           </h1>
         </div>
-
-        {phase === 'connecting' && <p style={hintStyle}>Conectando a Photon...</p>}
 
         {phase === 'error' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 18, width: '100%' }}>
