@@ -161,90 +161,35 @@ button {
   }
 }
 
-/* OnlineLobbyScreen's own 'menu' phase, its two-card layout specifically - reported directly,
-   with screenshots across several phone sizes, all still showing a scrollbar despite that same
-   report's own vh-based sizing fix on the surrounding inline styles (see that file's own
-   menuMascotStyle/menuCardStyle comments). vh-driven sizing alone can't fix this case: below
-   ~520px wide, menuCardsRowStyle's flexWrap stacks the two cards into one column instead of
-   side-by-side, roughly *doubling* the vertical space they need - on a typical tall-but-narrow
-   phone (e.g. 390x844) there's plenty of vh to go around, so those clamps sit near their own max
-   the whole time; the actual problem is width-triggered, not height-scarce, which vh alone has no
-   way to see. Needs an actual width breakpoint - overriding a few of that file's own inline
-   styles (!important is the only way to win against an inline style attribute's own specificity;
-   scoped to just this one breakpoint, not used anywhere else in this file). Card subtitles and
-   the hand-drawn doodle are dropped first (the least essential content, once real space runs
-   short) rather than shrinking every element into illegibly small text. */
+/* OnlineLobbyScreen's own 'menu' phase used to hack around not fitting a short/narrow window with
+   a pair of width/height media queries here, forcing individual elements (the mascot, card
+   padding, count-pill size...) to different fixed sizes at different breakpoints - reported
+   directly as looking "찌그러져"/distorted at in-between sizes, since a hard per-element cliff
+   like that makes the mascot and the cards shrink at completely different rates the moment a
+   window crosses one breakpoint but not the other. Replaced with useScaleToFit (see that hook's
+   own doc comment in OnlineLobbyScreen.tsx) - one uniform CSS transform on the whole panel,
+   computed from actual measured overflow - for the *height* axis specifically. mascot/card sizing
+   are their own vw-based clamps now (inline styles, not here) for the *width* axis, since a
+   narrow phone's own panel is already physically narrower (min(760px, 94vw)) and a mascot/card
+   padding sized for a wide desktop panel would look oversized next to it - the same per-element
+   mismatch complaint, just on the other axis. What's left here is content this app can genuinely
+   live without on a cramped, narrow, *stacked* (menuCardsRowStyle's own flexWrap) phone layout -
+   dropping it outright rather than shrinking it avoids yet another per-element size mismatch. */
 @media (max-width: 520px) {
   .menu-doodle,
   .menu-card-subtitle {
     display: none !important;
   }
-  .menu-mascot {
-    height: 100px !important;
-  }
-  .menu-card {
-    /* Back to a smaller override now that menuCardStyle itself is back on backgroundSize:'100%
-       100%' (badge clearance tracks this card's own HEIGHT under that, not width the way it did
-       under 'cover') - see that function's own doc comment. */
-    padding-top: 38px !important;
-    gap: 4px !important;
-  }
-  .menu-count-btn {
-    width: 30px !important;
-    height: 30px !important;
-  }
 }
 
-/* A second, independent axis from the width breakpoint above - a short-but-WIDE window (a phone
-   held sideways, e.g. 844x390) never triggers the stacked-cards case at all (side-by-side already
-   fits comfortably at that width), so it doesn't need the doodle/subtitle dropped - it just needs
-   the same handful of elements physically shorter, the same problem this file's own vh clamps
-   were meant to solve, pushed slightly further for the shortest realistic windows still measured
-   overflowing (a real phone's own landscape height, ~390-430px) even after that first pass.
-   Reported directly again after the badge-clearance fix raised menuCardStyle's own base padding
-   clamp: a moderately-short *narrow* phone (740px tall, still well above a landscape phone's own
-   height but shorter than most portrait phones tested) fell into a gap between the two
-   breakpoints - narrow enough to already drop the doodle/subtitle via the width rule above, but
-   not short enough to trigger this one, so it never got this rule's own extra savings either.
-   700 -> 780 closes that gap. */
-@media (max-height: 780px) {
+/* Same idea, the other axis - a landscape phone (short, not narrow) never triggers the width rule
+   above, but is exactly as cramped for the same reason: dropping this same decorative content
+   gives menuMascotStyle/menuCardStyle's own min(vw, vh) clamps and useScaleToFit's own uniform
+   transform less height to still have to make up between them. */
+@media (max-height: 460px) {
   .menu-doodle,
   .menu-card-subtitle {
     display: none !important;
-  }
-  .menu-mascot {
-    height: 50px !important;
-  }
-  .menu-card {
-    /* Back to a smaller override now that menuCardStyle itself is back on backgroundSize:'100%
-       100%' - see that function's own doc comment and the width breakpoint's own matching note
-       above. */
-    padding-top: 30px !important;
-    padding-bottom: 6px !important;
-    gap: 2px !important;
-  }
-  .menu-card-title {
-    font-size: 15px !important;
-  }
-  .menu-count-btn {
-    width: 26px !important;
-    height: 26px !important;
-  }
-  .menu-card-button {
-    padding-top: 5px !important;
-    padding-bottom: 5px !important;
-    font-size: 13px !important;
-  }
-  .menu-panel {
-    gap: 3px !important;
-  }
-  /* The outermost centering wrapper's own 16px-top+bottom padding (shared with every other phase
-     - see wrapperStyle's own definition - so scoped here to .menu-wrapper specifically, the
-     'menu' phase's own instance of it, rather than trimming it for every phase) was standing
-     between a real phone held sideways (e.g. 844x390) and fitting with zero scroll. */
-  .menu-wrapper {
-    padding-top: 4px !important;
-    padding-bottom: 4px !important;
   }
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { StartScreenBackground } from '../scene/StartScreenBackground'
 
 function lighten(hex: string, amount: number): string {
@@ -164,6 +164,47 @@ function PencilIcon({ size = 18 }: { size?: number }) {
   )
 }
 
+// Reported directly, with a screenshot at a window height where the mascot had shrunk to a tiny
+// fixed size via a CSS breakpoint while the cards below it stayed full-size: "왜 이지러져 나오는지
+// 모르겠다" (I don't know why it comes out distorted) - a hard per-element breakpoint cliff like
+// that reads as broken the moment a window lands between "big" and "small", since two elements
+// end up shrinking at completely different rates. Scaling the whole panel uniformly instead - one
+// CSS transform, computed from how much taller the panel's own natural/unscaled content is than
+// the space actually available - keeps every element's relative proportions identical at any
+// size: nothing ever shrinks faster than anything else, and it only engages once content
+// genuinely doesn't fit (a tall window leaves scale at 1, untouched). `transform` doesn't reflow,
+// so re-measuring the panel's own offsetHeight is unaffected by whatever scale is already
+// applied - safe to recompute on every resize without ever needing to reset first. minScale is a
+// last-resort floor (a genuinely tiny window falls back to the outer wrapper's own scroll instead
+// of shrinking text past legibility - see wrapperStyle's own overflowY).
+function useScaleToFit(ref: React.RefObject<HTMLElement | null>, minScale = 0.5) {
+  const [scale, setScale] = useState(1)
+  const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 })
+
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const recompute = () => {
+      const width = el.offsetWidth
+      const height = el.offsetHeight
+      if (width === 0 || height === 0) return
+      setNaturalSize({ width, height })
+      const availableHeight = window.innerHeight * 0.94
+      setScale(Math.max(minScale, Math.min(1, availableHeight / height)))
+    }
+    recompute()
+    const resizeObserver = new ResizeObserver(recompute)
+    resizeObserver.observe(el)
+    window.addEventListener('resize', recompute)
+    return () => {
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', recompute)
+    }
+  }, [ref, minScale])
+
+  return { scale, naturalSize }
+}
+
 type Phase = 'connecting' | 'error' | 'menu' | 'creating' | 'joining' | 'lobby' | 'game' | 'stopped'
 
 export default function OnlineLobbyScreen() {
@@ -207,6 +248,8 @@ export default function OnlineLobbyScreen() {
   // connect() again, exactly what a real retry needs - reusing the old, possibly-broken connection
   // object instead wouldn't reliably recover from whatever state it died in.
   const [connectAttempt, setConnectAttempt] = useState(0)
+  const menuPanelRef = useRef<HTMLDivElement>(null)
+  const { scale: menuScale, naturalSize: menuNaturalSize } = useScaleToFit(menuPanelRef)
 
   useEffect(() => {
     const appId = import.meta.env.VITE_PHOTON_APP_ID
@@ -529,7 +572,24 @@ export default function OnlineLobbyScreen() {
             background: 'radial-gradient(ellipse at center, rgba(10,8,4,0.15) 0%, rgba(6,8,14,0.7) 100%)',
           }}
         />
-        <div className="menu-panel" style={menuPanelStyle}>
+        {/* See useScaleToFit's own doc comment - this sizing div reserves exactly the panel's own
+            post-scale footprint (natural size × scale) in the flex-centered wrapper above, since
+            `transform` alone doesn't shrink the space an absolutely-positioned element would
+            otherwise occupy. Falls back to the panel's own intrinsic size before the first layout
+            measurement lands (0×0 initially), which resolves within the same paint via
+            useLayoutEffect - never a visible flash of the wrong size. */}
+        <div
+          style={
+            menuNaturalSize.width
+              ? { width: menuNaturalSize.width * menuScale, height: menuNaturalSize.height * menuScale, position: 'relative' }
+              : { position: 'relative' }
+          }
+        >
+          <div
+            ref={menuPanelRef}
+            className="menu-panel"
+            style={{ ...menuPanelStyle, transform: `scale(${menuScale})`, transformOrigin: 'top left', position: menuNaturalSize.width ? 'absolute' : 'relative', top: 0, left: 0 }}
+          >
           {/* Reported directly, with a screenshot circling this exact block: the badge/wordmark/
               tagline header was asked to be removed outright, not just resized - see the earlier
               size-fix commit for the same block, still shrunk down at the time this went. Only
@@ -629,6 +689,7 @@ export default function OnlineLobbyScreen() {
           <button className="chunky-btn" onClick={() => (window.location.hash = '')} style={menuBackButtonStyle}>
             <ArrowLeftIcon size={15} /> Volver
           </button>
+          </div>
         </div>
       </div>
     )
@@ -921,8 +982,8 @@ function menuCountButtonStyle(selected: boolean, hex: string): React.CSSProperti
   const dark = lighten(hex, -0.62)
   const darker = lighten(hex, -0.72)
   return {
-    width: 'clamp(32px, 6vh, 42px)',
-    height: 'clamp(32px, 6vh, 42px)',
+    width: 42,
+    height: 42,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -930,7 +991,7 @@ function menuCountButtonStyle(selected: boolean, hex: string): React.CSSProperti
     gap: 1,
     flexShrink: 0,
     fontFamily: "'Baloo 2', system-ui, sans-serif",
-    fontSize: 'clamp(12px, 1.8vh, 14px)',
+    fontSize: 14,
     fontWeight: 800,
     color: selected ? '#fff' : 'rgba(255,255,255,0.65)',
     background: selected
@@ -948,19 +1009,21 @@ function menuCountButtonStyle(selected: boolean, hex: string): React.CSSProperti
 // cards need more room than the 400px compact card every other phase still uses), and its own
 // header/plaque/tip-banner styles that don't apply anywhere else in this file.
 
+// No maxHeight/overflow here anymore - see useScaleToFit's own doc comment above the component:
+// this panel's natural (unscaled) height is measured directly and the whole thing is scaled down
+// uniformly to fit, rather than this element clipping/scrolling its own content independently of
+// everything else in it.
 const menuPanelStyle: React.CSSProperties = {
   position: 'relative',
   display: 'flex',
   flexDirection: 'column',
-  gap: 'clamp(8px, 1.6vh, 14px)',
-  padding: 'clamp(10px, 2vh, 20px) clamp(14px, 4vw, 28px)',
+  gap: 14,
+  padding: '20px 28px',
   borderRadius: 28,
   background: 'linear-gradient(180deg, rgba(255,255,255,0.05), transparent 25%), linear-gradient(165deg, rgba(58, 46, 30, 0.85), rgba(30, 23, 14, 0.85))',
   border: '2px solid #7a5f26',
   boxShadow: '0 10px 30px rgba(0,0,0,0.5), inset 0 0 0 3px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)',
   width: 'min(760px, 94vw)',
-  maxHeight: '94vh',
-  overflowY: 'auto',
   boxSizing: 'border-box',
 }
 
@@ -971,8 +1034,8 @@ const menuHeaderRowStyle: React.CSSProperties = {
 }
 
 const menuCloseButtonStyle: React.CSSProperties = {
-  width: 'clamp(32px, 6vh, 40px)',
-  height: 'clamp(32px, 6vh, 40px)',
+  width: 40,
+  height: 40,
   minWidth: 32,
   borderRadius: '50%',
   display: 'flex',
@@ -988,18 +1051,18 @@ const menuCloseButtonStyle: React.CSSProperties = {
   flexShrink: 0,
 }
 
-// Reported directly, with a screenshot of the panel's own scrollbar: sized by *width* before
-// (min(360px, 88%)), which tracks a narrow phone screen fine but has no idea a short/wide desktop
-// window even exists - on a short window this stayed full-width-sized and simply pushed the rest
-// of the panel below the fold. Driven by *height* instead (vh, the actual scarce dimension on a
-// short window), width following automatically via the image's own aspect ratio - shrinks exactly
-// when vertical room is tight, on any device, not just a narrow one; the low max keeps it from
-// ballooning on a merely-wide (not short) window either, per "don't make it too big" either way.
+// min(vw, vh) rather than picking one: a narrow phone's own panel is already physically narrower
+// (min(760px, 94vw)), so a mascot sized only for a wide desktop panel would look oversized next to
+// the now-narrower cards below it (the vw term handles this); a landscape phone is short rather
+// than narrow, so the vw term alone never engages there, and useScaleToFit's own uniform transform
+// (see that hook's own doc comment) has a legibility floor it can't always fully make up on its
+// own - the vh term catches that case too, smoothly, matched below by menuCardStyle's own padding
+// so both continue shrinking in step rather than reintroducing the original per-element mismatch.
 const menuMascotStyle: React.CSSProperties = {
   display: 'block',
   alignSelf: 'center',
   width: 'auto',
-  height: 'clamp(92px, 25vh, 270px)',
+  height: 'clamp(60px, min(22vw, 19vh), 220px)',
 }
 
 // Caveat (a handwritten-style Google Font, loaded in index.html for exactly this) for the
@@ -1008,7 +1071,7 @@ const menuMascotStyle: React.CSSProperties = {
 const menuDoodleStyle: React.CSSProperties = {
   fontFamily: "'Caveat', cursive",
   fontWeight: 700,
-  fontSize: 'clamp(15px, 2.6vh, 24px)',
+  fontSize: 22,
   color: '#f5e2a8',
   transform: 'rotate(-4deg)',
   textShadow: '0 2px 6px rgba(0,0,0,0.4)',
@@ -1016,7 +1079,7 @@ const menuDoodleStyle: React.CSSProperties = {
 
 const menuCardsRowStyle: React.CSSProperties = {
   display: 'flex',
-  gap: 'clamp(8px, 1.4vh, 14px)',
+  gap: 16,
   flexWrap: 'wrap',
 }
 
@@ -1043,8 +1106,8 @@ function menuCardStyle(imageUrl: string): React.CSSProperties {
     flexDirection: 'column',
     alignItems: 'center',
     textAlign: 'center',
-    gap: 'clamp(4px, 1vh, 10px)',
-    padding: 'clamp(46px, 9vh, 76px) clamp(12px, 2.5vw, 16px) clamp(10px, 1.8vh, 16px)',
+    gap: 8,
+    padding: 'clamp(30px, min(12vw, 9vh), 68px) 16px 16px',
     borderRadius: 30,
     overflow: 'hidden',
     backgroundImage: `url(${imageUrl})`,
@@ -1057,7 +1120,7 @@ function menuCardStyle(imageUrl: string): React.CSSProperties {
 const menuCardTitleStyle: React.CSSProperties = {
   margin: 0,
   fontFamily: "'Baloo 2', system-ui, sans-serif",
-  fontSize: 'clamp(15px, 2.3vh, 18px)',
+  fontSize: 19,
   fontWeight: 800,
   color: '#fff6e0',
   textShadow: '0 2px 4px rgba(0,0,0,0.4)',
@@ -1065,7 +1128,7 @@ const menuCardTitleStyle: React.CSSProperties = {
 
 const menuCardSubtitleStyle: React.CSSProperties = {
   margin: '-4px 0 2px',
-  fontSize: 'clamp(10px, 1.5vh, 11.5px)',
+  fontSize: 12,
   lineHeight: 1.4,
   color: 'rgba(242,237,224,0.75)',
   maxWidth: 200,
@@ -1083,8 +1146,8 @@ function coloredButtonStyle(enabled: boolean, hex: string): React.CSSProperties 
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 'clamp(8px, 1.6vh, 11px) 22px',
-    fontSize: 'clamp(14px, 2.2vh, 16px)',
+    padding: '11px 22px',
+    fontSize: 16,
     fontWeight: 800,
     letterSpacing: 0.3,
     fontFamily: "'Baloo 2', system-ui, sans-serif",
@@ -1109,6 +1172,6 @@ const menuBackButtonStyle: React.CSSProperties = {
   gap: 8,
   alignSelf: 'center',
   width: 'auto',
-  padding: 'clamp(7px, 1.4vh, 10px) 24px',
+  padding: '10px 24px',
 }
 
