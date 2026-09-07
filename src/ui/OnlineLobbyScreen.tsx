@@ -566,13 +566,13 @@ export default function OnlineLobbyScreen() {
             </button>
           </div>
 
-          {/* Cropped straight from the reference mockup image itself (backbutton.png, saved into
-              the project root) - a real illustrated mascot asset didn't exist anywhere else in
-              the project, and "extract it out of the mockup if you have to" is exactly what was
-              asked for. A tight crop around just the hooded figure, radial+bottom alpha-feathered
-              (see the scratchpad script that produced public/parkiller-mascot.png) so the
-              mockup's own busy photo background fades to transparent at the edges instead of
-              showing as a hard rectangle against this app's own dark board background. */}
+          {/* Reported directly: the first version of this (auto-cropped + manually feathered out
+              of the mockup screenshot itself, backbutton.png) was "vaguely" done and needed
+              swapping - the client supplied their own, better-isolated cutout instead
+              (public/icons/parkiBagk.png, already alpha-faded on a clean radial glow, no busy
+              photo background to fight with) and this is a straight crop of just the hooded
+              figure out of THAT, cropped tighter to drop its own wooden sign/dice so this app's
+              own coded "Jugar online" plaque right below isn't duplicated. */}
           <img
             src="/parkiller-mascot.png"
             alt=""
@@ -1018,9 +1018,9 @@ const menuCloseButtonStyle: React.CSSProperties = {
 const menuMascotStyle: React.CSSProperties = {
   display: 'block',
   alignSelf: 'center',
-  width: 'clamp(84px, 17vw, 112px)',
-  height: 'auto',
-  marginBottom: -16,
+  width: 'auto',
+  height: 'clamp(78px, 16vw, 104px)',
+  marginBottom: -14,
   position: 'relative',
   zIndex: 1,
   filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.5))',
