@@ -115,6 +115,79 @@ function shuffleColorsByActorNr(actorNrs: readonly number[], colors: readonly Pi
   return map
 }
 
+// Reported directly, next to the reference mockup's own icon badges: "use icons, not emoji" -
+// emoji render as a different literal glyph per OS/browser (Apple's vs. Microsoft's vs. Google's
+// own house/key/bulb pictures are all visually distinct, none of them this app's own art
+// direction), where a real vector icon renders identically everywhere and can actually be
+// colored/sized to match a button's own text. Plain inline SVGs, scoped to this file only (the
+// "each screen owns its own style objects" convention - see this file's own comment on it
+// elsewhere - extends to these too, since nothing else in the app had an icon set to share yet).
+function GroupIcon({ size = 24 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />
+    </svg>
+  )
+}
+
+function LinkIcon({ size = 24 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z" />
+    </svg>
+  )
+}
+
+function PersonIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+    </svg>
+  )
+}
+
+function ArrowRightIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 12h15" />
+      <path d="M13 6l6 6-6 6" />
+    </svg>
+  )
+}
+
+function ArrowLeftIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M20 12H5" />
+      <path d="M11 6l-6 6 6 6" />
+    </svg>
+  )
+}
+
+function CloseIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" aria-hidden="true">
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  )
+}
+
+function BulbIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M9 21h6v-1H9v1zm3-19C7.48 2 4 5.48 4 10c0 2.89 1.64 5.42 4 6.86V19h8v-2.14c2.36-1.44 4-3.97 4-6.86 0-4.52-3.48-8-8-8zm2 13.86V17h-4v-1.14c-2.36-1.02-4-3.28-4-5.86 0-3.31 2.69-6 6-6s6 2.69 6 6c0 2.58-1.64 4.84-4 5.86z" />
+    </svg>
+  )
+}
+
+function PencilIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
+    </svg>
+  )
+}
+
 type Phase = 'connecting' | 'error' | 'menu' | 'creating' | 'joining' | 'lobby' | 'game' | 'stopped'
 
 export default function OnlineLobbyScreen() {
@@ -489,7 +562,7 @@ export default function OnlineLobbyScreen() {
               style={menuCloseButtonStyle}
               aria-label="Cerrar"
             >
-              ✕
+              <CloseIcon size={15} />
             </button>
           </div>
 
@@ -511,39 +584,46 @@ export default function OnlineLobbyScreen() {
             <p style={menuSubtitleStyle}>Creá una sala nueva o unite con un código</p>
           </div>
 
-          <div style={{ ...menuDoodleStyle, alignSelf: 'flex-end', marginRight: 'clamp(4px, 4vw, 24px)' }}>¡Vamos a jugar! ✏️</div>
+          <div style={{ ...menuDoodleStyle, alignSelf: 'flex-end', marginRight: 'clamp(4px, 4vw, 24px)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            ¡Vamos a jugar! <PencilIcon size={17} />
+          </div>
 
           <div style={menuCardsRowStyle}>
             <div style={menuCardStyle('#3fae66')}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 22 }}>🏠</span>
-                <h3 style={menuCardTitleStyle}>Crear sala</h3>
+              <div style={menuCardBadgeStyle('#3fae66')}>
+                <GroupIcon size={26} />
               </div>
-              <div>
-                <div style={{ ...hintStyle, marginBottom: 8 }}>Jugadores</div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {[2, 3, 4, 5, 6].map((n, i) => (
-                    <button
-                      key={n}
-                      className="chunky-btn candy-btn"
-                      onClick={() => setPlayerCount(n)}
-                      style={{ ...countButtonStyle(n === playerCount, CANDY_COLORS[i]), ['--wobble-delay' as string]: `${i * 0.15}s` }}
-                    >
-                      {n}
-                    </button>
-                  ))}
-                </div>
+              <h3 style={menuCardTitleStyle}>
+                Crear <span style={{ color: '#79e39a' }}>sala</span>
+              </h3>
+              <p style={menuCardSubtitleStyle}>Elige el número de jugadores y crea tu propia sala.</p>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                {[2, 3, 4, 5, 6].map((n) => (
+                  <button
+                    key={n}
+                    className="chunky-btn"
+                    onClick={() => setPlayerCount(n)}
+                    style={menuCountButtonStyle(n === playerCount, '#3fae66')}
+                  >
+                    <PersonIcon size={13} />
+                    {n}
+                  </button>
+                ))}
               </div>
               <button className="chunky-btn" onClick={createRoom} style={coloredButtonStyle(true, '#3fae66')}>
-                Crear
+                Crear sala
+                <ArrowRightIcon size={17} />
               </button>
             </div>
 
             <div style={menuCardStyle('#3f8ee0')}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 22 }}>🔑</span>
-                <h3 style={menuCardTitleStyle}>Unirse a sala</h3>
+              <div style={menuCardBadgeStyle('#3f8ee0')}>
+                <LinkIcon size={26} />
               </div>
+              <h3 style={menuCardTitleStyle}>
+                Unirse <span style={{ color: '#8ec4f5' }}>a sala</span>
+              </h3>
+              <p style={menuCardSubtitleStyle}>Ingresa el código de la sala para unirte a la partida.</p>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 12 }}>
                 <input
                   value={roomCodeInput}
@@ -558,18 +638,19 @@ export default function OnlineLobbyScreen() {
                 disabled={!roomCodeInput.trim()}
                 style={coloredButtonStyle(Boolean(roomCodeInput.trim()), '#3f8ee0')}
               >
-                Unirse
+                Unirse a sala
+                <ArrowRightIcon size={17} />
               </button>
             </div>
           </div>
 
           <div style={menuTipBannerStyle}>
-            <span style={{ fontSize: 20 }}>💡</span>
+            <BulbIcon size={19} />
             <span>Tip: compartí el código de sala con tus amigos para armarla juntos</span>
           </div>
 
           <button className="chunky-btn" onClick={() => (window.location.hash = '')} style={menuBackButtonStyle}>
-            ← Volver
+            <ArrowLeftIcon size={15} /> Volver
           </button>
         </div>
       </div>
@@ -853,33 +934,34 @@ function chunkyButtonStyle(enabled: boolean): React.CSSProperties {
   }
 }
 
-// Same 5 colors as PlayerCountSelector.tsx's own identical picker, kept in sync by eye (each
-// screen owns its own style objects - see this file's own established pattern elsewhere - so this
-// is a deliberate duplicate, not an import, same as everything else here).
-const CANDY_COLORS = ['#ff6b6b', '#ffa94d', '#ffd43b', '#69db7c', '#4dabf7']
-
-// Same candy-jar redesign PlayerCountSelector.tsx's own identical picker just got - see that
-// file's own comment for why (asked for a fully distinct, playful/children's shape and feel, not
-// another variation on the app's usual premium chrome). One bright rainbow color per position,
-// same as there; the unselected/selected distinction that used to be gold-vs-muted-gold is now
-// full-bright-candy (selected) vs a washed-out pastel of that same hue (unselected) - still a real
-// rainbow across the row either way, just dimmer until picked.
-function countButtonStyle(selected: boolean, colorHex: string): React.CSSProperties {
-  const base = selected ? colorHex : lighten(colorHex, 0.28)
-  const light = lighten(base, 0.35)
-  const dark = lighten(base, -0.3)
+// Reported directly, next to the reference mockup's own player-count row: a rounded-square badge
+// per count, uniform in the card's own theme color (not this app's usual candy-jar rainbow - see
+// PlayerCountSelector.tsx's own identical picker for that convention, deliberately NOT reused
+// here since the mockup's own count badges are a single hue per card, muted until selected) with
+// a small person glyph above the number, selected state glowing in the same hue rather than
+// swapping to a brighter color entirely.
+function menuCountButtonStyle(selected: boolean, hex: string): React.CSSProperties {
+  const dark = lighten(hex, -0.62)
+  const darker = lighten(hex, -0.72)
   return {
-    width: 'clamp(38px, 11vw, 48px)',
-    height: 'clamp(38px, 11vw, 48px)',
-    fontSize: 'clamp(15px, 4.2vw, 19px)',
+    width: 42,
+    height: 42,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 1,
     flexShrink: 0,
-    fontWeight: 900,
-    color: '#ffffff',
-    background: `radial-gradient(circle at 32% 26%, ${light} 0%, ${base} 55%, ${dark} 100%)`,
-    border: `3px solid ${selected ? '#fffaf0' : 'rgba(255,250,240,0.55)'}`,
-    borderRadius: '30%',
-    boxShadow: `0 4px 0 ${dark}, 0 7px 11px rgba(0,0,0,0.3), inset 0 2px 2px rgba(255,255,255,0.65)`,
-    textShadow: '0 2px 0 rgba(0,0,0,0.25)',
+    fontFamily: "'Baloo 2', system-ui, sans-serif",
+    fontSize: 14,
+    fontWeight: 800,
+    color: selected ? '#fff' : 'rgba(255,255,255,0.65)',
+    background: selected
+      ? `linear-gradient(165deg, ${lighten(hex, 0.15)}, ${hex})`
+      : `linear-gradient(165deg, ${dark}, ${darker})`,
+    border: `2px solid ${selected ? lighten(hex, 0.4) : 'rgba(255,255,255,0.12)'}`,
+    borderRadius: 12,
+    boxShadow: selected ? `0 0 0 3px ${hex}55, 0 3px 8px rgba(0,0,0,0.35)` : 'inset 0 1px 2px rgba(0,0,0,0.3)',
     cursor: 'pointer',
   }
 }
@@ -1001,8 +1083,10 @@ function menuCardStyle(hex: string): React.CSSProperties {
     minWidth: 240,
     display: 'flex',
     flexDirection: 'column',
+    alignItems: 'center',
+    textAlign: 'center',
     gap: 10,
-    padding: '14px 16px 16px',
+    padding: '18px 16px 16px',
     borderRadius: 20,
     background: `linear-gradient(180deg, rgba(255,255,255,0.06), transparent 30%), linear-gradient(165deg, ${dark}, ${darker})`,
     border: `2px solid ${edge}`,
@@ -1010,13 +1094,42 @@ function menuCardStyle(hex: string): React.CSSProperties {
   }
 }
 
+// Circular badge behind each card's own icon (people for "Crear sala", link for "Unirse a sala")
+// - the mockup's own centered-badge-then-title layout, replacing this card's earlier inline
+// emoji+title row entirely.
+function menuCardBadgeStyle(hex: string): React.CSSProperties {
+  const light = lighten(hex, 0.3)
+  const dark = lighten(hex, -0.3)
+  return {
+    width: 52,
+    height: 52,
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#fff',
+    background: `radial-gradient(circle at 34% 30%, ${light} 0%, ${hex} 55%, ${dark} 100%)`,
+    border: `2px solid rgba(255,255,255,0.35)`,
+    boxShadow: `0 4px 10px rgba(0,0,0,0.35), inset 0 1px 1px rgba(255,255,255,0.4)`,
+    flexShrink: 0,
+  }
+}
+
 const menuCardTitleStyle: React.CSSProperties = {
   margin: 0,
   fontFamily: "'Baloo 2', system-ui, sans-serif",
-  fontSize: 20,
+  fontSize: 21,
   fontWeight: 800,
   color: '#fff6e0',
   textShadow: '0 2px 4px rgba(0,0,0,0.4)',
+}
+
+const menuCardSubtitleStyle: React.CSSProperties = {
+  margin: '-4px 0 2px',
+  fontSize: 12.5,
+  lineHeight: 1.4,
+  color: 'rgba(242,237,224,0.75)',
+  maxWidth: 220,
 }
 
 // Same carved-3D recipe as chunkyButtonStyle above, parameterized by hue instead of the fixed
@@ -1028,7 +1141,10 @@ function coloredButtonStyle(enabled: boolean, hex: string): React.CSSProperties 
   return {
     width: '100%',
     boxSizing: 'border-box',
-    padding: '11px 24px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '11px 22px',
     fontSize: 16,
     fontWeight: 800,
     letterSpacing: 0.3,
@@ -1038,7 +1154,7 @@ function coloredButtonStyle(enabled: boolean, hex: string): React.CSSProperties 
       ? `linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0) 40%), linear-gradient(180deg, ${light} 0%, ${hex} 48%, ${dark} 100%)`
       : 'linear-gradient(180deg, #8a8a80, #6a6a60)',
     border: `3px solid ${enabled ? dark : '#4a4a44'}`,
-    borderRadius: 16,
+    borderRadius: 999,
     boxShadow: enabled
       ? `0 5px 0 ${dark}, 0 9px 16px rgba(0,0,0,0.4), inset 0 2px 1px rgba(255,255,255,0.55)`
       : '0 5px 0 #3a3a34, 0 8px 12px rgba(0,0,0,0.3)',
@@ -1063,6 +1179,9 @@ const menuTipBannerStyle: React.CSSProperties = {
 
 const menuBackButtonStyle: React.CSSProperties = {
   ...secondaryButtonStyle,
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
   alignSelf: 'center',
   width: 'auto',
   padding: '10px 26px',
