@@ -249,11 +249,17 @@ function imageButtonStyle(enabled: boolean): React.CSSProperties {
   }
 }
 
+// Reported directly, twice now: a dark smudge still visible right where the two buttons meet,
+// even after the box-shadow/borderRadius fix. That fix addressed chunky-btn-pulse's own glow: the
+// *drop-shadow filter added here separately* was the other, unrelated source - a real shadow this
+// image genuinely casts (6px down, 14px blur), landing squarely in the gap below JUGAR LOCAL and
+// smudging into the top of JUGAR ONLINE beneath it. The art already bakes in its own glossy
+// depth/glow - this extra filter was never adding anything the art didn't already have, only a
+// stray shadow neither button asked for. Dropped entirely.
 const imageButtonImgStyle: React.CSSProperties = {
   display: 'block',
   width: '100%',
   height: 'auto',
-  filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.45))',
 }
 
 // Round gold-ring icon button, top-right - same medallion language as GameBoardScreen's own exit
