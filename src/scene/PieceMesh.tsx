@@ -92,7 +92,15 @@ export const PIECE_PROFILE_RAW: [number, number][] = [
 // (ParkillerMesh.tsx's PAWN_HEIGHT) is derived live from PIECE_PROFILE_RAW/PROFILE_SCALE, which
 // itself derives from this constant, so it grows right along with the pawns automatically - no
 // separate change needed there to keep the two in proportion.
-export const PIECE_BASE_RADIUS = 0.45
+//
+// Bumped a thirteenth time, 0.45 -> 0.5 - reported directly, again as a mild "un poco más grandes
+// de talla que los actuales" with the explicit constraint "siempre deben ser más pequeños que los
+// Parkis" (always smaller than the Parkis). That constraint holds automatically regardless of this
+// constant's own value: ParkillerMesh.tsx's Parkiller height is a fixed *multiple* of this same
+// PAWN_HEIGHT (currently 2.2275x, via its own 1.65 base scale times its 1.35 height boost), so
+// growing PIECE_BASE_RADIUS grows both pawn and Parkiller height together in lockstep, never
+// closing that ratio - no separate change needed there to keep pawns the smaller of the two.
+export const PIECE_BASE_RADIUS = 0.5
 export const PROFILE_SCALE = PIECE_BASE_RADIUS / Math.max(...PIECE_PROFILE_RAW.map(([r]) => r))
 // Stretches the profile taller without widening the base - requested directly, twice now ("peones
 // más alargados" both times), each time with a reference photo of taller pawns. Applied only to
