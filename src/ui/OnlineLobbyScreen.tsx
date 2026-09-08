@@ -722,11 +722,22 @@ export default function OnlineLobbyScreen() {
             background: 'radial-gradient(ellipse at center, rgba(10,8,4,0.15) 0%, rgba(6,8,14,0.7) 100%)',
           }}
         />
-        <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+        <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '0 16px', boxSizing: 'border-box' }}>
+          {/* Reported directly, with a screenshot showing the dots/"Preparando la partida" pushed
+              below the fold: sized by *width* only (min(460px, 82vw)), same class of bug as the
+              menu screen's own mascot before it - a short-but-wide window never shrinks it, so it
+              can eat the whole available height on its own with nothing left for the dots and
+              text below. min(vw, vh) on *height* instead, matching that fix. */}
           <img
             src="/connecting-hero.png"
             alt="Conectando..."
-            style={{ width: 'min(460px, 82vw)', height: 'auto', filter: 'drop-shadow(0 12px 32px rgba(0,0,0,0.55))', marginBottom: -6 }}
+            style={{
+              width: 'auto',
+              height: 'clamp(80px, min(30vw, 26vh), 260px)',
+              filter: 'drop-shadow(0 12px 32px rgba(0,0,0,0.55))',
+              marginBottom: -6,
+              maxWidth: '100%',
+            }}
           />
           {/* Reported directly: the loading dots baked into the hero image were static, so this
               screen never actually looked like it was doing anything - real animated dots here

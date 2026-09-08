@@ -228,12 +228,21 @@ function MusicOffIcon() {
 // VITE_PHOTON_APP_ID isn't configured) has no dedicated art, so it's simulated with a filter -
 // desaturated and dimmed rather than swapped for a coded fallback that wouldn't match the art's
 // own style.
+//
+// Reported directly, with a screenshot circling a dark rectangular corner peeking out from behind
+// the (rounded) button art: chunky-btn-pulse's own cta-pulse keyframe animates a *box-shadow*, and
+// box-shadow always follows the element's own box shape, not its content's - the old coded button
+// had borderRadius set to match, this image-based one didn't, so the glow rendered as a square-
+// cornered shadow behind a rounded image. borderRadius here (close to, not required to exactly
+// match, the art's own corner rounding - the shadow already has blur to cover the gap) fixes it
+// for both buttons, even though only the pulsing one (JUGAR LOCAL) made it visible.
 function imageButtonStyle(enabled: boolean): React.CSSProperties {
   return {
     display: 'block',
     width: '100%',
     padding: 0,
     border: 'none',
+    borderRadius: 20,
     background: 'transparent',
     cursor: enabled ? 'pointer' : 'default',
     filter: enabled ? 'none' : 'grayscale(0.85) brightness(0.6)',
