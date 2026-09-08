@@ -243,8 +243,20 @@ export class BotController {
     // piece exposed to next roll's danger when an equally legal move would clear it entirely is the
     // same avoidable class of risk, one step earlier. Same layering/fallback pattern as the two
     // preferences above it.
-    const unexposedMoves = safeMoves.filter((m) => !this.wouldLeavePieceExposedToParkiller(m))
-    const riskAwareMoves = unexposedMoves.length > 0 ? unexposedMoves : safeMoves
+    const unexposedToParkillerMoves = safeMoves.filter((m) => !this.wouldLeavePieceExposedToParkiller(m))
+    const safeFromParkiller = unexposedToParkillerMoves.length > 0 ? unexposedToParkillerMoves : safeMoves
+    // Reported directly ("El bot en vez de mover dos peones diferentes, con la suma de los dados
+    // 'se suicida el que va en cabeza'" - the bot, instead of moving two different pawns, suicides
+    // its lead pawn with the sum of the dice): every exposure check above this line only ever
+    // looked at danger from the opposing *Parkiller* - there was no equivalent check at all for an
+    // ordinary opposing pawn's own one-roll reach, so a sum-move landing the lead pawn within a
+    // normal opponent's capture range sailed through every filter untouched, then won the final
+    // largestAmount tiebreak below purely for covering more ground, over a safer two-pawn split
+    // that used each die on a different piece. Same layering/fallback pattern as the Parkiller
+    // check right above - only actually prefers dodging this once dodging the Parkiller is also
+    // satisfied (or impossible), never the other way around.
+    const unexposedMoves = safeFromParkiller.filter((m) => !this.wouldLeavePieceExposedToPawn(m))
+    const riskAwareMoves = unexposedMoves.length > 0 ? unexposedMoves : safeFromParkiller
     // Requested directly ("si algún peón del bot está en una casilla protegida no debería
     // arriesgarse a ser eliminado salvo para eliminar a otro peón. Es mejor que se mueva otro
     // peón y nunca suicidarse avanzando sin contar contra un parki" - if a bot's pawn is on a
@@ -384,6 +396,32 @@ export class BotController {
       if (!isParkillerOnTrack(player.parkiller)) continue
       const distance = (((player.parkiller.trackPosition - move.resultingTrackPosition) % trackLength) + trackLength) % trackLength
       if (distance >= 1 && distance <= 6) return true
+    }
+    return false
+  }
+
+  // Same "exposed to a one-roll capture" idea as wouldLeavePieceExposedToParkiller above, but for
+  // every ordinary opposing pawn instead of just the Parkiller - the actual gap behind the client's
+  // report (see onMoveChoicesReady's own comment on this call site). Direction is reversed from
+  // the Parkiller check: regular pawns walk the shared track *forward* (increasing trackPosition),
+  // so a threatening pawn's own distance to this move's destination is measured that way round, not
+  // the Parkiller's own backward one. Checks every piece of every other color (a pawn can threaten
+  // from any of its own 4 pieces, unlike a color's single Parkiller), skipping any not currently
+  // OnTrack (a yard/corridor/finished piece can't roll into this square next turn regardless of
+  // numeric distance). Landing exactly on a lone unprotected opposing pawn is a capture, not a
+  // danger, and is already handled (rewarded, even) elsewhere - this only ever flags the square as
+  // risky for what happens *after* landing, not the landing move itself.
+  private wouldLeavePieceExposedToPawn(move: MoveOption): boolean {
+    if (move.resultingTrackPosition === -1) return false
+    if (this.session.board.safeTrackIndices.has(move.resultingTrackPosition)) return false
+    const trackLength = this.session.board.trackLength
+    for (const player of this.session.players) {
+      if (player.color === move.piece.color) continue
+      for (const piece of player.pieces) {
+        if (piece.state !== 'OnTrack') continue
+        const distance = (((move.resultingTrackPosition - piece.trackPosition) % trackLength) + trackLength) % trackLength
+        if (distance >= 1 && distance <= 6) return true
+      }
     }
     return false
   }

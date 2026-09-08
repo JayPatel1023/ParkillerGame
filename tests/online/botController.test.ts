@@ -387,6 +387,46 @@ describe('BotController', () => {
     bots.dispose()
   })
 
+  // Reported directly ("El bot en vez de mover dos peones diferentes, con la suma de los dados
+  // 'se suicida el que va en cabeza'" - the bot, instead of moving two different pawns, suicides
+  // its lead pawn with the sum of the dice): the sibling test right above only ever covers danger
+  // from the opposing Parkiller - this is the same heuristic but for an ordinary opposing pawn,
+  // which previously had no equivalent check at all (wouldLeavePieceExposedToPawn's own doc
+  // comment covers why). Mirrors that test's own shape exactly, swapping the threat for a plain
+  // opposing pawn instead of a Parkiller.
+  it('prefers a move that clears an opposing pawn\'s one-roll reach when a safe alternative exists', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5 // dieA(2) lands this one at 7 - within blue.pieces[0]'s own
+    // one-roll reach (distance 3, forward from 4) but not directly on it - moves[0] under the old
+    // "always pick the first option" behavior.
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 15 // every option for this piece (dieA/dieB/sum) lands more than
+    // 6 squares from every blue piece - a genuinely safe alternative this roll.
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 4
+
+    const dice = new RecordingDice(new ScriptedDice([2, 4, 1]))
+    const inner = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+    const network = new FakeRoomNetwork(MASTER_ACTOR)
+    const transport = network.createTransport(MASTER_ACTOR)
+    const host = new HostTurnManagerBridge(inner, dice, [red, blue], transport, new Map<number, PieceColor>())
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2)
+
+    host.start()
+    vi.advanceTimersByTime(10) // the roll fires
+    vi.advanceTimersByTime(10) // the first move fires
+
+    // Whichever move actually got picked, piece0 must not have landed at 7 - within blue.pieces[0]'s
+    // own next-roll reach - when piece1 had a genuinely safe alternative available.
+    const piece0Exposed = red.pieces[0].state === 'OnTrack' && red.pieces[0].trackPosition === 7
+    expect(piece0Exposed).toBe(false)
+
+    bots.dispose()
+  })
+
   // Requested directly ("cuando cuente las recompensas idem: debe ver si elimina algún peón en
   // algún salto de 10 o se cae sobre un parki y se queda eliminado" - when counting rewards,
   // likewise: check whether it eliminates a pawn on some 10-jump): a reward move can capture too
