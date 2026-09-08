@@ -86,18 +86,26 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
             alt="Parkiller"
             style={{ width: 'clamp(58px, 16vw, 180px)', height: 'clamp(58px, 16vw, 180px)', filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.5))', marginTop: 4 }}
           />
+          {/* Reported directly, with reference screenshots of both buttons: use these exact
+              button images instead of the coded gradient+icon+text recipe above (still used
+              elsewhere - settings rows, GameBoardScreen, etc. - only these two are replaced).
+              Both source screenshots had the same baked-in-checkerboard issue as this session's
+              other supplied art (looks transparent, isn't - alpha channel present but uniformly
+              255) - cut out with a precise rounded-rect mask (measured directly off each button's
+              own pixel edges) rather than a flood-fill, since a clean rectangle has no irregular-
+              silhouette leak risk the way a character illustration would. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(7px, 1.8vh, 18px)', width: 'min(360px, 72vw)', marginTop: 'clamp(2px, 0.8vh, 10px)' }}>
-            <button className="chunky-btn chunky-btn-pulse" onClick={onPlayLocal} style={buttonStyle(true, 'green')}>
-              <span aria-hidden style={iconBadgeStyle}><PeopleIcon /></span> JUGAR LOCAL
+            <button className="chunky-btn chunky-btn-pulse" onClick={onPlayLocal} style={imageButtonStyle(true)}>
+              <img src="/jugar-local-btn.png" alt="Jugar local - En el mismo dispositivo" style={imageButtonImgStyle} />
             </button>
             <button
               className="chunky-btn"
               disabled={!canPlayOnline}
               title={canPlayOnline ? undefined : 'Falta configurar VITE_PHOTON_APP_ID'}
               onClick={() => (window.location.hash = '#online')}
-              style={buttonStyle(canPlayOnline, 'burgundy')}
+              style={imageButtonStyle(canPlayOnline)}
             >
-              <span aria-hidden style={iconBadgeStyle}><GlobeIcon /></span> JUGAR ONLINE
+              <img src="/jugar-online-btn.png" alt="Jugar online - Conecta con tus amigos" style={imageButtonImgStyle} />
             </button>
           </div>
         </GoldPanel>
@@ -175,29 +183,6 @@ const iconBadgeStyle: React.CSSProperties = {
   flexShrink: 0,
 }
 
-// Plain emoji (👥/🌐) rendered as a completely different, sometimes barely-recognizable glyph
-// depending on the platform's own emoji font (reported directly - looked like a robot face rather
-// than two people on the reporter's system). Custom SVGs render identically everywhere instead.
-function PeopleIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="#eef4ff" aria-hidden focusable="false">
-      <circle cx="9" cy="8" r="3.2" />
-      <path d="M9 12.5c-3.3 0-6 1.8-6 4v1.5h9.5V16.5c0-.7.2-1.4.6-2c-.9-1.2-2.4-2-4.1-2z" />
-      <circle cx="16.3" cy="9" r="2.6" opacity="0.85" />
-      <path d="M16.3 13c-1 0-1.9.3-2.6.8.9 1 1.4 2.3 1.4 3.7v1H21v-1.5c0-2-2.1-4-4.7-4z" opacity="0.85" />
-    </svg>
-  )
-}
-
-function GlobeIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#eef4ff" strokeWidth="1.7" aria-hidden focusable="false">
-      <circle cx="12" cy="12" r="9" />
-      <path d="M3 12h18M12 3c2.8 2.8 2.8 15.2 0 18M12 3c-2.8 2.8-2.8 15.2 0 18" />
-    </svg>
-  )
-}
-
 function GearIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill={THEME.cream} aria-hidden focusable="false">
@@ -237,45 +222,29 @@ function MusicOffIcon() {
   )
 }
 
-// Chunky carved-wood button, same physical-press recipe as the rest of the app (a solid, non-
-// blurred offset bottom edge reads as depth, not a bigger blurred shadow) - now recolored per
-// action: green for the local/offline action, burgundy for the online one, both trimmed in gold
-// instead of the earlier flat single blue used for both.
-// Reported directly (Carlos's own "life journey" philosophy - camaraderie over competition):
-// online used to be a cold, corporate blue, the one clearly "cool-toned" swatch on an otherwise
-// entirely warm screen. Burgundy (matches THEME.burgundy, #6e2430 - defined but never actually
-// used anywhere until now) keeps the two actions just as visually distinct from each other, but
-// both now read as warm, inviting choices rather than "the friendly one and the corporate one."
-const TINTS = {
-  green: ['#4c8c5c', '#256234', '#123d1c'],
-  burgundy: ['#c98a94', '#6e2430', '#2e0e12'],
-} as const
-
-function buttonStyle(enabled: boolean, tint: keyof typeof TINTS): React.CSSProperties {
-  const [light, mid, dark] = TINTS[tint]
+// Wrapper for the two image buttons above - the images themselves already carry the full visual
+// design (gradient, border, icon, text, subtitle, chevron), so this just needs to be an
+// unstyled, full-width click target. Disabled state (only ever the online button, when
+// VITE_PHOTON_APP_ID isn't configured) has no dedicated art, so it's simulated with a filter -
+// desaturated and dimmed rather than swapped for a coded fallback that wouldn't match the art's
+// own style.
+function imageButtonStyle(enabled: boolean): React.CSSProperties {
   return {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    padding: 'clamp(9px, 2vh, 22px) clamp(16px, 4vw, 42px)',
-    fontSize: 'clamp(13px, 3.6vw, 23px)',
-    fontWeight: 800,
-    letterSpacing: 0.4,
+    display: 'block',
     width: '100%',
-    boxSizing: 'border-box',
-    color: enabled ? THEME.cream : '#8a8a80',
-    background: enabled
-      ? `linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 40%), linear-gradient(180deg, ${light} 0%, ${mid} 55%, ${dark} 100%)`
-      : 'linear-gradient(180deg, #6a6a60, #4a4a44)',
-    border: `3px solid ${enabled ? THEME.gold : '#4a4a44'}`,
-    borderRadius: 16,
-    boxShadow: enabled
-      ? `0 6px 0 ${THEME.goldDeep}, 0 11px 18px rgba(0,0,0,0.45), inset 0 2px 1px rgba(255,255,255,0.35)`
-      : '0 6px 0 #3a3a34, 0 9px 14px rgba(0,0,0,0.3)',
-    textShadow: enabled ? '0 1px 3px rgba(0,0,0,0.5)' : 'none',
+    padding: 0,
+    border: 'none',
+    background: 'transparent',
     cursor: enabled ? 'pointer' : 'default',
+    filter: enabled ? 'none' : 'grayscale(0.85) brightness(0.6)',
   }
+}
+
+const imageButtonImgStyle: React.CSSProperties = {
+  display: 'block',
+  width: '100%',
+  height: 'auto',
+  filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.45))',
 }
 
 // Round gold-ring icon button, top-right - same medallion language as GameBoardScreen's own exit
