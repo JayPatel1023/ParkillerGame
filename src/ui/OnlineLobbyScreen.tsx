@@ -164,6 +164,23 @@ function PencilIcon({ size = 18 }: { size?: number }) {
   )
 }
 
+function CopyIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="9" y="9" width="12" height="12" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  )
+}
+
+function CheckIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 12.5l5 5 11-11" />
+    </svg>
+  )
+}
+
 // Reported directly, with a screenshot at a window height where the mascot had shrunk to a tiny
 // fixed size via a CSS breakpoint while the cards below it stayed full-size: "왜 이지러져 나오는지
 // 모르겠다" (I don't know why it comes out distorted) - a hard per-element breakpoint cliff like
@@ -213,6 +230,10 @@ export default function OnlineLobbyScreen() {
   const [roomCodeInput, setRoomCodeInput] = useState('')
   const [playerCount, setPlayerCount] = useState(4)
   const [roomCode, setRoomCode] = useState('')
+  // Reported directly, with a screenshot circling the space right next to the room code: a
+  // click-to-copy button - shows a checkmark for 1.5s after a successful copy, then reverts, so
+  // the click has some visible confirmation rather than silently doing something or nothing.
+  const [codeCopied, setCodeCopied] = useState(false)
   const [seats, setSeats] = useState<ActorInfo[]>([])
   const [session, setSession] = useState<GameSession | null>(null)
   // Set only once the game actually starts - who left, so the "stopped" screen can say so.
@@ -469,6 +490,16 @@ export default function OnlineLobbyScreen() {
         setErrorMessage(friendlyOnlineError(err instanceof Error ? err.message : String(err)))
         setPhase('error')
       })
+  }
+
+  function copyRoomCode() {
+    navigator.clipboard
+      .writeText(roomCode)
+      .then(() => {
+        setCodeCopied(true)
+        setTimeout(() => setCodeCopied(false), 1500)
+      })
+      .catch(() => {})
   }
 
   function joinRoom() {
@@ -819,7 +850,18 @@ export default function OnlineLobbyScreen() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, width: '100%' }}>
             <div style={sectionStyle}>
               <div style={hintStyle}>Código de sala</div>
-              <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: 3, color: '#e8cf8a', textShadow: '0 2px 0 #7a5f26' }}>{roomCode}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: 3, color: '#e8cf8a', textShadow: '0 2px 0 #7a5f26' }}>{roomCode}</div>
+                <button
+                  className="chunky-btn"
+                  onClick={copyRoomCode}
+                  title="Copiar código"
+                  aria-label="Copiar código"
+                  style={copyCodeButtonStyle}
+                >
+                  {codeCopied ? <CheckIcon size={15} /> : <CopyIcon size={15} />}
+                </button>
+              </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {(() => {
@@ -1119,6 +1161,24 @@ const menuCloseButtonStyle: React.CSSProperties = {
   background: 'linear-gradient(165deg, rgba(255,255,255,0.1), rgba(255,255,255,0) 60%), rgba(58, 46, 30, 0.6)',
   border: '2px solid #7a5f26',
   boxShadow: '0 4px 0 #4a3a1a, 0 6px 10px rgba(0,0,0,0.35)',
+  cursor: 'pointer',
+  flexShrink: 0,
+}
+
+// Same recipe as menuCloseButtonStyle above, just smaller - sits inline next to the room code
+// text itself rather than in a header row.
+const copyCodeButtonStyle: React.CSSProperties = {
+  width: 32,
+  height: 32,
+  minWidth: 28,
+  borderRadius: '50%',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  color: '#e8cf8a',
+  background: 'linear-gradient(165deg, rgba(255,255,255,0.1), rgba(255,255,255,0) 60%), rgba(58, 46, 30, 0.6)',
+  border: '2px solid #7a5f26',
+  boxShadow: '0 3px 0 #4a3a1a, 0 5px 8px rgba(0,0,0,0.35)',
   cursor: 'pointer',
   flexShrink: 0,
 }
