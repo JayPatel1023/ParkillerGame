@@ -161,6 +161,38 @@ button {
   }
 }
 
+/* OnlineLobbyScreen's own 'connecting' phase - reported directly: the 3 loading dots under
+   "Conectando..." were baked into the hero image as static art, reading as decoration rather than
+   an actual in-progress connection ("현재는 정적인데 진짜 connecting중이라는것으로 알리도록동적으로" -
+   currently static, make it dynamic so it actually signals a real connection happening). The dots
+   were cropped out of the image itself (see connecting-hero.png's own history) and replaced with
+   these three real elements instead, each given its own --dot-delay so they pulse in a wave
+   rather than all together - the classic "still thinking" typing-indicator rhythm, immediately
+   readable as live activity instead of a static picture. */
+@keyframes connecting-dot-pulse {
+  0%,
+  80%,
+  100% {
+    transform: scale(0.72);
+    opacity: 0.55;
+  }
+  40% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+}
+
+.connecting-dot {
+  animation: connecting-dot-pulse 1.3s ease-in-out infinite;
+  animation-delay: var(--dot-delay, 0s);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .connecting-dot {
+    animation: none;
+  }
+}
+
 /* OnlineLobbyScreen's own 'menu' phase used to hack around not fitting a short/narrow window with
    a pair of width/height media queries here, forcing individual elements (the mascot, card
    padding, count-pill size...) to different fixed sizes at different breakpoints - reported

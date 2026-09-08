@@ -726,8 +726,21 @@ export default function OnlineLobbyScreen() {
           <img
             src="/connecting-hero.png"
             alt="Conectando..."
-            style={{ width: 'min(460px, 82vw)', height: 'auto', filter: 'drop-shadow(0 12px 32px rgba(0,0,0,0.55))' }}
+            style={{ width: 'min(460px, 82vw)', height: 'auto', filter: 'drop-shadow(0 12px 32px rgba(0,0,0,0.55))', marginBottom: -6 }}
           />
+          {/* Reported directly: the loading dots baked into the hero image were static, so this
+              screen never actually looked like it was doing anything - real animated dots here
+              instead, color-matched to the image's own (now-removed) dots by sampling their exact
+              pixel values directly. */}
+          <div style={{ display: 'flex', gap: 'clamp(8px, 2.2vw, 14px)' }}>
+            {[0, 1, 2].map((i) => (
+              <span
+                key={i}
+                className="connecting-dot"
+                style={{ ...connectingDotStyle, ['--dot-delay' as string]: `${i * 0.18}s` }}
+              />
+            ))}
+          </div>
           <p
             style={{
               margin: 0,
@@ -1221,5 +1234,18 @@ const menuBackButtonStyle: React.CSSProperties = {
   alignSelf: 'center',
   width: 'auto',
   padding: '10px 24px',
+}
+
+// Colors sampled directly off the hero image's own (now-cropped-out) dots - a glossy sphere,
+// cream highlight fading through gold to a dark orange-brown edge - so the real animated
+// replacement reads as the same object still there, just alive now, not a different design.
+const connectingDotStyle: React.CSSProperties = {
+  display: 'inline-block',
+  width: 'clamp(14px, 4.2vw, 24px)',
+  height: 'clamp(14px, 4.2vw, 24px)',
+  borderRadius: '50%',
+  background: 'radial-gradient(circle at 32% 26%, #fcfbc7 0%, #fdd624 55%, #c13d00 100%)',
+  border: '1.5px solid #7a2c00',
+  boxShadow: '0 2px 5px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.6)',
 }
 
