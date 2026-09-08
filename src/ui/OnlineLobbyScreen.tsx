@@ -1191,17 +1191,18 @@ const copyCodeButtonStyle: React.CSSProperties = {
 // own - the vh term catches that case too, smoothly, matched below by menuCardStyle's own padding
 // so both continue shrinking in step rather than reintroducing the original per-element mismatch.
 //
-// Reported directly, with a reference image: too big and unbalanced, next to a screenshot circling
-// this image specifically. Two changes together - the image itself (parkiller-mascot.png) is now
-// cropped tighter around just the mascot+sign (the floating dice and the dead black space around
-// them are gone - see that file's own recent history), which alone makes the same display height
-// render narrower and more compact; the max height here is also lowered (220 -> 165) so it reads
-// smaller even at full scale, not just differently cropped.
+// Reported directly, with a side-by-side current-state vs. target-mockup screenshot ("우선 파키위치를
+// 정확하게 매취시켜달라" - first, match the Parki's position/size precisely to the mockup): the
+// mockup's mascot+sign reads as the panel's own dominant header element, not a small icon above it -
+// a past pass (see this file's own git history) had shrunk this same block down (220 -> 165) after
+// the opposite complaint on an earlier, differently-cropped version of parkiller-mascot.png: that
+// context no longer applies now that the client's own asset was swapped back to the wider
+// mascot+dice composition the mockup itself shows. Sized larger again to match.
 const menuMascotStyle: React.CSSProperties = {
   display: 'block',
   alignSelf: 'center',
   width: 'auto',
-  height: 'clamp(50px, min(17vw, 15vh), 165px)',
+  height: 'clamp(80px, min(26vw, 24vh), 260px)',
 }
 
 // Caveat (a handwritten-style Google Font, loaded in index.html for exactly this) for the
