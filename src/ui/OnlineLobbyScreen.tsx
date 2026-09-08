@@ -1198,11 +1198,19 @@ const copyCodeButtonStyle: React.CSSProperties = {
 // the opposite complaint on an earlier, differently-cropped version of parkiller-mascot.png: that
 // context no longer applies now that the client's own asset was swapped back to the wider
 // mascot+dice composition the mockup itself shows. Sized larger again to match.
+// Reported directly, with a screenshot of the target position and a concrete reference ("실례크기를
+// 든다면 margin-top:-135px 정도쯤" - as an example, about the amount margin-top:-135px would move
+// it): pulled up so the hood pokes out past the panel's own top border instead of sitting fully
+// inside it, same "breaks the frame" flourish the mockup itself uses. -135px was measured off that
+// one screenshot's own size, not a fixed constant to reuse as-is - scaled down here by the same
+// ratio (~0.52) as this element's own height clamp uses, so the overlap stays proportional instead
+// of swallowing the whole mascot on a small phone or barely nudging it on a big desktop.
 const menuMascotStyle: React.CSSProperties = {
   display: 'block',
   alignSelf: 'center',
   width: 'auto',
   height: 'clamp(80px, min(26vw, 24vh), 260px)',
+  marginTop: 'clamp(-140px, min(-14vw, -13vh), -44px)',
 }
 
 // Caveat (a handwritten-style Google Font, loaded in index.html for exactly this) for the
