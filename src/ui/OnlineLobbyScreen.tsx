@@ -1119,11 +1119,18 @@ const menuCloseButtonStyle: React.CSSProperties = {
 // (see that hook's own doc comment) has a legibility floor it can't always fully make up on its
 // own - the vh term catches that case too, smoothly, matched below by menuCardStyle's own padding
 // so both continue shrinking in step rather than reintroducing the original per-element mismatch.
+//
+// Reported directly, with a reference image: too big and unbalanced, next to a screenshot circling
+// this image specifically. Two changes together - the image itself (parkiller-mascot.png) is now
+// cropped tighter around just the mascot+sign (the floating dice and the dead black space around
+// them are gone - see that file's own recent history), which alone makes the same display height
+// render narrower and more compact; the max height here is also lowered (220 -> 165) so it reads
+// smaller even at full scale, not just differently cropped.
 const menuMascotStyle: React.CSSProperties = {
   display: 'block',
   alignSelf: 'center',
   width: 'auto',
-  height: 'clamp(60px, min(22vw, 19vh), 220px)',
+  height: 'clamp(50px, min(17vw, 15vh), 165px)',
 }
 
 // Caveat (a handwritten-style Google Font, loaded in index.html for exactly this) for the
