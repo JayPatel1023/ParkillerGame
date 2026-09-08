@@ -98,6 +98,15 @@ const SCAN_MODEL_RAW_HEIGHT = 33.0007
 const SCAN_MODEL_RAW_FOOTPRINT_RADIUS = 9.0006
 const SCAN_MODEL_SCALE = (PAWN_HEIGHT * 1.65) / SCAN_MODEL_RAW_HEIGHT
 
+// Reported directly ("파키말과 pawn말의 크기는 서로 달라야한다... 높이만 오직 높이만 길게해달라" - the
+// Parki and the pawn need to read as different sizes, the pawn currently reads bigger; stretch
+// only the height, only the height): a uniform SCAN_MODEL_SCALE keeps the Parkiller's own
+// proportions faithful to the real scan, but a taller-not-wider distinction from a pawn was always
+// the actual ask (see PAWN_HEIGHT's own comment above, "clearly bigger... was always about height,
+// not footprint") - a height-only multiplier on top of SCAN_MODEL_SCALE, not a bigger uniform one,
+// grows the figure taller without also puffing out its already-correct (scan-faithful) footprint.
+const SCAN_MODEL_HEIGHT_BOOST = 1.35
+
 // A continuous bell-like flare from a wide, near-flat base up to narrow shoulders - not the old
 // profile's straight vertical-walled cylinder through the midsection, which is nowhere in any of
 // the sheet's views. First two points share y=0 (center, then base radius) so the lathe closes
@@ -387,7 +396,7 @@ export function ParkillerScanModel({ color }: { color: PieceColor }) {
   if (!geometry) return null
 
   return (
-    <group scale={SCAN_MODEL_SCALE}>
+    <group scale={[SCAN_MODEL_SCALE, SCAN_MODEL_SCALE * SCAN_MODEL_HEIGHT_BOOST, SCAN_MODEL_SCALE]}>
       <mesh geometry={geometry} material={material} castShadow receiveShadow />
     </group>
   )
