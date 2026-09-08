@@ -9,6 +9,7 @@ import { pauseIntroMusic, playIntroMusic } from './ui/introMusic'
 import { PlayerCountSelector } from './ui/PlayerCountSelector'
 import { StartScreen } from './ui/StartScreen'
 import { preloadTexture } from './scene/useRobustTexture'
+import { preloadSTL } from './scene/useRobustSTL'
 
 // Reported directly ("이오락의 로딩속도가 매우느리다" - this game's loading speed is very slow):
 // every one of these used to be a plain top-level import, so the whole app - the entire Three.js/
@@ -92,6 +93,7 @@ export default function App() {
   // flow's own real time to finish in the background - see this file's own top comment.
   useEffect(() => {
     gameBoardScreenImport()
+    preloadSTL('/parkiller.stl')
   }, [])
   // null means classic hotseat (every color passed around one device) - see ColorSelector's own
   // "Jugar todos los colores" option. Non-null means vs-bots: the human plays only this color,

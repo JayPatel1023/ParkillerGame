@@ -19,6 +19,7 @@ import {
   easeOutBounce,
   easeOutCubic,
 } from './PieceMesh'
+import { useRobustSTL } from './useRobustSTL'
 
 interface ParkillerMeshProps {
   color: PieceColor
@@ -87,6 +88,16 @@ const PAWN_HEIGHT = PIECE_PROFILE_RAW[PIECE_PROFILE_RAW.length - 1][1] * PROFILE
 const MODEL_RAW_HEIGHT = 2.9
 const MODEL_SCALE = (PAWN_HEIGHT * 1.65) / MODEL_RAW_HEIGHT
 
+// The client's actual 3D scan of the physical figurine ("FIGURA DEL PARKILLER") - see
+// ParkillerScanModel further down for the component that renders it. Raw dimensions measured
+// directly off the scan file itself (millimeters, after useRobustSTL's own Z-up correction):
+// 33mm tall, ~18mm square footprint at the base. Scaled to the same PAWN_HEIGHT*1.65 target
+// MODEL_SCALE above already uses, so the footprint radius below and the rendered mesh itself
+// (ParkillerScanModel) always agree on scale even though they're computed in different places.
+const SCAN_MODEL_RAW_HEIGHT = 33.0007
+const SCAN_MODEL_RAW_FOOTPRINT_RADIUS = 9.0006
+const SCAN_MODEL_SCALE = (PAWN_HEIGHT * 1.65) / SCAN_MODEL_RAW_HEIGHT
+
 // A continuous bell-like flare from a wide, near-flat base up to narrow shoulders - not the old
 // profile's straight vertical-walled cylinder through the midsection, which is nowhere in any of
 // the sheet's views. First two points share y=0 (center, then base radius) so the lathe closes
@@ -105,14 +116,14 @@ const BODY_PROFILE_RAW: [number, number][] = [
   [0.2, 2.0],
 ]
 
-// This model's own widest point (the base, 0.78 raw) scaled to world units - the actual footprint
-// a stacking offset needs to clear, bigger than a pawn's own PIECE_BASE_RADIUS and computed live
-// from the same MODEL_SCALE the rendered mesh itself uses, not a separately-guessed constant that
-// could drift out of sync with it. Exported for BoardScene's own localStackOffset (see that file's
-// own comment) - the two most common "2 occupants share a square" cases are a pawn+pawn barrier
-// and a pawn joining the Parkiller, and a stacking offset sized only for the smaller pawn footprint
-// would still let the Parkiller spill past a tile's own border in the second case.
-export const PARKILLER_FOOTPRINT_RADIUS = 0.78 * MODEL_SCALE
+// The actual scan's own footprint (its widest point, base radius ~9mm raw) scaled to world units
+// - the real footprint a stacking offset needs to clear now that ParkillerScanModel (the scan) is
+// what's actually rendered, not ParkillerModel's old procedural approximation this constant used
+// to track. Exported for BoardScene's own localStackOffset (see that file's own comment) - the two
+// most common "2 occupants share a square" cases are a pawn+pawn barrier and a pawn joining the
+// Parkiller, and a stacking offset sized only for the smaller pawn footprint would still let the
+// Parkiller spill past a tile's own border in the second case.
+export const PARKILLER_FOOTPRINT_RADIUS = SCAN_MODEL_RAW_FOOTPRINT_RADIUS * SCAN_MODEL_SCALE
 
 // Tapers continuously from the shoulder to a sharp point, matching every view on the sheet - the
 // old profile's radius actually *increased* from 0.26 to 0.29 between y=2.0 and y=2.32 before
@@ -340,6 +351,48 @@ export function ParkillerModel({ color, config }: { color: PieceColor; config: P
   )
 }
 
+// The client sent an actual 3D scan of the real physical figurine ("STL file... FIGURA DEL
+// PARKILLER", 112,636 triangles) rather than another reference photo to re-approximate by eye -
+// this renders that scan directly instead of ParkillerModel's hand-tuned lathe-and-primitives
+// approximation above. ParkillerModel/DEFAULT_PARKILLER_CONFIG are left completely untouched
+// (still exported, still what ParkillerEditor.tsx's #parkiller-editor tool shows) since that tool
+// exists specifically to tune the *old* approximation against a photo - not relevant to a real
+// scan, but not this change's job to remove either. SCAN_MODEL_SCALE itself lives up with
+// MODEL_SCALE/PARKILLER_FOOTPRINT_RADIUS above, not here, since that constant needs to exist
+// before this file's own footprint-radius export runs.
+const PARKILLER_STL_URL = '/parkiller.stl'
+
+export function ParkillerScanModel({ color }: { color: PieceColor }) {
+  const geometry = useRobustSTL(PARKILLER_STL_URL)
+
+  // Same clearcoat recipe ParkillerModel's own mainMaterial uses, so the scan reads as the same
+  // glossy-lacquered material as every other piece on the board rather than a differently-finished
+  // one-off.
+  const material = useMemo(
+    () =>
+      new THREE.MeshPhysicalMaterial({
+        color: getColor(color),
+        roughness: 0.25,
+        metalness: 0.1,
+        clearcoat: 0.7,
+        clearcoatRoughness: 0.2,
+      }),
+    [color],
+  )
+
+  // Renders nothing (rather than a placeholder primitive) while the scan is still loading/retrying
+  // - the same "briefly absent, never wrong-looking" tradeoff useRobustSTL's own useRobustTexture
+  // sibling makes for board textures; a fallback shape here would have to be discarded the instant
+  // the real scan arrives anyway.
+  if (!geometry) return null
+
+  return (
+    <group scale={SCAN_MODEL_SCALE}>
+      <mesh geometry={geometry} material={material} castShadow receiveShadow />
+    </group>
+  )
+}
+
 export function ParkillerMesh({
   color,
   restPosition,
@@ -493,7 +546,7 @@ export function ParkillerMesh({
         document.body.style.cursor = 'auto'
       }}
     >
-      <ParkillerModel color={color} config={DEFAULT_PARKILLER_CONFIG} />
+      <ParkillerScanModel color={color} />
     </group>
   )
 }
