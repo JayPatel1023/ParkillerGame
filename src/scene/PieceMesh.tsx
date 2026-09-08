@@ -85,7 +85,14 @@ export const PIECE_PROFILE_RAW: [number, number][] = [
 // Verified live, via a screenshot, on that same tightest (6-player) board with two pieces sharing
 // one square (the actual worst case for overlap, not just a single idle piece) - both pieces are
 // still clearly separated, not touching, so there's no need to also touch the stacking clamp itself.
-export const PIECE_BASE_RADIUS = 0.4
+//
+// Bumped a twelfth time, 0.4 -> 0.45 - reported directly, but this time as a mild "un poco más
+// grandes" (a bit bigger) rather than another "still too small" - a modest ~12% nudge instead of
+// the much larger jumps the last two "still too small" rounds needed. The Parkiller's own height
+// (ParkillerMesh.tsx's PAWN_HEIGHT) is derived live from PIECE_PROFILE_RAW/PROFILE_SCALE, which
+// itself derives from this constant, so it grows right along with the pawns automatically - no
+// separate change needed there to keep the two in proportion.
+export const PIECE_BASE_RADIUS = 0.45
 export const PROFILE_SCALE = PIECE_BASE_RADIUS / Math.max(...PIECE_PROFILE_RAW.map(([r]) => r))
 // Stretches the profile taller without widening the base - requested directly, twice now ("peones
 // más alargados" both times), each time with a reference photo of taller pawns. Applied only to
