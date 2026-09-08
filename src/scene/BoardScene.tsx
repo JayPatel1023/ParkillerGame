@@ -360,14 +360,28 @@ function localTangentNormal(waypoints: [number, number][], index: number): { tan
 // at that waypoint instead of the world's fixed axes - see STACK_OFFSETS' own comment for why on
 // both counts. `waypoints` is null for a piece the caller couldn't resolve a lane for (shouldn't
 // normally happen); falls back to the raw (unscaled, unrotated) fraction as-is.
-// The larger of the two occupant footprints a shared square can ever actually hold - a pawn+pawn
-// barrier or a pawn joining the Parkiller, never two Parkillers (each color has exactly one).
-// Sized off the Parkiller's own (bigger) footprint so the clamp below stays safe for either case.
-const MAX_OCCUPANT_RADIUS = Math.max(PIECE_BASE_RADIUS, PARKILLER_FOOTPRINT_RADIUS)
+// Reported directly ("barreras siguen fijas, sin que los peones... puedan moverse" - barriers
+// stay stuck, the pawns forming them can't move): the *engine* already allows breaking a barrier
+// open (PK9.1 - a double forces one piece open, and both pieces are genuinely clickable), but a
+// single global MAX_OCCUPANT_RADIUS - sized for the worst case, a pawn sharing a square with the
+// much bigger Parkiller (see ParkillerMesh.tsx's own real-scan footprint) - clamped the offset for
+// *every* shared square down to a sliver (or, on the tightest 6-player board, to zero, once the
+// day's pawn-size bump pushed PARKILLER_FOOTPRINT_RADIUS past that board's own tile half-width).
+// Two barrier pawns then rendered fully coincident - clickable, but visually merged into what
+// reads as one single, immovable piece. The ordinary pawn+pawn case (the actual barrier the client
+// hit) never needed clamping that hard - only a square actually holding the Parkiller does. Each
+// call now gets the real max radius for its own two occupants (maxRadiusForGroup below) instead of
+// assuming the worst case everywhere.
 // Leaves a visible gap from the tile's own drawn border, not just enough to avoid true geometric
 // overlap - reported directly, with a screenshot, as still "밟고있다" (stepping on the line) at an
 // offset that technically stayed inside the tile's raw half-width.
 const STACK_CLEARANCE_FACTOR = 0.85
+
+// A stack group's own occupant ids are prefixed 'pawn-'/'parkiller-' (see pawnOccupantId/
+// parkillerOccupantId) - cheaper and more direct than re-deriving piece types from state.
+function maxRadiusForGroup(group: string[]): number {
+  return group.some((id) => id.startsWith('parkiller-')) ? PARKILLER_FOOTPRINT_RADIUS : PIECE_BASE_RADIUS
+}
 
 function localStackOffset(
   waypoints: [number, number][] | null,
@@ -375,6 +389,7 @@ function localStackOffset(
   along: number,
   across: number,
   tileSize: number,
+  maxOccupantRadius: number,
 ): [number, number] {
   // Reported directly, with a screenshot: two stacked pieces spilling past the tile's own border,
   // "밟고있다" (stepping on the line) - these offsets are tuned as *fractions of tileSize* (see
@@ -384,7 +399,7 @@ function localStackOffset(
   // fractions were last tuned by eye). Clamping the offset's own magnitude against the tile's real
   // half-width minus the larger occupant's own radius makes this correct by construction regardless
   // of how big pieces get from here, instead of needing another by-eye re-tune each time.
-  const maxOffsetMagnitude = Math.max(0, tileSize / 2 - MAX_OCCUPANT_RADIUS) * STACK_CLEARANCE_FACTOR
+  const maxOffsetMagnitude = Math.max(0, tileSize / 2 - maxOccupantRadius) * STACK_CLEARANCE_FACTOR
   const rawMagnitude = Math.hypot(along, across) * tileSize
   const clampScale = rawMagnitude > maxOffsetMagnitude && rawMagnitude > 0 ? maxOffsetMagnitude / rawMagnitude : 1
 
@@ -839,7 +854,7 @@ export function BoardScene({
         if (group && group.length > 1) {
           const [along, across] = STACK_OFFSETS[group.indexOf(pawnOccupantId(piece)) % STACK_OFFSETS.length]
           const stackWp = stackWaypointsFor(piece, definition)
-          const [ox, oz] = localStackOffset(stackWp?.waypoints ?? null, stackWp?.index ?? -1, along, across, tileSize)
+          const [ox, oz] = localStackOffset(stackWp?.waypoints ?? null, stackWp?.index ?? -1, along, across, tileSize, maxRadiusForGroup(group))
           restPosition[0] += ox
           restPosition[2] += oz
         }
@@ -916,7 +931,14 @@ export function BoardScene({
         const parkillerCrowded = Boolean(parkillerGroup && parkillerGroup.length > 1)
         if (parkillerGroup && parkillerGroup.length > 1) {
           const [along, across] = STACK_OFFSETS[parkillerGroup.indexOf(parkillerOccupantId(player.color)) % STACK_OFFSETS.length]
-          const [ox, oz] = localStackOffset(definition.trackWaypoints, player.parkiller.trackPosition, along, across, tileSize)
+          const [ox, oz] = localStackOffset(
+            definition.trackWaypoints,
+            player.parkiller.trackPosition,
+            along,
+            across,
+            tileSize,
+            maxRadiusForGroup(parkillerGroup),
+          )
           restPosition[0] += ox
           restPosition[2] += oz
         }
