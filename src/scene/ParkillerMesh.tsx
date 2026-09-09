@@ -105,7 +105,15 @@ const SCAN_MODEL_SCALE = (PAWN_HEIGHT * 1.65) / SCAN_MODEL_RAW_HEIGHT
 // the actual ask (see PAWN_HEIGHT's own comment above, "clearly bigger... was always about height,
 // not footprint") - a height-only multiplier on top of SCAN_MODEL_SCALE, not a bigger uniform one,
 // grows the figure taller without also puffing out its already-correct (scan-faithful) footprint.
-const SCAN_MODEL_HEIGHT_BOOST = 1.35
+//
+// Reported directly again ("파키말의 크기가 너무 크다" - the Parki's size is now too big): 1.35 on
+// top of SCAN_MODEL_SCALE's own 1.65x meant a total 2.23x pawn height, which kept compounding every
+// time PAWN_HEIGHT itself grew from a later, separate pawn-size bump - the two requests share the
+// same base height, so a fixed extra multiplier here couldn't help but drift further from "clearly
+// bigger" into "too big" as the pawn it's measured against kept growing. Backed off to 1.1 - the
+// base 1.65x alone already reads taller than a pawn, so this is a small extra lift, not the main
+// source of the height difference anymore.
+const SCAN_MODEL_HEIGHT_BOOST = 1.1
 
 // A continuous bell-like flare from a wide, near-flat base up to narrow shoulders - not the old
 // profile's straight vertical-walled cylinder through the midsection, which is nowhere in any of
