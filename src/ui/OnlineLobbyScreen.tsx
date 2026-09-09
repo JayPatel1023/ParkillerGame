@@ -60,14 +60,14 @@ function generateRoomCode(): string {
 // string so this still degrades to the generic fallback (never a raw/English leak) if photonClient's
 // own wording ever changes without this list being updated to match.
 function friendlyOnlineError(rawMessage: string): string {
-  if (rawMessage.includes('room does not exist')) return 'La sala no existe. Revisá el código.'
+  if (rawMessage.includes('room does not exist')) return 'La sala no existe. Revise el código.'
   if (rawMessage.includes('room is full')) return 'La sala ya está llena.'
   if (rawMessage.includes('room has already started')) return 'Esa partida ya empezó.'
-  if (rawMessage.includes('room code already in use')) return 'Ese código de sala ya está en uso - probá de nuevo.'
+  if (rawMessage.includes('room code already in use')) return 'Ese código de sala ya está en uso - pruebe de nuevo.'
   if (rawMessage.includes('lost connection') || rawMessage.includes('connection failed') || rawMessage.includes('not connected')) {
     return 'Se perdió la conexión con el servidor.'
   }
-  return 'No se pudo conectar. Probá de nuevo en un momento.'
+  return 'No se pudo conectar. Pruebe de nuevo en un momento.'
 }
 
 // Every seat's color is a pure function of actorNr rank - the lowest actorNr in the room (always
@@ -645,7 +645,7 @@ export default function OnlineLobbyScreen() {
               and the dice) untouched, exactly as supplied. */}
           <img
             src="/parkiller-mascot.png"
-            alt="Jugar online - Creá una sala o unite con un código"
+            alt="Jugar online - Crea una sala o únete con un código para jugar con tus amigos en línea"
             className="menu-mascot"
             style={menuMascotStyle}
           />
@@ -672,7 +672,7 @@ export default function OnlineLobbyScreen() {
               <h3 className="menu-card-title" style={menuCardTitleStyle}>
                 Crear <span style={{ color: '#79e39a' }}>sala</span>
               </h3>
-              <p className="menu-card-subtitle" style={menuCardSubtitleStyle}>Elige el número de jugadores y crea tu propia sala.</p>
+              <p className="menu-card-subtitle" style={menuCardSubtitleStyle}>Elija el número de jugadores y cree su propia sala.</p>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
                 {[2, 3, 4, 5, 6].map((n) => (
                   <button
@@ -696,7 +696,7 @@ export default function OnlineLobbyScreen() {
               <h3 className="menu-card-title" style={menuCardTitleStyle}>
                 Unirse <span style={{ color: '#8ec4f5' }}>a sala</span>
               </h3>
-              <p className="menu-card-subtitle" style={menuCardSubtitleStyle}>Ingresa el código de la sala para unirte a la partida.</p>
+              <p className="menu-card-subtitle" style={menuCardSubtitleStyle}>Ingrese el código de la sala para unirse a la partida.</p>
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 12 }}>
                 <input
                   value={roomCodeInput}

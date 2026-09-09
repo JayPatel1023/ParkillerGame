@@ -270,8 +270,8 @@ export default function ParkillerEditor() {
         <h1 style={{ fontSize: 18, fontWeight: 800, margin: '0 0 12px 0' }}>Editor de forma del Parki</h1>
         <p style={{ fontSize: 13, color: '#aaa', lineHeight: 1.6, marginBottom: 14 }}>
           Los puntos <b style={{ color: '#c9a24b' }}>dorados</b> (cuerpo) y <b style={{ color: '#7ed88b' }}>verdes</b> (capucha) del panel del medio se
-          arrastran hacia adentro o hacia afuera con el mouse. La figura 3D y este mismo dibujo se actualizan al instante. Compará con estas fotos, y
-          cuando quede parecida sacale una captura de pantalla a toda la página.
+          arrastran hacia adentro o hacia afuera con el mouse. La figura 3D y este mismo dibujo se actualizan al instante. Compare con estas fotos, y
+          cuando quede parecida sáquele una captura de pantalla a toda la página.
         </p>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
           {(Object.keys(VIEW_IMAGES) as View[]).map((v) => (
@@ -299,7 +299,7 @@ export default function ParkillerEditor() {
 
       {/* Draggable profile silhouette */}
       <div style={{ flexShrink: 0 }}>
-        <div style={{ marginBottom: 10, fontSize: 13, color: '#999' }}>Arrastrá los puntos ← →</div>
+        <div style={{ marginBottom: 10, fontSize: 13, color: '#999' }}>Arrastre los puntos ← →</div>
         <ProfileEditor bodyProfile={bodyProfile} hoodProfile={hoodProfile} onBodyChange={setBodyProfile} onHoodChange={setHoodProfile} />
       </div>
 
@@ -326,7 +326,7 @@ export default function ParkillerEditor() {
             <OrbitControls target={[0, 0.7, 0]} />
           </Canvas>
         </div>
-        <p style={{ fontSize: 12, color: '#999', marginTop: 8 }}>Arrastrá con el mouse (fuera de los puntos) para girar la figura.</p>
+        <p style={{ fontSize: 12, color: '#999', marginTop: 8 }}>Arrastre con el mouse (fuera de los puntos) para girar la figura.</p>
       </div>
 
       {/* Arms/hands + reset */}

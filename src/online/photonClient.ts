@@ -204,7 +204,7 @@ export class PhotonConnection implements RoomTransport {
   // connection to the region master had silently died in the background sometime after connect()
   // first resolved, and nothing was watching for that. This lets a caller find out about a lost
   // connection whenever it happens, not just at the moment an operation already failed because of
-  // it - OnlineLobbyScreen.tsx uses it to route back to a clear "reconectá" state while sitting on
+  // it - OnlineLobbyScreen.tsx uses it to route back to a clear "reconectar" state while sitting on
   // the menu, instead of leaving a dead connection looking identical to a live one.
   onConnectionLost(listener: () => void): () => void {
     return this.subscribeStateChange((state) => {

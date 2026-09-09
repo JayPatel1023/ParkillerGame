@@ -565,7 +565,7 @@ export function GameBoardScreen({
 // is equally "yours") marks which pill is *this player's own* seat, distinct from isCurrentTurn
 // (whose turn it is right now) - reported directly for online play: once a game actually starts,
 // nothing on screen said which color a given online player even was anymore (the lobby's own
-// "(vos)" tag only exists before that point) - important with more than 2 real people in a room,
+// "Usted" tag only exists before that point) - important with more than 2 real people in a room,
 // where "wait for your own name to light up" isn't enough to know which color that even is in the
 // first place. The same tag is just as useful once local play also has non-human seats (bots) to
 // tell apart from the human's own.

@@ -75,7 +75,7 @@ export function ColorDrawModal({
             return (
               <div key={i} style={{ ...rowStyle, borderColor: isYou ? BRAND_GOLD : `${BRAND_GOLD}55` }}>
                 <span style={{ ...dotStyle, background: getColor(displayColors[i]) }} />
-                <span style={labelStyle}>{spinning ? ' ' : isYou ? 'Vos' : entry.isBot ? 'Bot' : 'Jugador'}</span>
+                <span style={labelStyle}>{spinning ? ' ' : isYou ? 'Usted' : entry.isBot ? 'Bot' : 'Jugador'}</span>
               </div>
             )
           })}
