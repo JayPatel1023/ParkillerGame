@@ -8,11 +8,13 @@ import type { Piece } from '../core/pieces/piece'
 import type { MoveOption } from '../core/rules/moveOption'
 import { useTurnManager } from '../hooks/useTurnManager'
 import { BoardScene } from '../scene/BoardScene'
+import { getHopSoundLabel, getSelectedHopSoundIndex, nextHopSound, playHopSound } from '../scene/hopSound'
 import { playCaptureSound, playFinishSound, playGameWonSound } from './celebrationSound'
 import { ColorDrawModal, type ColorDrawEntry } from './ColorDrawModal'
 import { Confetti } from './Confetti'
 import { EliminationToast } from './EliminationToast'
 import { HelpModal } from './HelpModal'
+import { getSelectedTrackIndex, getTrackLabel, isMusicMuted, nextMusicTrack, toggleMusicMuted } from './introMusic'
 import { MoveLog } from './MoveLog'
 import { RewardBurst } from './RewardBurst'
 import { RewardToast } from './RewardToast'
@@ -136,6 +138,17 @@ export function GameBoardScreen({
   // isn't one to pause anyway; it's all synchronous) keeps running underneath exactly like the exit
   // confirmation dialog already does.
   const [showingHelp, setShowingHelp] = useState(false)
+  // Requested directly ("음악을 넣어야겠는데... 3개옵션으로 노래를 선택할수잇게 해달라... 말들을
+  // 움직일때의 소리도 3가지로" - add music, let people choose from 3 song options, and also give
+  // the piece-movement sound 3 different options): both preferences already existed as functions
+  // (introMusic.ts, hopSound.ts) but were only ever reachable from StartScreen's own settings
+  // panel, before a game had even started - this mirrors that same row-of-buttons panel here so a
+  // player can actually change either one mid-game, which is when "노래를 고를수잇도록" (being able
+  // to pick a song) and hearing the result of a hop-sound choice actually matters.
+  const [showingSoundSettings, setShowingSoundSettings] = useState(false)
+  const [musicMuted, setMusicMuted] = useState(isMusicMuted)
+  const [trackIndex, setTrackIndex] = useState(getSelectedTrackIndex)
+  const [hopSoundIndex, setHopSoundIndex] = useState(getSelectedHopSoundIndex)
   // See GameSession's own startingPlayerResult doc comment - shown exactly once, right when this
   // screen first mounts for a local game; undefined session.startingPlayerResult (online play)
   // just means this never becomes true at all. Not reset on a later re-render even if the prop
@@ -441,11 +454,42 @@ export function GameBoardScreen({
         ?
       </button>
 
+      <button className="chunky-btn" onClick={() => setShowingSoundSettings(true)} title="Sonido" style={soundSettingsButtonStyle}>
+        ♪
+      </button>
+
       <button className="chunky-btn" onClick={() => setConfirmingExit(true)} title="Salir del juego" style={exitButtonStyle}>
         ✕
       </button>
 
       {showingHelp && <HelpModal onClose={() => setShowingHelp(false)} />}
+
+      {showingSoundSettings && (
+        <div style={overlayStyle}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: '#f2ede0' }}>Sonido</div>
+          <button className="chunky-btn" onClick={() => setMusicMuted(toggleMusicMuted())} style={secondaryButtonStyle}>
+            {musicMuted ? 'Música: apagada' : 'Música: encendida'}
+          </button>
+          <button className="chunky-btn" onClick={() => setTrackIndex(nextMusicTrack())} style={secondaryButtonStyle}>
+            {getTrackLabel(trackIndex)}
+          </button>
+          {/* Immediately plays the newly-picked tick, not just the next real hop - otherwise the
+              choice wouldn't actually be heard until this player's next move. */}
+          <button
+            className="chunky-btn"
+            onClick={() => {
+              setHopSoundIndex(nextHopSound())
+              playHopSound()
+            }}
+            style={secondaryButtonStyle}
+          >
+            Sonido de movimiento: {getHopSoundLabel(hopSoundIndex)}
+          </button>
+          <button className="chunky-btn" onClick={() => setShowingSoundSettings(false)} style={rollButtonStyle(true)}>
+            Cerrar
+          </button>
+        </div>
+      )}
 
       {showingColorDraw && session.colorDraw && (
         <ColorDrawModal
@@ -770,6 +814,13 @@ const exitButtonStyle: React.CSSProperties = {
 const helpButtonStyle: React.CSSProperties = {
   ...exitButtonStyle,
   right: 16 + 46 + 10,
+}
+
+// Same medallion, one more slot further left - opens the music/hop-sound picker (see
+// showingSoundSettings above) without leaving the game screen.
+const soundSettingsButtonStyle: React.CSSProperties = {
+  ...exitButtonStyle,
+  right: 16 + 46 + 10 + 46 + 10,
 }
 
 const overlayStyle: React.CSSProperties = {

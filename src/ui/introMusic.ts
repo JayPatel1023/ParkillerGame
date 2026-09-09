@@ -12,6 +12,12 @@
 // two tracks (sound_musica_1/_2) are back for the melody half, this time with an actual picker
 // (nextMusicTrack, wired to a Settings row) instead of the original's silent per-launch random
 // pick - "para elegir" (to choose) was explicit, not just variety for its own sake.
+//
+// Requested directly again ("오락을 하는기간에도... 음악을 넣어야겠는데" - during the gameplay
+// period too, we need music so it's not boring): despite the name, this module's own playback was
+// never actually limited to the intro/lobby screens - App.tsx's own screen-driven effect was what
+// silenced it the instant a game started. That's the piece that changed (see App.tsx), not
+// anything here; the same 3 tracks/picker now carry straight through into gameplay.
 const TRACKS: { url: string; label: string }[] = [
   { url: '/music/intro.mp3', label: 'Melodía 1' },
   { url: '/music/music-2.mp3', label: 'Melodía 2' },

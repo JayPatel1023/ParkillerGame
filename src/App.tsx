@@ -133,12 +133,23 @@ export default function App() {
   }, [])
 
   // Requested directly ("habría que ponerle alguna música a la introducción del juego"): plays
-  // while the player is still setting a game up (start/player-count/color screens), not once real
-  // gameplay (or a dev-only tool, or online play - a separate mode with its own concerns) has
-  // actually started. introMusic.ts's own play/pause are safe to call repeatedly - this just
-  // re-asserts the right state on every render rather than tracking a previous value.
+  // while the player is still setting a game up (start/player-count/color screens). Requested
+  // again, directly, once that much existed ("오락을 하는기간에도... 음악을 넣어야겠는데" - during
+  // the gameplay period too, we need music, so it's not boring): this used to stop the instant
+  // `screen` became 'game' - now it keeps playing straight through local play as well, same
+  // track/mute choice, just no longer silenced once a game actually starts. Still off for any
+  // dev-only tool or online play (a separate mode with its own concerns) via the `hash === ''`
+  // check.
+  //
+  // `screen` stays a dependency even though the condition no longer branches on it - the browser
+  // blocks the very first play() attempt (this effect's own initial mount, before any user
+  // gesture exists), and introMusic.ts's own audio element is never touched again until this
+  // effect re-runs, so without `screen` here the retry that screen change causes could never
+  // happen, and music would silently never actually start for the whole local-play session
+  // despite every call site looking correct. play()/pause() are both safe to call repeatedly - an
+  // already-playing/-paused element just no-ops.
   useEffect(() => {
-    if (screen !== 'game' && hash === '') playIntroMusic()
+    if (hash === '') playIntroMusic()
     else pauseIntroMusic()
   }, [screen, hash])
 
