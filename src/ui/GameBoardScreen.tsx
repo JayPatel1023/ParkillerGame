@@ -374,9 +374,7 @@ export function GameBoardScreen({
     : !isMyTurn
       ? `Esperando el turno de ${currentPlayer.color}...`
       : noMoveReason && !rolling
-        ? noMoveReason === 'barrier'
-          ? 'Barrera bloqueada: hace falta un dobles para abrirla'
-          : 'Ningún movimiento posible con esta tirada'
+        ? 'Ningún movimiento posible con esta tirada'
         : pieceChoice
           ? 'Elija con qué dado moverla'
           : visiblePendingReward

@@ -29,14 +29,15 @@ export interface DiceRoll {
 type BarrierLocation = { kind: 'track'; position: number } | { kind: 'corridor'; position: number }
 
 /** Why moveNotPossible fired - reported directly (Carlos: "Cuando hay una barrera no se quieren
- * mover ninguno de los dos peones... no ha manera"): a barrier-forfeited roll used to look
- * identical to a roll that genuinely had nothing to move, and the turn just silently passed either
- * way with zero on-screen explanation. 'barrier' means offerMoves() actually found candidate moves
- * this roll but excludeLockedBarrierPieces filtered every one of them out for sitting in the
- * player's own barrier - 'none' covers every other reason (nothing in play could use either die at
- * all). GameBoardScreen uses this to show a specific "barrier locked, need a double" message
- * instead of the turn just silently advancing. */
-export type MoveNotPossibleReason = 'barrier' | 'none'
+ * mover ninguno de los dos peones... no ha manera"): a wasted roll used to look identical to a
+ * roll that genuinely had nothing to move, and the turn just silently passed either way with zero
+ * on-screen explanation. Only ever 'none' now - see pieceIsInOwnBarrier's own doc comment on why a
+ * barrier no longer has a distinct reason of its own: a normal roll can freely move a barrier piece
+ * (the player's own choice), so a barrier alone no longer forces a wasted roll the way it used to.
+ * Kept as a named reason (rather than inlining a plain boolean) since GameBoardScreen still branches
+ * on it to show an explanatory message instead of the turn just silently advancing, and a future
+ * distinct reason may still want to reuse this same plumbing. */
+export type MoveNotPossibleReason = 'none'
 
 export interface ParkillerMoveResult {
   color: PieceColor
@@ -568,25 +569,30 @@ export class TurnManager {
     return { capturedPawn, capturedParkillerColor, secondCapturedParkillerColor }
   }
 
-  // Client's own corrected rulebook (rules.pdf, "OPENING A BARRIER" - "THERE ARE TWO WAYS TO
-  // OPEN A BARRIER"): a barrier blocks the path outright, including for the two pieces that *are*
-  // the barrier - a normal move simply has no legal option for either of them, full stop, not even
-  // a capture escape hatch. The only two ways out are a double (offerMoves() below, forces one
-  // open) or an opposing Parki interacting with the square (landing on it eliminates one, per
-  // resolveParkillerCollisions - already unaffected by this, since the Parki's own black die is
-  // never subject to offerMoves()/offerReward() at all). Computed fresh on every call, not cached,
-  // since a barrier can form or break mid-roll.
+  // Corrected directly by the client, reversing an earlier reading of rules.pdf's "OPENING A
+  // BARRIER" page ("THERE ARE TWO WAYS TO OPEN A BARRIER" - a double, or an opposing Parki): that
+  // page describes the two ways a barrier opens *involuntarily* (forced, no choice - a double
+  // obligates it per PK9.1, a Parki simply eliminates one pawn outright), not the *only* ways it
+  // can ever open at all. "La barrera se abre 'obligatoriamente e involuntariamente' si sale un
+  // doble, pero el jugador puede abrirla cuando quiera" (the barrier opens "mandatorily and
+  // involuntarily" on a double, but the player can open it whenever they want): an ordinary,
+  // non-double roll can still move either barrier piece normally, by the player's own choice - see
+  // offerMoves() below, which no longer excludes a barrier piece from dieA/dieB/sum moves the way
+  // it used to. This method's own two remaining callers are unaffected by that correction:
+  // offerMoves()'s double-forces-open branch still needs to know exactly this "is there currently
+  // an own barrier" answer (to force the choice rather than leave it optional on a double), and
+  // offerReward's own excludeBarrierAndSpentPiece still unconditionally excludes a barrier piece
+  // from a *bonus/reward* move specifically (a separate, previously-reported bug - a reward move
+  // isn't a die's own face value, and was never one of the rulebook's own ways to move a barrier
+  // piece at all, voluntarily or not). Computed fresh on every call, not cached, since a barrier
+  // can form or break mid-roll.
   // Reported directly, via a systematic rules audit Carlos himself requested: `ownBarrierCorridor`
   // used to only ever get computed `ownBarrierTrack === null ? ... : null` - the instant a player
   // also had a barrier on the shared track, their own separate corridor barrier (a fully legitimate
   // simultaneous state, using all 4 of a color's own pieces - 2 in each) went completely invisible
-  // to this check, silently unlocking it on a non-double roll. Verified directly: a Red with a
-  // track barrier at position 5 AND a corridor barrier at corridor index 1 offered real, legal
-  // CorridorMove options for the corridor-barrier pieces on a plain [3, 2] roll. Both barrier kinds
-  // are independent detectors (ownBarrierTrackPosition/ownCorridorBarrierPosition each only ever
-  // scan this same player's own 4 pieces) and can coexist - computing both unconditionally fixes
-  // this for both callers of this method (offerMoves' own excludeLockedBarrierPieces below, and
-  // offerReward's own excludeBarrierAndSpentPiece, which share this exact helper).
+  // to this check. Both barrier kinds are independent detectors (ownBarrierTrackPosition/
+  // ownCorridorBarrierPosition each only ever scan this same player's own 4 pieces) and can
+  // coexist - computing both unconditionally fixes this for both remaining callers.
   private pieceIsInOwnBarrier(piece: Piece): boolean {
     const ownBarrierTrack = ownBarrierTrackPosition(this.currentPlayer)
     const ownBarrierCorridor = ownCorridorBarrierPosition(this.currentPlayer)
@@ -600,34 +606,24 @@ export class TurnManager {
     const state = this.diceState
     if (!state) return
 
-    // See pieceIsInOwnBarrier's own doc comment - unlike offerReward's own unconditional exclusion
-    // below, a double is the one case where a barrier piece *should* stay eligible (that's the
-    // "roll a double" way of opening it, per the rulebook's own two options) - the double-forces-
-    // open branch further down needs exactly this same "is there currently an own barrier" answer.
-    //
-    // barrierExcludedAnyMove (see MoveNotPossibleReason) tracks whether this filter actually threw
-    // out a real candidate this roll, so the moveNotPossible check further down can tell a genuine
-    // barrier-forfeited roll apart from a roll that never had anything to offer in the first place.
-    let barrierExcludedAnyMove = false
-    const excludeLockedBarrierPieces = (moves: MoveOption[]) => {
-      if (state.dieA === state.dieB) return moves
-      const filtered = moves.filter((m) => !this.pieceIsInOwnBarrier(m.piece))
-      if (filtered.length < moves.length) barrierExcludedAnyMove = true
-      return filtered
-    }
-
+    // Corrected directly by the client (see pieceIsInOwnBarrier's own doc comment): a barrier
+    // piece is never excluded from an ordinary dieA/dieB/sum move just for sitting in a barrier -
+    // the player can always choose to move it normally, on any roll. Only the double-forces-open
+    // obligation further down (barrierLocation/applyObligations) ever *restricts* moves down to a
+    // barrier-break when a barrier already exists, and that's a double-only, mandatory narrowing,
+    // not an exclusion on every other roll.
     const isDoubleRoll = state.dieA === state.dieB
     const dieAMoves = !state.dieAUsed
-      ? excludeLockedBarrierPieces(getValidMoves(this.board, this.currentPlayer, this.players, state.dieA, this.settings, 'dieA', isDoubleRoll))
+      ? getValidMoves(this.board, this.currentPlayer, this.players, state.dieA, this.settings, 'dieA', isDoubleRoll)
       : null
     const dieBMoves = !state.dieBUsed
-      ? excludeLockedBarrierPieces(getValidMoves(this.board, this.currentPlayer, this.players, state.dieB, this.settings, 'dieB', isDoubleRoll))
+      ? getValidMoves(this.board, this.currentPlayer, this.players, state.dieB, this.settings, 'dieB', isDoubleRoll)
       : null
     // Only ever a candidate move source before either die is individually spent - same precondition
     // the sum-move computation further down already required.
     const sumMoves =
       !state.dieAUsed && !state.dieBUsed
-        ? excludeLockedBarrierPieces(getValidMoves(this.board, this.currentPlayer, this.players, state.dieA + state.dieB, this.settings, 'sum', isDoubleRoll))
+        ? getValidMoves(this.board, this.currentPlayer, this.players, state.dieA + state.dieB, this.settings, 'sum', isDoubleRoll)
         : null
 
     // PC2.1: "A pawn must move to the starting square" whenever a die's own value is the exit
@@ -795,7 +791,7 @@ export class TurnManager {
     this.pendingMoves = options
 
     if (this.pendingMoves.length === 0) {
-      this.moveNotPossible.emit(barrierExcludedAnyMove ? 'barrier' : 'none')
+      this.moveNotPossible.emit('none')
       // Neither remaining die has a legal move - both are lost per the rulebook ("if the move is
       // impossible, the roll is lost"), not retried.
       state.dieAUsed = true

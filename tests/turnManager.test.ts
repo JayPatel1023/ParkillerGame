@@ -523,9 +523,11 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     const red = createPlayerState('Red', board)
     const blue = createPlayerState('Blue', board)
     red.pieces[0].state = 'OnTrack'
-    red.pieces[0].trackPosition = 12
+    red.pieces[0].trackPosition = 30
     red.pieces[1].state = 'OnTrack'
-    red.pieces[1].trackPosition = 12 // pieces[0] and pieces[1] form a barrier at 12
+    red.pieces[1].trackPosition = 30 // pieces[0] and pieces[1] form a barrier at 30 - well ahead
+    // of pieces[2]'s own reward path below, so it's excluded by the barrier check itself, not
+    // incidentally blocked as a path obstacle it would otherwise have to cross.
     red.pieces[2].state = 'OnTrack'
     red.pieces[2].trackPosition = 5 // the one that actually captures
     blue.pieces[0].state = 'OnTrack'
@@ -541,16 +543,19 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     const result = manager.submitMove(red.pieces[2]) // 5 -> 8 (dieA=3), captures blue.pieces[0]
     expect(result?.capturedPiece).toBe(blue.pieces[0])
 
-    // The reward is offered, but pieces[0]/pieces[1] - still locked in their own barrier on this
-    // non-double roll - must not appear as candidates for it at all, for either amount.
+    // The reward is genuinely offered (not forfeited) - pieces[0]/pieces[1], sitting in their own
+    // barrier at 30, never appear as candidates for it at all, for either amount, while pieces[2]
+    // (not barrier-locked) does. This exclusion stays unconditional regardless of double or not -
+    // see excludeBarrierAndSpentPiece's own doc comment - unlike an ordinary dieA/dieB/sum move,
+    // which this describe block's own header comment covers separately.
+    expect(latestMoves.every((m) => m.diceSource === 'reward')).toBe(true)
     expect(latestMoves.some((m) => m.piece === red.pieces[0])).toBe(false)
     expect(latestMoves.some((m) => m.piece === red.pieces[1])).toBe(false)
-    // pieces[2] itself (not barrier-locked) still gets offered normally.
     expect(latestMoves.some((m) => m.piece === red.pieces[2])).toBe(true)
 
-    // The barrier itself really is still there - unaffected, still stacked at 12.
-    expect(red.pieces[0].trackPosition).toBe(12)
-    expect(red.pieces[1].trackPosition).toBe(12)
+    // The barrier itself really is still there - unaffected, still stacked at 30.
+    expect(red.pieces[0].trackPosition).toBe(30)
+    expect(red.pieces[1].trackPosition).toBe(30)
   })
 
   it('finishing a piece grants a 10-square reward', () => {
@@ -998,21 +1003,26 @@ describe('TurnManager - mandatory barrier removal on doubles (PK9.1)', () => {
   })
 })
 
-// Reported directly ("장벽 안에 있는 말이 어떤 숫자가 나오든 자동으로 장벽에서 나올 수 있는 규칙은
-// 아닙니다" - a piece in a barrier does NOT automatically come out no matter what number comes up):
-// the client's own corrected rulebook (rules.pdf, "OPENING A BARRIER") states "THERE ARE TWO WAYS
-// TO OPEN A BARRIER" - a double, or an opposing Parki - and that a barrier "blocks the path"
-// outright otherwise. A normal (non-double) roll previously moved a barrier piece exactly like any
-// other piece; per this page, it should have *no* legal move for either barrier piece at all.
-describe('TurnManager - a normal roll cannot move a piece out of its own barrier', () => {
-  it('offers no moves for either barrier piece on a non-double roll, only for a free third piece', () => {
+// Corrected directly by the client, reversing this describe block's own earlier premise: "La
+// barrera se abre 'obligatoriamente e involuntariamente' si sale un doble, pero el jugador puede
+// abrirla cuando quiera" (the barrier opens "mandatorily and involuntarily" on a double, but the
+// player can open it whenever they want). rules.pdf's "OPENING A BARRIER" page ("THERE ARE TWO
+// WAYS TO OPEN A BARRIER" - a double, or an opposing Parki) describes the two *involuntary* ways a
+// barrier opens, not the only ways it can ever move at all - a normal roll can still voluntarily
+// move either barrier piece, exactly like any other piece. Reported directly, concretely, with a
+// screenshot and the client's own exact roll ("Salió 5+2 al azul. NO se movió la barrera... NO
+// dejó mover ni el 2 ni el 5"): a non-double 5+2 with a barrier on the entry square and nothing
+// else in play correctly offered zero moves under the old (incorrect) reading - re-verified
+// directly against this same scenario before writing the tests below.
+describe('TurnManager - a normal roll can voluntarily move a piece out of its own barrier', () => {
+  it('offers ordinary moves for both barrier pieces on a non-double roll, alongside a free third piece', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)
     const blue = createPlayerState('Blue', board)
     red.pieces[0].state = 'OnTrack'
     red.pieces[0].trackPosition = 5
     red.pieces[1].state = 'OnTrack'
-    red.pieces[1].trackPosition = 5 // own barrier at 5, pieces[0] + pieces[1] - locked in place
+    red.pieces[1].trackPosition = 5 // own barrier at 5, pieces[0] + pieces[1] - free to move away
     red.pieces[2].state = 'OnTrack'
     red.pieces[2].trackPosition = 0 // free to move normally - not part of the barrier
 
@@ -1024,15 +1034,15 @@ describe('TurnManager - a normal roll cannot move a piece out of its own barrier
 
     manager.requestRoll()
 
-    expect(offered.some((m) => m.piece === red.pieces[0])).toBe(false)
-    expect(offered.some((m) => m.piece === red.pieces[1])).toBe(false)
+    expect(offered.some((m) => m.piece === red.pieces[0])).toBe(true)
+    expect(offered.some((m) => m.piece === red.pieces[1])).toBe(true)
     expect(offered.some((m) => m.piece === red.pieces[2])).toBe(true)
   })
 
-  // Same lockout, but the barrier is a pawn sharing its square with the player's own Parkiller
+  // Same as above, but the barrier is a pawn sharing its square with the player's own Parkiller
   // instead of a second pawn - see ownBarrierTrackPosition's own doc comment on why this pairing
-  // counts as a real own barrier just like two own pawns do.
-  it('also locks a pawn sharing its square with the player own Parkiller on a non-double roll', () => {
+  // counts as a real own barrier just like two own pawns do. Voluntary movement applies equally.
+  it('also frees a pawn sharing its square with the player own Parkiller on a non-double roll', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)
     const blue = createPlayerState('Blue', board)
@@ -1052,44 +1062,37 @@ describe('TurnManager - a normal roll cannot move a piece out of its own barrier
     manager.requestRoll()
 
     expect(red.parkiller.trackPosition).toBe(5)
-    expect(offered.some((m) => m.piece === red.pieces[0])).toBe(false)
+    expect(offered.some((m) => m.piece === red.pieces[0])).toBe(true)
     expect(offered.some((m) => m.piece === red.pieces[2])).toBe(true)
   })
 
-  it('loses the roll outright when the only pieces in play are locked in a barrier', () => {
+  it('no longer wastes the roll just because the only pieces in play are sharing a barrier', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)
     const blue = createPlayerState('Blue', board)
     red.pieces[0].state = 'OnTrack'
     red.pieces[0].trackPosition = 5
     red.pieces[1].state = 'OnTrack'
-    red.pieces[1].trackPosition = 5 // own barrier - the only two pieces in play, both locked
+    red.pieces[1].trackPosition = 5 // own barrier - the only two pieces in play, both now movable
 
     const dice = new ScriptedDice([3, 4, 1]) // not a double, and neither is the exit roll
     const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
 
     let notPossible = false
-    let reason: string | null = null
-    manager.moveNotPossible.on((r) => {
+    manager.moveNotPossible.on(() => {
       notPossible = true
-      reason = r
     })
-    let offered: import('../src/core/rules/moveOption').MoveOption[] | null = null
+    let offered: import('../src/core/rules/moveOption').MoveOption[] = []
     manager.moveChoicesReady.on((moves) => (offered = moves))
 
     manager.requestRoll()
 
-    expect(notPossible).toBe(true)
-    // See MoveNotPossibleReason's own doc comment - GameBoardScreen shows a specific "barrier
-    // locked" message only when a real candidate move existed and got excluded for sitting in the
-    // barrier, which is exactly this scenario (both pieces in play have a barrier-eligible move).
-    expect(reason).toBe('barrier')
-    expect(offered).toBeNull()
-    expect(red.pieces[0].trackPosition).toBe(5)
-    expect(red.pieces[1].trackPosition).toBe(5)
+    expect(notPossible).toBe(false)
+    expect(offered.some((m) => m.piece === red.pieces[0] && m.amount === 3)).toBe(true)
+    expect(offered.some((m) => m.piece === red.pieces[1] && m.amount === 4)).toBe(true)
   })
 
-  it('reports "none", not "barrier", when nothing in play could use the roll at all', () => {
+  it('reports "none" when nothing in play could use the roll at all', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)
     const blue = createPlayerState('Blue', board)
@@ -1156,7 +1159,13 @@ describe('TurnManager - a normal roll cannot move a piece out of its own barrier
 
     expect(offered.some((m) => m.piece === red.pieces[2] && m.amount === 5)).toBe(true) // the exit
     expect(offered.some((m) => m.piece === red.pieces[3] && m.amount === 2)).toBe(true) // the other piece
-    expect(offered.some((m) => m.piece === red.pieces[0] || m.piece === red.pieces[1])).toBe(false) // barrier stays locked
+    // Corrected directly by the client: a normal roll can still voluntarily move a barrier piece -
+    // it's just never *forced* to (that's the double's own job). Die 5 is still locked to the exit
+    // (pieces[2] can use it, so PC2.1 applies exactly as before) - only the free die (2) is also a
+    // real option for either barrier piece here, on top of the exit and the unrelated piece above.
+    expect(offered.some((m) => m.piece === red.pieces[0] && m.amount === 2)).toBe(true)
+    expect(offered.some((m) => m.piece === red.pieces[1] && m.amount === 2)).toBe(true)
+    expect(offered.some((m) => (m.piece === red.pieces[0] || m.piece === red.pieces[1]) && m.amount === 5)).toBe(false)
   })
 
   // Reported directly ("Si sale un 5 y un 4 no deja mover si hay barrera en la casilla de salida.
@@ -1191,16 +1200,24 @@ describe('TurnManager - a normal roll cannot move a piece out of its own barrier
     expect(offered.some((m) => m.piece === red.pieces[2])).toBe(false) // exit correctly blocked - square is full
     expect(offered.some((m) => m.piece === red.pieces[3] && m.amount === 5)).toBe(true) // exit die, now free
     expect(offered.some((m) => m.piece === red.pieces[3] && m.amount === 4)).toBe(true) // the other die
-    expect(offered.some((m) => m.piece === red.pieces[0] || m.piece === red.pieces[1])).toBe(false) // barrier stays locked
+    // Corrected directly by the client: the barrier itself never needed the exit lock's own
+    // fallback to become movable - either barrier piece can voluntarily use either die too.
+    expect(offered.some((m) => m.piece === red.pieces[0] && m.amount === 5)).toBe(true)
+    expect(offered.some((m) => m.piece === red.pieces[1] && m.amount === 4)).toBe(true)
   })
 
-  // Reported directly, via a systematic rules audit Carlos himself requested: pieceIsInOwnBarrier
-  // used to only ever compute a corridor barrier when there was *no* track barrier at all
-  // (`ownBarrierTrack === null ? ownCorridorBarrierPosition(...) : null`) - the instant a player
-  // also had a barrier on the shared track, their own separate corridor barrier went completely
-  // invisible to this check and silently unlocked, even though a color's own 4 pieces splitting
-  // into a track pair and a separate corridor pair is a fully legitimate, reachable state.
-  it('a corridor barrier stays locked even while the same player also has a track barrier elsewhere', () => {
+  // Reported directly, via a systematic rules audit Carlos himself requested: the double-forces-
+  // open obligation's own track/corridor barrier detection used to only ever compute a corridor
+  // barrier when there was *no* track barrier at all (`ownBarrierTrack === null ?
+  // ownCorridorBarrierPosition(...) : null`) - the instant a player also had a barrier on the
+  // shared track, their own separate corridor barrier went completely invisible to this check,
+  // even though a color's own 4 pieces splitting into a track pair and a separate corridor pair is
+  // a fully legitimate, reachable state. Re-scoped to a double roll (a non-double no longer locks
+  // either barrier at all - see this describe block's own header comment): confirms the double's
+  // obligation still correctly detects the track barrier (picked first, per this same priority's
+  // own doc comment) and restricts this roll to breaking *that* one specifically, leaving the
+  // corridor barrier's own pieces untouched this roll rather than silently offering them too.
+  it('a double roll targets only the track barrier when a corridor barrier also exists, per the track-first priority', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)
     const blue = createPlayerState('Blue', board)
@@ -1213,25 +1230,16 @@ describe('TurnManager - a normal roll cannot move a piece out of its own barrier
     red.pieces[3].state = 'InHomeCorridor'
     red.pieces[3].corridorPosition = 1 // corridor barrier at index 1, at the same time
 
-    const dice = new ScriptedDice([3, 2, 1]) // not a double
+    const dice = new ScriptedDice([3, 3, 1]) // a double
     const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
 
     let offered: import('../src/core/rules/moveOption').MoveOption[] = []
     manager.moveChoicesReady.on((moves) => (offered = moves))
-    let notPossible = false
-    let reason: string | null = null
-    manager.moveNotPossible.on((r) => {
-      notPossible = true
-      reason = r
-    })
 
     manager.requestRoll()
 
-    // All 4 pieces are locked - the track barrier and the corridor barrier alike - so this roll has
-    // no legal move at all, same as the already-covered single-barrier case.
-    expect(notPossible).toBe(true)
-    expect(reason).toBe('barrier')
-    expect(offered).toEqual([])
+    expect(offered.map((m) => m.piece)).toEqual(expect.arrayContaining([red.pieces[0], red.pieces[1]]))
+    expect(offered.some((m) => m.piece === red.pieces[2] || m.piece === red.pieces[3])).toBe(false)
     expect(red.pieces[2].corridorPosition).toBe(1)
     expect(red.pieces[3].corridorPosition).toBe(1)
   })

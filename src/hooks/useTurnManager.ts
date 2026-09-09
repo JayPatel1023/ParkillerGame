@@ -116,8 +116,8 @@ export function useTurnManager(turnManager: TurnManagerLike) {
   const [eliminatedByDoubles, setEliminatedByDoubles] = useState<Piece | null>(null)
   const [pendingReward, setPendingReward] = useState<RewardGrant | null>(null)
   const [forfeitedReward, setForfeitedReward] = useState<RewardGrant | null>(null)
-  // See NO_MOVE_HOLD_MS's own comment - noMoveReason/turnEndingSoon are what the "barrier locked"
-  // message and the disabled-until-it-clears roll button are driven from; sawNoMoveRef/
+  // See NO_MOVE_HOLD_MS's own comment - noMoveReason/turnEndingSoon are what the "no move
+  // possible" message and the disabled-until-it-clears roll button are driven from; sawNoMoveRef/
   // deferredTurnTimeoutRef are the plumbing that holds turnStarted back only when it immediately
   // follows a same-tick moveNotPossible.
   const [noMoveReason, setNoMoveReason] = useState<MoveNotPossibleReason | null>(null)
