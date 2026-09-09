@@ -456,6 +456,31 @@ function parkillerOccupantId(color: PieceColor): string {
 // a real visual bug: a pawn that had just exited onto that exact entrance square got an unwanted
 // stack offset applied, as if a Parkiller still visually back in the corridor were actually sharing
 // its square, when it wasn't there at all.
+// Reported directly, twice: "las fichas no se ven una al lado de la otra. las casillas deberían
+// ser más anchas. deben caber dos piezas" (the pieces don't show up side by side - the squares
+// should be wider, two pieces should fit) and "no se ve apenas que sea una zona protegida" (you
+// can barely tell it's a protected zone). Checked directly against the actual radii: a pawn+
+// Parkiller pair's own max stacking offset (localStackOffset, STACK_CLEARANCE_FACTOR below) tops
+// out well short of PARKILLER_FOOTPRINT_RADIUS + PIECE_BASE_RADIUS at an ordinary tile's own half-
+// width, so the two barely separate at all on a normal-width square - a protected square
+// specifically is exactly where a lone opposing pawn (or a same-color pawn) most often ends up
+// sharing a square with the Parkiller (PK4/PK5's own safe-square exception), so it's the square
+// that most needs the room. Widened here rather than uniformly across every tile, since a global
+// widen would be a much bigger, riskier change than this specific report called for.
+const SAFE_TILE_WIDTH_MULTIPLIER = 1.8
+
+// Boosts saturation and darkens lightness on top of the tile's own sampled board-art color, so a
+// protected square reads as visually distinct at a glance instead of relying on the underlying art
+// alone (confirmed directly: several of this game's real safe squares - the ones beyond each
+// color's own starred entry - have no distinct color or mark on the board art at all).
+function emphasizeSafeColor(hex: string): string {
+  const color = new THREE.Color(hex)
+  const hsl = { h: 0, s: 0, l: 0 }
+  color.getHSL(hsl)
+  color.setHSL(hsl.h, Math.min(1, hsl.s + 0.35), Math.max(0, hsl.l - 0.22))
+  return `#${color.getHexString()}`
+}
+
 function parkillerStackKey(parkiller: PlayerState['parkiller']): string | null {
   if (parkiller.state !== 'InPlay') return null
   if (parkiller.corridorPosition < parkiller.corridorLength) return null
@@ -556,6 +581,11 @@ export function BoardScene({
   const allPieces = players.flatMap((player) => player.pieces)
   const sampleColor = useBoardColorSampler(definition.boardImage)
   const tileSize = estimateSquareSize(definition.trackWaypoints)
+  // See SAFE_TILE_WIDTH_MULTIPLIER's own doc comment - shared between the tile mesh's own widening
+  // below and the stacking-offset math further down, so a piece actually standing on a protected
+  // square gets the same wider clearance the tile itself now renders with, not just a wider-looking
+  // tile underneath pieces still separated by the old, narrower math.
+  const safeTrackIndexSet = useMemo(() => new Set(definition.safeTrackIndices), [definition])
 
   // Reported directly - the game gets progressively slower to render the longer a session runs.
   // Root cause: this list used to be rebuilt inline in the render below (computeTileCorners called
@@ -576,12 +606,17 @@ export function BoardScene({
       const w = toWorldPosition(wp)
       return [w[0], w[2]]
     })
-    return definition.trackWaypoints.map((wp, i) => ({
-      key: `tile-${i}`,
-      corners: computeTileCorners(worldPoints, i, tileSize / 2),
-      color: sampleColor(wp[0], wp[1]),
-    }))
-  }, [definition, sampleColor, tileSize])
+    return definition.trackWaypoints.map((wp, i) => {
+      const isSafe = safeTrackIndexSet.has(i)
+      const halfWidth = isSafe ? (tileSize / 2) * SAFE_TILE_WIDTH_MULTIPLIER : tileSize / 2
+      const baseColor = sampleColor(wp[0], wp[1])
+      return {
+        key: `tile-${i}`,
+        corners: computeTileCorners(worldPoints, i, halfWidth),
+        color: isSafe ? emphasizeSafeColor(baseColor) : baseColor,
+      }
+    })
+  }, [definition, sampleColor, tileSize, safeTrackIndexSet])
 
   // Recomputing hops/hopFrom inline in the render below (as this used to) builds a brand new
   // array every time BoardScene re-renders, even though `moveAnimation` itself hasn't changed -
@@ -854,7 +889,19 @@ export function BoardScene({
         if (group && group.length > 1) {
           const [along, across] = STACK_OFFSETS[group.indexOf(pawnOccupantId(piece)) % STACK_OFFSETS.length]
           const stackWp = stackWaypointsFor(piece, definition)
-          const [ox, oz] = localStackOffset(stackWp?.waypoints ?? null, stackWp?.index ?? -1, along, across, tileSize, maxRadiusForGroup(group))
+          // See SAFE_TILE_WIDTH_MULTIPLIER's own doc comment - only the shared track has real
+          // "safe square" semantics (stackWp.waypoints === definition.trackWaypoints singles out
+          // OnTrack over InHomeCorridor, which stackWaypointsFor's own doc comment covers).
+          const onSafeTrackSquare = stackWp?.waypoints === definition.trackWaypoints && safeTrackIndexSet.has(stackWp.index)
+          const effectiveTileSize = onSafeTrackSquare ? tileSize * SAFE_TILE_WIDTH_MULTIPLIER : tileSize
+          const [ox, oz] = localStackOffset(
+            stackWp?.waypoints ?? null,
+            stackWp?.index ?? -1,
+            along,
+            across,
+            effectiveTileSize,
+            maxRadiusForGroup(group),
+          )
           restPosition[0] += ox
           restPosition[2] += oz
         }
@@ -931,12 +978,17 @@ export function BoardScene({
         const parkillerCrowded = Boolean(parkillerGroup && parkillerGroup.length > 1)
         if (parkillerGroup && parkillerGroup.length > 1) {
           const [along, across] = STACK_OFFSETS[parkillerGroup.indexOf(parkillerOccupantId(player.color)) % STACK_OFFSETS.length]
+          // parkillerStackKey (above) only ever returns non-null once the Parkiller has genuinely
+          // crossed onto the shared track, so trackPosition here is always a real track index.
+          const parkillerEffectiveTileSize = safeTrackIndexSet.has(player.parkiller.trackPosition)
+            ? tileSize * SAFE_TILE_WIDTH_MULTIPLIER
+            : tileSize
           const [ox, oz] = localStackOffset(
             definition.trackWaypoints,
             player.parkiller.trackPosition,
             along,
             across,
-            tileSize,
+            parkillerEffectiveTileSize,
             maxRadiusForGroup(parkillerGroup),
           )
           restPosition[0] += ox
