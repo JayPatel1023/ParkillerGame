@@ -673,7 +673,7 @@ export default function OnlineLobbyScreen() {
                 Crear <span style={{ color: '#79e39a' }}>sala</span>
               </h3>
               <p className="menu-card-subtitle" style={menuCardSubtitleStyle}>Elija el número de jugadores y cree su propia sala.</p>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', justifyContent: 'center' }}>
                 {[2, 3, 4, 5, 6].map((n) => (
                   <button
                     key={n}
@@ -681,7 +681,7 @@ export default function OnlineLobbyScreen() {
                     onClick={() => setPlayerCount(n)}
                     style={menuCountButtonStyle(n === playerCount, '#3fae66')}
                   >
-                    <PersonIcon size={17} />
+                    <PersonIcon size={15} />
                     {n}
                   </button>
                 ))}
@@ -1101,8 +1101,8 @@ function menuCountButtonStyle(selected: boolean, hex: string): React.CSSProperti
   const dark = lighten(hex, -0.62)
   const darker = lighten(hex, -0.72)
   return {
-    width: 56,
-    height: 56,
+    width: 48,
+    height: 48,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -1110,15 +1110,15 @@ function menuCountButtonStyle(selected: boolean, hex: string): React.CSSProperti
     gap: 2,
     flexShrink: 0,
     fontFamily: "'Baloo 2', system-ui, sans-serif",
-    fontSize: 19,
+    fontSize: 16,
     fontWeight: 800,
     color: selected ? '#fff' : 'rgba(255,255,255,0.65)',
     background: selected
       ? `linear-gradient(165deg, ${lighten(hex, 0.15)}, ${hex})`
       : `linear-gradient(165deg, ${dark}, ${darker})`,
-    border: `3px solid ${selected ? lighten(hex, 0.4) : 'rgba(255,255,255,0.12)'}`,
-    borderRadius: 16,
-    boxShadow: selected ? `0 0 0 4px ${hex}55, 0 4px 10px rgba(0,0,0,0.35)` : 'inset 0 1px 2px rgba(0,0,0,0.3)',
+    border: `2px solid ${selected ? lighten(hex, 0.4) : 'rgba(255,255,255,0.12)'}`,
+    borderRadius: 14,
+    boxShadow: selected ? `0 0 0 3px ${hex}55, 0 3px 8px rgba(0,0,0,0.35)` : 'inset 0 1px 2px rgba(0,0,0,0.3)',
     cursor: 'pointer',
   }
 }
@@ -1132,6 +1132,11 @@ function menuCountButtonStyle(selected: boolean, hex: string): React.CSSProperti
 // this panel's natural (unscaled) height is measured directly and the whole thing is scaled down
 // uniformly to fit, rather than this element clipping/scrolling its own content independently of
 // everything else in it.
+// Reported directly, with a screenshot: enlarging the player-count badges (menuCountButtonStyle,
+// 42px -> 56px) left each "Crear sala" card with barely enough room for the 5-across row at this
+// panel's old 760px max width - comfortable on paper (5*56 + 4*8 = 312px against a ~344px card),
+// but real layout (borders, subpixel rounding) tipped it over into wrapping "6" onto its own row.
+// Widened 760 -> 820 so each card gets real slack instead of a razor-thin fit.
 const menuPanelStyle: React.CSSProperties = {
   position: 'relative',
   display: 'flex',
@@ -1142,7 +1147,7 @@ const menuPanelStyle: React.CSSProperties = {
   background: 'linear-gradient(180deg, rgba(255,255,255,0.05), transparent 25%), linear-gradient(165deg, rgba(58, 46, 30, 0.85), rgba(30, 23, 14, 0.85))',
   border: '2px solid #7a5f26',
   boxShadow: '0 10px 30px rgba(0,0,0,0.5), inset 0 0 0 3px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)',
-  width: 'min(760px, 94vw)',
+  width: 'min(820px, 94vw)',
   boxSizing: 'border-box',
 }
 
@@ -1253,8 +1258,8 @@ const menuCardsRowStyle: React.CSSProperties = {
 // tuned against, not width the way it briefly needed to be under cover.
 function menuCardStyle(imageUrl: string): React.CSSProperties {
   return {
-    flex: '1 1 220px',
-    minWidth: 210,
+    flex: '1 1 300px',
+    minWidth: 300,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
