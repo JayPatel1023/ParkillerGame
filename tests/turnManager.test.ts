@@ -1124,6 +1124,41 @@ describe('TurnManager - a normal roll cannot move a piece out of its own barrier
     expect(offered.some((m) => m.piece === red.pieces[0])).toBe(true)
   })
 
+  // Reported directly ("no se pudo avanzar con un peón y darle salida al otro con el 5. Como la
+  // barrera ya estaba formada podría incluso mover 5..." - couldn't advance a pawn and exit the
+  // other one with the 5; since the barrier was already formed [it should still work]): a barrier
+  // left over from an earlier turn, on a square with nothing to do with either this roll's exit
+  // die or the unrelated piece below - confirms an existing barrier elsewhere on the board never
+  // interferes with an ordinary "exit die locked to the yard, other die free for any other piece"
+  // roll (PC2.1), the exact combination the client described being unable to do. Re-verified
+  // directly (5 runs, varied barrier/piece positions and die order) against this exact scenario
+  // before writing this test - every run already passed, so this exists to keep it that way.
+  it('an existing barrier elsewhere never blocks an ordinary exit-die-plus-other-piece roll', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 5 // own barrier at 5, formed on an earlier turn - unrelated to
+    // both the exit and pieces[3] below
+    // pieces[2] stays InYard (createPlayerState's own default) - exits on the 5
+    red.pieces[3].state = 'OnTrack'
+    red.pieces[3].trackPosition = 2 // unrelated already-out piece - free to use the other die
+
+    const dice = new ScriptedDice([5, 2, 1]) // not a double
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let offered: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((moves) => (offered = moves))
+
+    manager.requestRoll()
+
+    expect(offered.some((m) => m.piece === red.pieces[2] && m.amount === 5)).toBe(true) // the exit
+    expect(offered.some((m) => m.piece === red.pieces[3] && m.amount === 2)).toBe(true) // the other piece
+    expect(offered.some((m) => m.piece === red.pieces[0] || m.piece === red.pieces[1])).toBe(false) // barrier stays locked
+  })
+
   // Reported directly, via a systematic rules audit Carlos himself requested: pieceIsInOwnBarrier
   // used to only ever compute a corridor barrier when there was *no* track barrier at all
   // (`ownBarrierTrack === null ? ownCorridorBarrierPosition(...) : null`) - the instant a player
