@@ -681,7 +681,7 @@ export default function OnlineLobbyScreen() {
                     onClick={() => setPlayerCount(n)}
                     style={menuCountButtonStyle(n === playerCount, '#3fae66')}
                   >
-                    <PersonIcon size={13} />
+                    <PersonIcon size={17} />
                     {n}
                   </button>
                 ))}
@@ -1092,28 +1092,33 @@ function chunkyButtonStyle(enabled: boolean): React.CSSProperties {
 // here since the mockup's own count badges are a single hue per card, muted until selected) with
 // a small person glyph above the number, selected state glowing in the same hue rather than
 // swapping to a brighter color entirely.
+// Reported directly ("No deja elegir número de jugadores. SALE 4 y listo" - it won't let me pick a
+// player count, it just shows 4 - resolved once he noticed the row was clickable: "Debe de estar
+// más grande para que se vea más claro" - it should be bigger so it reads more clearly): sized up
+// from the original 42x42/14px reference-mockup match, since at that size the selected-vs-not
+// contrast between these badges was too subtle to register as "pick one of these" at a glance.
 function menuCountButtonStyle(selected: boolean, hex: string): React.CSSProperties {
   const dark = lighten(hex, -0.62)
   const darker = lighten(hex, -0.72)
   return {
-    width: 42,
-    height: 42,
+    width: 56,
+    height: 56,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 1,
+    gap: 2,
     flexShrink: 0,
     fontFamily: "'Baloo 2', system-ui, sans-serif",
-    fontSize: 14,
+    fontSize: 19,
     fontWeight: 800,
     color: selected ? '#fff' : 'rgba(255,255,255,0.65)',
     background: selected
       ? `linear-gradient(165deg, ${lighten(hex, 0.15)}, ${hex})`
       : `linear-gradient(165deg, ${dark}, ${darker})`,
-    border: `2px solid ${selected ? lighten(hex, 0.4) : 'rgba(255,255,255,0.12)'}`,
-    borderRadius: 12,
-    boxShadow: selected ? `0 0 0 3px ${hex}55, 0 3px 8px rgba(0,0,0,0.35)` : 'inset 0 1px 2px rgba(0,0,0,0.3)',
+    border: `3px solid ${selected ? lighten(hex, 0.4) : 'rgba(255,255,255,0.12)'}`,
+    borderRadius: 16,
+    boxShadow: selected ? `0 0 0 4px ${hex}55, 0 4px 10px rgba(0,0,0,0.35)` : 'inset 0 1px 2px rgba(0,0,0,0.3)',
     cursor: 'pointer',
   }
 }
