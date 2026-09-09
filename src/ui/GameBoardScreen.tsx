@@ -216,12 +216,43 @@ export function GameBoardScreen({
   // changes, so it can't fire mid-roll or carry over onto the next player's turn.
   const IDLE_NUDGE_MS = 60_000
   const [nudgeDice, setNudgeDice] = useState(false)
+
+  // Idle disconnect warning: reported directly ("오락을 하던도중하다가 하지않고 시간이 어느정도
+  // 좀지나면 오락련결이 끊어지는데 이것을 알려주는 효과" - during play, if you stop for a while the
+  // connection cuts off, and there should be an effect warning about it) - a longer idle stretch
+  // than the dice nudge above now escalates into an explicit full-screen countdown, since the
+  // subtle dice pulse alone was easy to miss entirely if a player had actually stepped away.
+  // idleResetToken is bumped by a click anywhere on the warning overlay (see dismissIdleWarning
+  // below) purely to re-run this same effect and restart both timers, without needing canRoll or
+  // the turn itself to change first - clicking through the warning should buy another full
+  // IDLE_WARNING_MS, not just silently freeze the countdown in place.
+  const IDLE_WARNING_MS = 90_000
+  const IDLE_WARNING_COUNTDOWN_S = 20
+  const [idleWarningSecondsLeft, setIdleWarningSecondsLeft] = useState<number | null>(null)
+  const [idleResetToken, setIdleResetToken] = useState(0)
+
   useEffect(() => {
     setNudgeDice(false)
+    setIdleWarningSecondsLeft(null)
     if (!canRoll) return
-    const timer = setTimeout(() => setNudgeDice(true), IDLE_NUDGE_MS)
+    const nudgeTimer = setTimeout(() => setNudgeDice(true), IDLE_NUDGE_MS)
+    const warningTimer = setTimeout(() => setIdleWarningSecondsLeft(IDLE_WARNING_COUNTDOWN_S), IDLE_WARNING_MS)
+    return () => {
+      clearTimeout(nudgeTimer)
+      clearTimeout(warningTimer)
+    }
+  }, [canRoll, currentPlayer.color, idleResetToken])
+
+  // Ticks the on-screen countdown down to 0 once the warning above has appeared, then just holds
+  // there - no explicit request to force any auto-skip/kick action once it hits zero, so it stays
+  // up (still dismissible by the same click-anywhere handler) rather than doing anything drastic.
+  useEffect(() => {
+    if (idleWarningSecondsLeft === null || idleWarningSecondsLeft <= 0) return
+    const timer = setTimeout(() => setIdleWarningSecondsLeft((seconds) => (seconds === null ? null : seconds - 1)), 1000)
     return () => clearTimeout(timer)
-  }, [canRoll, currentPlayer.color])
+  }, [idleWarningSecondsLeft])
+
+  const dismissIdleWarning = () => setIdleResetToken((token) => token + 1)
 
   // See DICE_DISPLAY_HOLD_MS's own doc comment above - holds the last roll's numbers on screen for
   // a minimum viewing window instead of blanking the instant the turn moves on. Shows a fresh roll
@@ -367,6 +398,15 @@ export function GameBoardScreen({
       />
 
       <div style={frameOverlayStyle} />
+
+      {idleWarningSecondsLeft !== null && (
+        <div style={idleWarningOverlayStyle} onClick={dismissIdleWarning}>
+          <div style={idleWarningCountdownStyle}>{idleWarningSecondsLeft}</div>
+          <div style={idleWarningTitleStyle}>¿Sigue ahí?</div>
+          <div style={hintTextStyle}>La partida podría desconectarse por inactividad.</div>
+          <div style={hintTextStyle}>Toque la pantalla para continuar.</div>
+        </div>
+      )}
 
       <RewardBurst pendingReward={visiblePendingReward} />
       <RewardToast pendingReward={visiblePendingReward} forfeitedReward={visibleForfeitedReward} />
@@ -741,4 +781,35 @@ const overlayStyle: React.CSSProperties = {
   justifyContent: 'center',
   gap: 8,
   background: 'rgba(0,0,0,0.55)',
+}
+
+// Same full-screen click target as overlayStyle above, but rendered above BoardScene rather than
+// as a modal choice - covers the whole play area so a click ANYWHERE dismisses it (reported
+// directly: "화면의 아무런 자리에 클릭하면 다시 할수있게 해달라"), not just a single button.
+const idleWarningOverlayStyle: React.CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  zIndex: 40,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 6,
+  background: 'rgba(10, 6, 2, 0.72)',
+  cursor: 'pointer',
+}
+
+const idleWarningCountdownStyle: React.CSSProperties = {
+  fontSize: 56,
+  fontWeight: 800,
+  color: BRAND_GOLD,
+  fontFamily: 'system-ui, sans-serif',
+  lineHeight: 1,
+}
+
+const idleWarningTitleStyle: React.CSSProperties = {
+  fontSize: 20,
+  fontWeight: 700,
+  color: '#f2ede0',
+  fontFamily: 'system-ui, sans-serif',
 }
