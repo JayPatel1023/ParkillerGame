@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { GoldPanel } from './GoldPanel'
-import { isMusicMuted, toggleMusicMuted } from './introMusic'
+import { getSelectedTrackIndex, getTrackLabel, isMusicMuted, nextMusicTrack, toggleMusicMuted } from './introMusic'
 import { THEME } from './theme'
 
 // Where "Ayuda" (inside the settings panel below) sends the player - supplied directly, not
@@ -25,6 +25,7 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
   // row here instead of staying a placeholder.
   const [showSettings, setShowSettings] = useState(false)
   const [musicMuted, setMusicMuted] = useState(isMusicMuted)
+  const [trackIndex, setTrackIndex] = useState(getSelectedTrackIndex)
   return (
     <div style={{ height: '100%', position: 'relative', backgroundColor: THEME.wood }}>
       {/* `cover` (not `contain`) so the photo fills every viewport edge to edge with zero visible
@@ -123,6 +124,14 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
               <span aria-hidden style={iconBadgeStyle}>{musicMuted ? <MusicOffIcon /> : <MusicOnIcon />}</span>
               {musicMuted ? 'Música: apagada' : 'Música: encendida'}
             </button>
+            {/* Requested directly ("Tiene que haber varias melodías de fondo para elegir" - there
+                should be several background melodies to choose from): cycles through every track
+                (introMusic.ts's own TRACKS) one at a time - simpler than a dropdown/list for just
+                3 options, and matches this row-of-buttons settings panel's own existing style. */}
+            <button className="chunky-btn" onClick={() => setTrackIndex(nextMusicTrack())} style={settingsRowStyle}>
+              <span aria-hidden style={iconBadgeStyle}><NextTrackIcon /></span>
+              {getTrackLabel(trackIndex)}
+            </button>
             <button
               className="chunky-btn"
               onClick={() => window.open(HELP_URL, '_blank', 'noopener,noreferrer')}
@@ -218,6 +227,15 @@ function MusicOffIcon() {
       <circle cx="17" cy="15.5" r="3.2" opacity="0.5" />
       <path d="M9.7 18V5.2L20.2 3v12.5" stroke="#eef4ff" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" opacity="0.5" />
       <path d="M3 3l18 18" stroke="#eef4ff" strokeWidth="2.2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function NextTrackIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="#eef4ff" aria-hidden focusable="false">
+      <path d="M4 5l9 7-9 7V5Z" />
+      <path d="M14 5l9 7-9 7V5Z" />
     </svg>
   )
 }
