@@ -233,6 +233,14 @@ describe('BotController', () => {
   // explored the split, since offerReward lists the full-amount option before the split one - a
   // human watching only bot play would see nothing but "one pawn takes the whole 20," every single
   // time, indistinguishable from the split simply not existing.
+  //
+  // pieces[1] sits at 15, not 0 - an earlier version of this test placed it at 0, Red's own entry
+  // square, without noticing that's also a *protected* square: the bot's own separate "keep
+  // sheltered pieces sheltered unless the move captures" preference (elsewhere in this same
+  // decision) filtered pieces[1]'s own reward-move options out before the split-preference logic
+  // below ever saw them, so this test's "genuine second pawn" was never actually a real candidate -
+  // it happened to still pass under the old, unconditional split-preference (see this describe
+  // block's next test for why that was itself a bug), which masked the setup mistake completely.
   it('prefers the split path over the full amount when a capture grants a reward', () => {
     const board = buildBigTestBoard()
     const red = createPlayerState('Red', board)
@@ -240,7 +248,7 @@ describe('BotController', () => {
     red.pieces[0].state = 'OnTrack'
     red.pieces[0].trackPosition = 3 // dieA(3) lands it on blue.pieces[0] at 6 - a capture
     red.pieces[1].state = 'OnTrack'
-    red.pieces[1].trackPosition = 0 // in play too, so the split has a genuine second pawn to use
+    red.pieces[1].trackPosition = 15 // in play too, on an unprotected square - a genuine second pawn
     blue.pieces[0].state = 'OnTrack'
     blue.pieces[0].trackPosition = 6
     const dice = new RecordingDice(new ScriptedDice([3, 4, 1]))
@@ -263,7 +271,63 @@ describe('BotController', () => {
     // play) moved by 10 more - 6 -> 16 - not the full 20 from its own position (6 -> 26). Confirms
     // the split path was picked over the lump sum, not just that *some* move happened.
     expect(red.pieces[0].trackPosition).toBe(16)
-    expect(red.pieces[1].trackPosition).toBe(0) // untouched by this first half of the split
+    expect(red.pieces[1].trackPosition).toBe(15) // untouched by this first half of the split
+
+    // The just-submitted 10-square move itself extends the bot's own busy window by
+    // amount*hopDurationMs (10*2=20ms here) before it schedules the next decision - a single
+    // thinkDelayMs (10ms) tick isn't enough to clear that on its own.
+    vi.advanceTimersByTime(30) // the remaining 10 fires, now offered to pieces[1] alone
+    // The split actually completes end to end - the other pawn genuinely receives its own half,
+    // not just "some move happened after the first half" (see the next test's own report for why
+    // a split that never completes is exactly the bug this whole preference exists to avoid).
+    expect(red.pieces[1].trackPosition).toBe(25)
+
+    bots.dispose()
+  })
+
+  // Reported directly, with a screen recording ("Había dos peones fuera. Movió uno solo 10... Los
+  // otros 10 se perdieron, no movió nadie y pasó el turno" - there were two pawns out, it moved
+  // only one 10, the other 10 was lost, nobody moved, and the turn passed): the split-preference
+  // above used to fire unconditionally on the reward's own minimum amount, with no check for
+  // whether a genuinely different piece could actually use the complementary half - "two pawns
+  // out" doesn't mean the *other* one has a legal reward move from wherever it happens to sit.
+  // pieces[1] here sits at 37, close enough to its own home entrance (39) that a reward move by
+  // either 10 or 20 overshoots past the exact-count landing PC4/PC5 require (verified directly
+  // against getValidMoves: neither amount has a legal move for it from 37), so pieces[1] is never
+  // a real candidate for anything - the only genuine choice left is between the capturing piece's
+  // own 20-in-one or its own 10-split, and picking the split here would just throw away the other
+  // 10 for nothing, since nothing else could ever receive it.
+  it('takes the full reward amount instead of a wasted split when no other piece can use the remainder', () => {
+    const board = buildBigTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 3 // dieA(3) lands it on blue.pieces[0] at 6 - a capture
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 37 // "out," but too close to home (39) for either reward amount
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 6
+    const dice = new RecordingDice(new ScriptedDice([3, 4, 1]))
+    const inner = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+    const network = new FakeRoomNetwork(MASTER_ACTOR)
+    const transport = network.createTransport(MASTER_ACTOR)
+    const host = new HostTurnManagerBridge(inner, dice, [red, blue], transport, new Map<number, PieceColor>())
+    const thinkDelayMs = 10
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), thinkDelayMs, 2, 2)
+
+    let forfeited: { amount: number; reason: string } | null = null
+    inner.rewardForfeited.on((grant) => (forfeited = grant))
+
+    host.start()
+    vi.advanceTimersByTime(thinkDelayMs) // the roll fires
+    vi.advanceTimersByTime(thinkDelayMs) // the capturing move submits, offering the 20-square reward
+    vi.advanceTimersByTime(thinkDelayMs) // the reward move fires
+
+    // The full 20 in one move (6 -> 26), not the 10-split that would have nowhere to send its other
+    // half - pieces[1] stays exactly where it was, and nothing was ever forfeited.
+    expect(red.pieces[0].trackPosition).toBe(26)
+    expect(red.pieces[1].trackPosition).toBe(37)
+    expect(forfeited).toBeNull()
 
     bots.dispose()
   })

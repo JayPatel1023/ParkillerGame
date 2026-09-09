@@ -284,10 +284,25 @@ export class BotController {
     // it's fully implemented and available to a human player. Every move in a reward offer shares
     // the same diceSource ('reward') - not mixed with an ordinary dieA/dieB/sum offer - so
     // preferring the smaller amount present only ever kicks in for an actual reward decision.
+    //
+    // Reported directly again, with a screen recording ("Había dos peones fuera. Movió uno solo
+    // 10... Los otros 10 se perdieron, no movió nadie y pasó el turno" - there were two pawns out,
+    // it moved only one 10, the other 10 was lost, nobody moved, and the turn passed): the blind
+    // "always prefer the minimum amount" above never checked whether a second, genuinely different
+    // piece could actually use the complementary half before committing to the split - "two pawns
+    // out" doesn't mean the *other* one has a legal move for this exact reward distance from
+    // wherever it happens to sit (e.g. too close to its own home entrance for a valid landing).
+    // Reproduced directly: with only the capturing piece itself eligible for the 10-split, the old
+    // logic still took the 10 (throwing away the other 10 it could have kept by taking the same
+    // piece's own, equally-available 20 instead) and forfeited the remainder outright. Only worth
+    // exploring the split when at least one *other* piece is genuinely eligible for it - otherwise
+    // every "split" here is really just this one piece giving up half its own reward for nothing.
     const isRewardOffer = finalMoves[0]?.diceSource === 'reward'
-    const rewardCandidates = isRewardOffer
-      ? finalMoves.filter((m) => m.amount === Math.min(...finalMoves.map((c) => c.amount)))
-      : finalMoves
+    const minRewardAmount = isRewardOffer ? Math.min(...finalMoves.map((c) => c.amount)) : 0
+    const splitOptions = finalMoves.filter((m) => m.amount === minRewardAmount)
+    const splitPieceKeys = new Set(splitOptions.map((m) => `${m.piece.color}:${m.piece.pieceIndex}`))
+    const splitHasGenuineSecondBeneficiary = splitPieceKeys.size > 1
+    const rewardCandidates = isRewardOffer && splitHasGenuineSecondBeneficiary ? splitOptions : finalMoves
     // Requested directly ("el bot, si puede eliminar un peón de otro jugador sin riesgo, debe
     // hacerlo" - the bot, if it can eliminate an opponent's pawn without risk, must do so): a
     // capturing move already surviving every filter above (doesn't form an own barrier, doesn't
