@@ -29,7 +29,8 @@ export function createPiece(color: PieceColor, pieceIndex: number): Piece {
 /** Just enough of a Piece's position to reconstruct where it was before/after a move (see
  * scene/piecePosition.ts's getHopWaypoints) - lives here rather than in scene/ since TurnManager
  * itself needs to take a "before" snapshot the instant a move is submitted, and core/ can't
- * depend on scene/ (see CLAUDE.md's layering). */
+ * depend on scene/ (framework-independent engine code can't reach into the Three.js layer
+ * above it). */
 export interface PieceSnapshot {
   state: PieceState
   trackPosition: number

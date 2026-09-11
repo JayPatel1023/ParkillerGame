@@ -56,8 +56,9 @@ const BOT_THINK_DELAY_MS = 2400
 // symptom reported. `busyUntilMs` tracks a running "don't act again before this real time" bound,
 // extended by every action this class takes, so a slow-playing animation is never cut short by
 // the next one - this class has no direct access to the scene layer's own timing constants
-// (gameFlow/ and scene/ are peers, per CLAUDE.md's layering), so the values below are duplicated
-// from there and must be kept in sync: DICE_SPIN_MS matches useTurnManager.ts's own constant of
+// (gameFlow/ and scene/ are peers in this project's own layering, neither depending on the
+// other), so the values below are duplicated from there and must be kept in sync: DICE_SPIN_MS
+// matches useTurnManager.ts's own constant of
 // the same name, HOP_DURATION_MS matches PieceMesh.tsx's HOP_DURATION (in seconds, *1000 here).
 const DICE_SPIN_MS = 450
 // Kept in sync with PieceMesh.tsx's own HOP_DURATION (0.48s, *1000 here) - reported directly
@@ -92,8 +93,8 @@ class EventEmitter<T> {
  * "ownership" concept to bypass at all, since it's one shared device; rollForBot/submitMoveForBot
  * there are just plain requestRoll/submitMove under these two names). Moved here from src/online/
  * (where this class originally lived, online-only) so src/core/ - which local play's own
- * localGameSession.ts belongs to - doesn't have to depend on src/online/, a strictly higher layer
- * per CLAUDE.md's own architecture. */
+ * localGameSession.ts belongs to - doesn't have to depend on src/online/, a strictly higher
+ * layer in this project's own architecture. */
 export interface BotDrivableSession {
   readonly currentPlayer: PlayerState
   /** Every player in this game, not just currentPlayer - needed to check an opposing color's own

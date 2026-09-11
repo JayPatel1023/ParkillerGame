@@ -12,6 +12,7 @@ scripts/debug_*.png
 .vs/
 .vscode/
 .idea/
+.claude/
 *.suo
 
 # OS

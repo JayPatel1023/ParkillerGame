@@ -165,7 +165,7 @@ function CrownIcon() {
 }
 
 // A thin rule under the title with a small fleur-de-lis centered on it - echoes the board art's
-// own fleur-de-lis corner ornaments (see CLAUDE.md) instead of a plain diamond.
+// own fleur-de-lis corner ornaments instead of a plain diamond.
 function GoldDivider({ accent = false }: { accent?: boolean }) {
   if (!accent) {
     return <div style={{ width: '100%', height: 1, background: `linear-gradient(90deg, transparent, ${THEME.gold}, transparent)` }} />
