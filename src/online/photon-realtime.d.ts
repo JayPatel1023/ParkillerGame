@@ -115,6 +115,12 @@ declare module 'photon-realtime' {
        * photonClient.ts's own leaveRoom() for why this matters. */
       leaveRoom(): void
       joinRoom(roomName: string, joinOptions?: RoomOptions, createOptions?: RoomOptions): void
+      /** Confirmed directly in the shipped module source: reconnects using the cached game-server
+       * address and auth token from the connection that just dropped, then rejoins that same room -
+       * the SDK's own built-in recovery path for a brief disconnect while already in a room. Returns
+       * false synchronously (no connection attempt even started) if the client isn't currently
+       * Disconnected/Error, or has no cached address/token to reconnect with at all. */
+      reconnectAndRejoin(): boolean
       raiseEvent(code: number, data: unknown, options?: { receivers?: number }): void
       myActor(): Actor
       myRoom(): Room

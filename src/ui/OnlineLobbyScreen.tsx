@@ -238,6 +238,10 @@ export default function OnlineLobbyScreen() {
   const [session, setSession] = useState<GameSession | null>(null)
   // Set only once the game actually starts - who left, so the "stopped" screen can say so.
   const [stopReason, setStopReason] = useState('')
+  // True while attempting PhotonConnection's own reconnectAndRejoin() after a drop mid-game - see
+  // the onConnectionLost effect below for why this exists instead of stopping the game outright on
+  // every disconnect.
+  const [reconnecting, setReconnecting] = useState(false)
   // Reported directly, via a screen recording of two real clients: the creator clicked "Empezar
   // partida" alone (fully clickable the instant the room exists - see startGame()'s own comment on
   // why solo-start is unrestricted) a few seconds before a friend finished typing in the room code,
@@ -433,16 +437,32 @@ export default function OnlineLobbyScreen() {
   // onConnectionLost is scoped to 'lobby'/'game' here specifically (see the *separate*
   // 'menu'-scoped subscription above, which routes to 'error' instead - there's no live session to
   // tear down yet at that point).
+  //
+  // Reported directly, repeatedly ("se pierde la conexión con frecuencia" - the connection drops
+  // frequently): this used to tear the whole game down on the very *first* disconnect event, no
+  // matter how brief - completely wasting createRoom()'s own 60s playerTTL grace period (see that
+  // constant's own comment), which the *other* players' clients already lean on to tolerate exactly
+  // this kind of momentary mobile wifi/data handoff. reconnectAndRejoin() gives this client that
+  // same chance instead of giving up instantly: the game (session, bot controller, turnManager) is
+  // left running untouched while it's in flight, so a successful reconnect resumes with no visible
+  // interruption beyond the "Reconectando..." overlay GameBoardScreen's own wrapper shows for it -
+  // only a reconnect that genuinely fails (or times out past that same grace window) falls through
+  // to the original teardown.
   useEffect(() => {
     const connection = connectionRef.current
     if (!connection || (phase !== 'lobby' && phase !== 'game')) return
     return connection.onConnectionLost(() => {
-      botControllerRef.current?.dispose()
-      botControllerRef.current = null
-      session?.turnManager.dispose?.()
-      setSession(null)
-      setStopReason('Se perdió la conexión con el servidor - la partida se detuvo.')
-      setPhase('stopped')
+      setReconnecting(true)
+      connection.reconnectAndRejoin().then((reconnected) => {
+        setReconnecting(false)
+        if (reconnected) return
+        botControllerRef.current?.dispose()
+        botControllerRef.current = null
+        session?.turnManager.dispose?.()
+        setSession(null)
+        setStopReason('Se perdió la conexión con el servidor - la partida se detuvo.')
+        setPhase('stopped')
+      })
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
@@ -577,7 +597,42 @@ export default function OnlineLobbyScreen() {
   }
 
   if (phase === 'game' && session) {
-    return <GameBoardScreen definition={BOARD_DEFINITIONS[playerCount]} session={session} onExit={() => (window.location.hash = '')} />
+    return (
+      <div style={{ position: 'relative', height: '100%' }}>
+        <GameBoardScreen definition={BOARD_DEFINITIONS[playerCount]} session={session} onExit={() => (window.location.hash = '')} />
+        {/* Shown while reconnectAndRejoin() (see the onConnectionLost effect above) is in flight -
+            the game underneath keeps running untouched, so a successful reconnect just fades this
+            back out with nothing else to resume. */}
+        {reconnecting && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(5,7,12,0.72)',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 10,
+                padding: '20px 32px',
+                borderRadius: 18,
+                background: 'linear-gradient(165deg, rgba(255,255,255,0.08), rgba(255,255,255,0) 60%), rgba(26,19,16,0.92)',
+                border: '2px solid #c9a24b',
+              }}
+            >
+              <div style={{ fontSize: 16, fontWeight: 800, color: '#e8cf8a' }}>Reconectando...</div>
+              <div style={{ fontSize: 13, color: '#cbb98f' }}>Se perdió la conexión - intentando recuperar la partida</div>
+            </div>
+          </div>
+        )}
+      </div>
+    )
   }
 
   // Reported directly, with a reference mockup image and a screenshot of the plain carved-wood

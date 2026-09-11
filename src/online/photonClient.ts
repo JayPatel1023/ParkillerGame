@@ -212,6 +212,51 @@ export class PhotonConnection implements RoomTransport {
     })
   }
 
+  // Reported directly, repeatedly ("se pierde la conexión con frecuencia" - the connection drops
+  // frequently): createRoom()'s own playerTTL above already gives the *other* players' clients a
+  // real 60s grace period before treating a drop as a genuine departure - but nothing on *this*
+  // client's own side ever used that same window to actually try reconnecting; onConnectionLost
+  // (above) fired straight into an immediate, permanent "conexión perdida" for every caller, even
+  // a few seconds of totally normal mobile wifi/data handoff. reconnectAndRejoin() is the SDK's own
+  // built-in recovery path for exactly this (confirmed in the shipped module source - requires the
+  // client to still be Disconnected/Error, have a cached game-server address and auth token from
+  // the connection that just dropped, all of which a fresh disconnect still has). Resolves true only
+  // once actually back in the room (state reaches Joined again); false immediately if the SDK's own
+  // preconditions reject the attempt outright, or once PLAYER_TTL_MS elapses with no success -
+  // matching the same window the room's own playerTTL already tolerates, so this client gets a
+  // genuine chance to recover within exactly the time the *other* players are already waiting.
+  reconnectAndRejoin(): Promise<boolean> {
+    return new Promise((resolve) => {
+      if (!this.client.reconnectAndRejoin()) {
+        resolve(false)
+        return
+      }
+      let settled = false
+      let timeoutHandle: ReturnType<typeof setTimeout>
+      const unsubscribe = this.subscribeStateChange((state) => {
+        if (settled) return
+        if (state === LBC.State.Joined) {
+          settled = true
+          clearTimeout(timeoutHandle)
+          unsubscribe()
+          this.lastKnownMasterActorNr = this.client.myRoomMasterActorNr()
+          resolve(true)
+        } else if (state === LBC.State.Error || state === LBC.State.Disconnected) {
+          settled = true
+          clearTimeout(timeoutHandle)
+          unsubscribe()
+          resolve(false)
+        }
+      })
+      timeoutHandle = setTimeout(() => {
+        if (settled) return
+        settled = true
+        unsubscribe()
+        resolve(false)
+      }, PhotonConnection.PLAYER_TTL_MS)
+    })
+  }
+
   get localActorNr(): number {
     return this.client.myActor().actorNr
   }
