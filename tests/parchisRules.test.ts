@@ -347,18 +347,56 @@ describe('parchisRules', () => {
       expect(result.capturedPiece).toBe(blue.pieces[0])
     })
 
-    it('two opposing pawns already on the entry square block exit as a foreign barrier', () => {
+    it('a same-color foreign pawn barrier on the entry square does not block exit - eliminates whichever arrived later', () => {
       const board = buildTestBoard()
       const red = createPlayerState('Red', board)
       const blue = createPlayerState('Blue', board)
       blue.pieces[0].state = 'OnTrack'
       blue.pieces[0].trackPosition = 0
+      blue.pieces[0].arrivedAt = 3 // arrived first
       blue.pieces[1].state = 'OnTrack'
       blue.pieces[1].trackPosition = 0
+      blue.pieces[1].arrivedAt = 7 // arrived later - this one goes
 
       const settings = defaultRuleSettings()
-      const moves = getValidMoves(board, red, [red, blue], 5, settings)
-      expect(moves.find((m) => m.kind === 'ExitYard')).toBeUndefined()
+      const exitMove = getValidMoves(board, red, [red, blue], 5, settings).find((m) => m.kind === 'ExitYard')
+      expect(exitMove).toBeTruthy()
+
+      const result = applyMove(board, exitMove!, [red, blue], settings, true)
+      expect(result.capturedPiece).toBe(blue.pieces[1])
+      expect(blue.pieces[1].state).toBe('InYard')
+      expect(blue.pieces[0].state).toBe('OnTrack') // the earlier arrival is untouched, now paired with Red
+      expect(blue.pieces[0].trackPosition).toBe(0)
+    })
+
+    it('a double 5 exits both Red pawns onto a same-color foreign barrier and eliminates both of it', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+      blue.pieces[0].state = 'OnTrack'
+      blue.pieces[0].trackPosition = 0
+      blue.pieces[0].arrivedAt = 3
+      blue.pieces[1].state = 'OnTrack'
+      blue.pieces[1].trackPosition = 0
+      blue.pieces[1].arrivedAt = 7
+
+      const settings = defaultRuleSettings()
+      // First exit: matches the single-exit test above - eliminates the later arrival.
+      const firstMove = getValidMoves(board, red, [red, blue], 5, settings, 'dieA', true).find((m) => m.kind === 'ExitYard')!
+      applyMove(board, firstMove, [red, blue], settings, true, 1, true)
+      expect(blue.pieces[1].state).toBe('InYard')
+      expect(blue.pieces[0].state).toBe('OnTrack')
+
+      // Second exit (the double's other 5): Red's second pawn joins its own pawn already there,
+      // eliminating the one remaining Blue pawn - same "second own pawn joining bumps the lone
+      // opponent" mechanic PC2.1 already uses elsewhere, not a barrier-specific special case.
+      const secondMove = getValidMoves(board, red, [red, blue], 5, settings, 'dieB', true).find((m) => m.kind === 'ExitYard')!
+      const secondResult = applyMove(board, secondMove, [red, blue], settings, true, 2, true)
+      expect(secondResult.capturedPiece).toBe(blue.pieces[0])
+      expect(blue.pieces[0].state).toBe('InYard')
+      expect(blue.pieces[1].state).toBe('InYard')
+      expect(red.pieces[0].state).toBe('OnTrack')
+      expect(red.pieces[1].state).toBe('OnTrack')
     })
 
     it('two *different-colored* opponents on the entry square are not a barrier - exit is allowed, eliminating whichever arrived later', () => {

@@ -161,15 +161,18 @@ export function getValidMoves(
         const opposingParkillerColorsAtEntry = allPlayers
           .filter((p) => p.color !== player.color && isParkillerOnTrack(p.parkiller) && p.parkiller.trackPosition === lane.entryTrackIndex)
           .map((p) => p.color)
-        const opposingColorsAtEntry = [...opposingAtEntry.map((p) => p.color), ...opposingParkillerColorsAtEntry]
-        const foreignBarrier = opposingColorsAtEntry.length >= 2 && opposingColorsAtEntry.every((c) => c === opposingColorsAtEntry[0])
-        // A double opens *this specific* foreign barrier (an opposing pawn paired with that exact
-        // opponent's own Parkiller) - the one shape the client's guide documents a double-5 exit
-        // resolving (page 3: eliminates the pawn, the Parkiller itself untouched - see applyMove).
-        // A plain two-same-color-opposing-*pawns* barrier isn't covered by that page at all, so it
-        // keeps blocking regardless of a double, same as it always has.
-        const foreignBarrierOpenedByDouble = isDoubleRoll && foreignBarrier && opposingParkillerColorsAtEntry.length > 0
-        const blockedByOccupancy = ownOnEntry >= 2 || (foreignBarrier && !foreignBarrierOpenedByDouble)
+        // Client's own corrections doc ("resumen completo de cómo funciona hoy en el código"): a
+        // foreign barrier sitting on this exit's own entry square - same-color pawn pair OR
+        // different-color pawn pair - never blocks the exit at all; it always lands, and applyMove's
+        // own capture resolution (resolveBarrierElimination, generalized below to cover same-color
+        // opponents too) eliminates whichever of the two arrived later - both, if a double 5 exits
+        // two pawns onto it in a row. Only the pawn+own-Parkiller pairing (its own, separately
+        // documented "protected until a double" rule - client's Special Situations guide, page 3)
+        // still blocks a plain single exit; a double still opens *that* one specifically.
+        const pawnPlusOwnParkillerBarrier =
+          opposingAtEntry.length === 1 && opposingParkillerColorsAtEntry.length === 1 && opposingAtEntry[0].color === opposingParkillerColorsAtEntry[0]
+        const pawnPlusOwnParkillerBarrierOpenedByDouble = isDoubleRoll && pawnPlusOwnParkillerBarrier
+        const blockedByOccupancy = ownOnEntry >= 2 || (pawnPlusOwnParkillerBarrier && !pawnPlusOwnParkillerBarrierOpenedByDouble)
         if (!blockedByOccupancy) {
           moves.push({
             piece,
@@ -327,8 +330,9 @@ export function applyMove(
   // arrival order keeps working unchanged.
   arrivalSequence = 0,
   // Client's own "Special Situations" guide: a double opens a same-color opposing pawn+Parkiller
-  // pairing on the entry square for this exit (see getValidMoves' own foreignBarrierOpenedByDouble,
-  // which already gates *whether* this move exists at all on the same flag) - kept separate from
+  // pairing on the entry square for this exit (see getValidMoves' own
+  // pawnPlusOwnParkillerBarrierOpenedByDouble, which already gates *whether* this move exists at
+  // all on the same flag) - kept separate from
   // allowParkillerCapture (PK6/PK8's own single-move-per-roll window, already closed by the time a
   // double's *second* exit could reach this same square) since this one needs to stay true for the
   // whole roll, not just its first move.
@@ -388,10 +392,14 @@ export function applyMove(
       //    lone opponent already on the square doesn't get captured by a first exit, only once a
       //    further own piece joins that same mixed square.
       const joiningOwnPawn = ownAtDestination > 1
-      // 2) two *different-colored* opposing pawns already sharing the square (not a real barrier
-      //    - see getValidMoves' own comment on foreignBarrier) - PC2.1 names this outright:
-      //    "the last one to arrive is eliminated".
-      const exposedForeignPair = ownAtDestination === 1 && opposingAtDestination.length === 2 && opposingAtDestination[0].color !== opposingAtDestination[1].color
+      // 2) two opposing pawns already sharing the square, same color or different (neither shape
+      //    blocks this exit - see getValidMoves' own comment on pawnPlusOwnParkillerBarrier, the
+      //    only foreign pairing that still does) - PC2.1 names the different-color case outright,
+      //    "the last one to arrive is eliminated", and the client's own corrections doc extends the
+      //    same resolution to a same-color foreign barrier too. resolveBarrierElimination already
+      //    generalizes correctly either way (two same-colored non-mover pieces fall straight to its
+      //    own arrival-order tiebreak), so this gate no longer needs to check the two colors differ.
+      const exposedForeignPair = ownAtDestination === 1 && opposingAtDestination.length === 2
       result.capturedPiece = settings.captureSendsToYard
         ? captureAt(board, piece, move.resultingTrackPosition, allPlayers, joiningOwnPawn || exposedForeignPair)
         : null
@@ -454,9 +462,9 @@ export function applyMove(
           // Case: a foreign Parkiller already paired with a pawn - a *third* player's (client's
           // guide, page 4: "single 5 eliminates that pawn", any dice), or that exact Parkiller's
           // *own* color (page 3: protected against a single 5 - getValidMoves' own
-          // foreignBarrierOpenedByDouble already keeps this move from existing at all unless
-          // isDoubleRoll opened it, so reaching here on a same-color pair only ever happens on a
-          // double). Either way, the pawn goes, the Parkiller itself untouched *by this specific
+          // pawnPlusOwnParkillerBarrierOpenedByDouble already keeps this move from existing at all
+          // unless isDoubleRoll opened it, so reaching here on a same-color pair only ever happens
+          // on a double). Either way, the pawn goes, the Parkiller itself untouched *by this specific
           // capture* - re-runs captureAt with the safe-zone bypassed (this pair is exactly as real
           // as the plain two-different-opposing-pawns case PC2.1 already names) now that it's known
           // there's a genuine pawn+Parkiller pair here to resolve, not just a lone protected pawn.
@@ -468,8 +476,8 @@ export function applyMove(
       // Client's own "Special Situations" guide, page 7: two Parkis already paired on the entry
       // square, *neither* belonging to the shelter owner, are exposed exactly like the mixed
       // pawn+Parkiller pair above - a single 5 (this exit never blocked on them in the first place,
-      // same reasoning as getValidMoves' own foreignBarrier: two *different* colors never form a
-      // protected pairing) eliminates one, "the last Parki to arrive" (the same arrival-order
+      // only a pawn+own-Parkiller pairing ever blocks an exit) eliminates one, "the last Parki to
+      // arrive" (the same arrival-order
       // tie-break resolveBarrierElimination already uses for two pawns, generalized to a Parkiller's
       // own arrivedAt). A double's second exit, joining whichever one is left (now a lone Parkiller
       // - opposingParkillerAtDestination, length back down to 1), falls straight into the ordinary
