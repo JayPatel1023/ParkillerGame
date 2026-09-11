@@ -448,17 +448,19 @@ export function GameBoardScreen({
         ))}
       </div>
 
-      <button className="chunky-btn" onClick={() => setShowingHelp(true)} title="Cómo se juega" style={helpButtonStyle}>
-        ?
-      </button>
+      <div style={topRightButtonRowStyle}>
+        <button className="chunky-btn" onClick={() => setShowingSoundSettings(true)} title="Sonido" style={medallionButtonStyle}>
+          ♪
+        </button>
 
-      <button className="chunky-btn" onClick={() => setShowingSoundSettings(true)} title="Sonido" style={soundSettingsButtonStyle}>
-        ♪
-      </button>
+        <button className="chunky-btn" onClick={() => setShowingHelp(true)} title="Cómo se juega" style={medallionButtonStyle}>
+          ?
+        </button>
 
-      <button className="chunky-btn" onClick={() => setConfirmingExit(true)} title="Salir del juego" style={exitButtonStyle}>
-        ✕
-      </button>
+        <button className="chunky-btn" onClick={() => setConfirmingExit(true)} title="Salir del juego" style={medallionButtonStyle}>
+          ✕
+        </button>
+      </div>
 
       {showingHelp && <HelpModal onClose={() => setShowingHelp(false)} />}
 
@@ -640,8 +642,8 @@ const frameOverlayStyle: React.CSSProperties = {
 // floating button - echoes the reference's single "RED'S TURN / Roll the dice" card exactly.
 const turnCardStyle: React.CSSProperties = {
   position: 'absolute',
-  top: 16,
-  left: 16,
+  top: 'max(16px, env(safe-area-inset-top))',
+  left: 'max(16px, env(safe-area-inset-left))',
   display: 'flex',
   flexDirection: 'column',
   gap: 12,
@@ -696,7 +698,7 @@ const turnSubtitleStyle: React.CSSProperties = {
 // reference's row of player badges - wraps on narrow phones instead of overflowing.
 const playerRowStyle: React.CSSProperties = {
   position: 'absolute',
-  bottom: 16,
+  bottom: 'max(16px, env(safe-area-inset-bottom))',
   left: '50%',
   transform: 'translateX(-50%)',
   display: 'flex',
@@ -781,20 +783,35 @@ const secondaryButtonStyle: React.CSSProperties = {
   cursor: 'pointer',
 }
 
+// The three corner medallions (sound/help/exit) used to each carry their own absolute top/right,
+// hand-added up from a fixed 46px + 10px gap - correct on the wide phones it was built against,
+// but on an iPhone-width screen (390px, and narrower still on an SE) that fixed math reads as
+// cramped: the badges keep their desktop-sized 46px footprint right up against a real notch/
+// Dynamic Island with no give at all. One flex row now owns the position (with a safe-area-aware
+// inset so a notch/rounded corner never eats into a tap target), and each medallion sizes itself
+// off the same vw-based clamp() the turn card's own avatar already uses - shrinks together on a
+// narrow phone instead of one fixed pixel size fighting the viewport.
+const topRightButtonRowStyle: React.CSSProperties = {
+  position: 'absolute',
+  top: 'max(16px, env(safe-area-inset-top))',
+  right: 'max(16px, env(safe-area-inset-right))',
+  display: 'flex',
+  gap: 'clamp(6px, 2vw, 10px)',
+}
+
 // Round medallion badge instead of a rectangular "Salir" pill - matches the fleur-de-lis/star
 // corner ornaments already painted into the board art, and clears the boxy dead space a text
 // button left in the corner (reported directly, alongside the panel/roll-button shapes). Same
-// solid offset-edge depth as the pill buttons, just circular.
-const exitButtonStyle: React.CSSProperties = {
-  position: 'absolute',
-  top: 16,
-  right: 16,
-  width: 46,
-  height: 46,
+// solid offset-edge depth as the pill buttons, just circular. Shared by all three top-right
+// buttons (sound/help/exit) - positioning now lives on topRightButtonRowStyle instead.
+const medallionButtonStyle: React.CSSProperties = {
+  width: 'clamp(38px, 10vw, 46px)',
+  height: 'clamp(38px, 10vw, 46px)',
+  flexShrink: 0,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  fontSize: 17,
+  fontSize: 'clamp(14px, 3.6vw, 17px)',
   fontWeight: 700,
   background:
     'linear-gradient(180deg, rgba(255,255,255,0.22), transparent 45%), linear-gradient(165deg, rgba(64, 50, 32, 0.95), rgba(36, 28, 18, 0.95))',
@@ -805,20 +822,6 @@ const exitButtonStyle: React.CSSProperties = {
   cursor: 'pointer',
   fontFamily: 'system-ui, sans-serif',
   lineHeight: 1,
-}
-
-// Same medallion shape as exitButtonStyle, sitting just to its left - reported directly, with a
-// screenshot pointing at that same corner, asking for a way to check the rules mid-game.
-const helpButtonStyle: React.CSSProperties = {
-  ...exitButtonStyle,
-  right: 16 + 46 + 10,
-}
-
-// Same medallion, one more slot further left - opens the music/hop-sound picker (see
-// showingSoundSettings above) without leaving the game screen.
-const soundSettingsButtonStyle: React.CSSProperties = {
-  ...exitButtonStyle,
-  right: 16 + 46 + 10 + 46 + 10,
 }
 
 const overlayStyle: React.CSSProperties = {

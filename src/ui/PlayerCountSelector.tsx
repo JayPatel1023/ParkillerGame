@@ -1,4 +1,19 @@
-import { StartScreenBackground } from '../scene/StartScreenBackground'
+import { lazy, Suspense } from 'react'
+
+// Reported directly ("이오락의 로딩속도가 매우느리다" - this game's loading speed is very slow):
+// StartScreen.tsx's own background is a plain CSS photo now (see that file's own doc comment) and
+// GameBoardScreen/OnlineLobbyScreen are already lazy() in App.tsx - but this screen and
+// ColorSelector are NOT lazy, and both statically imported StartScreenBackground, which pulls in
+// the full Three.js/@react-three/fiber runtime at module scope. Since App.tsx imports this file
+// eagerly (`screen === 'selectCount'` is a plain conditional render, not a lazy route), that
+// static import chain dragged all of three.js into the SAME main chunk StartScreen itself ships
+// in - confirmed directly in the built bundle (WebGLRenderer/TextureLoader present in
+// dist/assets/index-*.js) - even though the very first screen a player sees never touches it.
+// lazy() here moves StartScreenBackground (and three.js) into its own chunk instead, shared with
+// GameBoardScreen's own chunk - App.tsx's mount effect already starts fetching that same GameBoard
+// chunk as soon as StartScreen appears, well before a player could realistically reach this
+// screen, so in practice the Suspense fallback below is never actually visible.
+const StartScreenBackground = lazy(() => import('../scene/StartScreenBackground').then((m) => ({ default: m.StartScreenBackground })))
 
 function lighten(hex: string, amount: number): string {
   const n = parseInt(hex.slice(1), 16)
@@ -56,7 +71,13 @@ export function PlayerCountSelector({ onConfirm }: { onConfirm: (count: number) 
           load is seamless (no color flash once the canvas does paint), and a failed one still shows
           an intentional dark background instead of true emptiness. */}
       <div style={{ position: 'absolute', inset: 0, backgroundColor: '#05070c' }}>
-        <StartScreenBackground />
+        {/* fallback null: the wrapper div's own #05070c already matches StartScreenBackground's
+            internal fog color exactly (see the comment just below), so there's nothing visibly
+            missing while its chunk is still in flight - same reasoning that comment already
+            documents for a slow/failed canvas, just via Suspense instead. */}
+        <Suspense fallback={null}>
+          <StartScreenBackground />
+        </Suspense>
       </div>
       <div
         style={{

@@ -8,8 +8,6 @@ import { ColorSelector } from './ui/ColorSelector'
 import { pauseIntroMusic, playIntroMusic } from './ui/introMusic'
 import { PlayerCountSelector } from './ui/PlayerCountSelector'
 import { StartScreen } from './ui/StartScreen'
-import { preloadTexture } from './scene/useRobustTexture'
-import { preloadSTL } from './scene/useRobustSTL'
 
 // Reported directly ("이오락의 로딩속도가 매우느리다" - this game's loading speed is very slow):
 // every one of these used to be a plain top-level import, so the whole app - the entire Three.js/
@@ -23,7 +21,23 @@ import { preloadSTL } from './scene/useRobustSTL'
 // gameBoardScreenImport is called directly (not just handed to lazy()) in the preload effect below
 // so that fetch starts immediately instead of waiting for the player to actually reach the game
 // screen - same "start the fetch early, let real setup-screen interaction time cover it" pattern
-// this file's own preloadTexture calls already use for board art.
+// this file's own preloadTexture/preloadSTL calls below use for board art and the Parkiller model.
+//
+// Reported again, still slow, after the split above already shipped: the split only moved
+// GameBoardScreen's own *rendering* code (BoardMesh/TrackTile/PieceMesh JSX) into its lazy chunk -
+// preloadTexture (useRobustTexture.ts) and preloadSTL (useRobustSTL.ts) were still plain top-level
+// imports here for their own sake, and both modules themselves import the real `three`/
+// `three-stdlib` runtime (THREE.TextureLoader, STLLoader) at module scope, sharing a single
+// textureCache/geometryCache with the useRobustTexture/useRobustSTL *hooks* those same files
+// export (the whole point - a preload has to warm the same cache the eventual hook read hits).
+// Because App.tsx - not GameBoardScreen - is what statically imported them, Rollup had no choice
+// but to bundle all of three.js (confirmed directly in dist/assets/index-*.js: WebGLRenderer,
+// TextureLoader, STLLoader, all present) into the same eager main chunk StartScreen ships in,
+// silently defeating the split above for exactly the heaviest dependency it was meant to keep out.
+// Turning just these two calls into dynamic import()s - still fired from the same mount effects,
+// so the fetch still starts exactly as early as before - lets Rollup put useRobustTexture.ts/
+// useRobustSTL.ts (and the `three` code they pull in) in their own chunk instead, shared with
+// GameBoardScreen's chunk rather than forced into the one every visitor downloads first.
 const gameBoardScreenImport = () => import('./ui/GameBoardScreen').then((m) => ({ default: m.GameBoardScreen }))
 const GameBoardScreen = lazy(gameBoardScreenImport)
 const WaypointEditor = lazy(() => import('./tools/WaypointEditor'))
@@ -83,9 +97,11 @@ export default function App() {
   // used this session. Effect re-fires as `playerCount` changes (PlayerCountSelector's own
   // onConfirm), so picking a different count immediately reprioritizes to that one.
   useEffect(() => {
-    preloadTexture(BOARD_DEFINITIONS[playerCount].boardImage)
-    preloadTexture('/tiles/tile-fill.png')
-    preloadTexture('/tiles/tile-border.png')
+    import('./scene/useRobustTexture').then(({ preloadTexture }) => {
+      preloadTexture(BOARD_DEFINITIONS[playerCount].boardImage)
+      preloadTexture('/tiles/tile-fill.png')
+      preloadTexture('/tiles/tile-border.png')
+    })
   }, [playerCount])
   // Fires once, unconditionally, regardless of playerCount - every game reaches GameBoardScreen
   // eventually, so there's no "which one" question the way there is for board art. Starting this
@@ -93,7 +109,7 @@ export default function App() {
   // flow's own real time to finish in the background - see this file's own top comment.
   useEffect(() => {
     gameBoardScreenImport()
-    preloadSTL('/parkiller.stl')
+    import('./scene/useRobustSTL').then(({ preloadSTL }) => preloadSTL('/parkiller.stl'))
   }, [])
   // null means classic hotseat (every color passed around one device) - see ColorSelector's own
   // "Jugar todos los colores" option. Non-null means vs-bots: the human plays only this color,

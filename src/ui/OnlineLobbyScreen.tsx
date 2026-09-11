@@ -644,7 +644,7 @@ export default function OnlineLobbyScreen() {
               whole image (mascot, wooden "Jugar online" sign with its own subtitle/description,
               and the dice) untouched, exactly as supplied. */}
           <img
-            src="/parkiller-mascot.png"
+            src="/parkiller-mascot.webp"
             alt="Jugar online - Crea una sala o únete con un código para jugar con tus amigos en línea"
             className="menu-mascot"
             style={menuMascotStyle}
@@ -668,7 +668,7 @@ export default function OnlineLobbyScreen() {
             {/* Reported directly: the fanned-out tilt from an earlier pass (each card rotated a
                 few degrees away from the other, "diagonal lines drawn across both cards") is
                 reverted here - back to straight/level, no transform, as it originally was. */}
-            <div className="menu-card" style={menuCardStyle('/backgrounds/leftbg.png')}>
+            <div className="menu-card" style={menuCardStyle('/backgrounds/leftbg.webp')}>
               <h3 className="menu-card-title" style={menuCardTitleStyle}>
                 Crear <span style={{ color: '#79e39a' }}>sala</span>
               </h3>
@@ -692,7 +692,7 @@ export default function OnlineLobbyScreen() {
               </button>
             </div>
 
-            <div className="menu-card" style={menuCardStyle('/backgrounds/bluebg.png')}>
+            <div className="menu-card" style={menuCardStyle('/backgrounds/bluebg.webp')}>
               <h3 className="menu-card-title" style={menuCardTitleStyle}>
                 Unirse <span style={{ color: '#8ec4f5' }}>a sala</span>
               </h3>
@@ -760,7 +760,7 @@ export default function OnlineLobbyScreen() {
               can eat the whole available height on its own with nothing left for the dots and
               text below. min(vw, vh) on *height* instead, matching that fix. */}
           <img
-            src="/connecting-hero.png"
+            src="/connecting-hero.webp"
             alt="Conectando..."
             style={{
               width: 'auto',

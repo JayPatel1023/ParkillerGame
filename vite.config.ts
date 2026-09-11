@@ -68,7 +68,16 @@ export default defineConfig({
         // visitor to download something big upfront" reasoning this file's own rules.pdf exclusion
         // below already uses, not a blanket precache-everything case. Loaded on demand instead
         // (still cacheable by the browser's normal HTTP cache once played), same as the PDF.
-        globIgnores: ['music/**'],
+        //
+        // public/reference/ holds the client's own physical-figurine reference PHOTOS
+        // (parkiller-full/angle/front/side/back.png, ~4.2MB total) - inputs for the #parkiller-
+        // editor dev tool (ParkillerEditor.tsx) used to hand-tune ParkillerMesh.tsx's own
+        // DEFAULT_PARKILLER_CONFIG, never loaded by the actual shipped game. "Precache everything"
+        // above was blindly pulling all 4.2MB of them into every regular player's first-load
+        // download (reported directly as slow loading, and confirmed by the built dist/sw.js
+        // precache manifest - ~14.8MB total, of which this one directory alone was well over a
+        // quarter) for art no player's own device ever renders.
+        globIgnores: ['music/**', 'reference/**'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         // Reported directly ("직접 문서로 가게 만들라" - make it go directly to the document):
         // clicking the help card's own rulebook PDF link opened the app's start screen instead of

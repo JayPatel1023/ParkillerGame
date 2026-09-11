@@ -1,6 +1,14 @@
-import { StartScreenBackground } from '../scene/StartScreenBackground'
+import { lazy, Suspense } from 'react'
 import { getColor } from '../core/colorPalette'
 import type { PieceColor } from '../core/pieceColor'
+
+// Reported directly ("이오락의 로딩속도가 매우느리다" - this game's loading speed is very slow): same
+// fix, same reasoning, as PlayerCountSelector's own matching comment - this screen is also eagerly
+// imported by App.tsx (not a lazy route) and also statically imported StartScreenBackground,
+// dragging three.js into the main chunk. lazy() here shares the same chunk PlayerCountSelector's
+// own StartScreenBackground import now resolves to (Rollup dedupes identical dynamic import()
+// targets), not a second copy.
+const StartScreenBackground = lazy(() => import('../scene/StartScreenBackground').then((m) => ({ default: m.StartScreenBackground })))
 
 // Reported directly ("EL JUGADOR AL INICIO DEBE PODER ELEGIR EL COLOR Y JUGAR CONTRA LOS OTROS
 // OPONENTE PILOTADOS POR EL BOT. AHORA EL JUGADOR JUEGA CON TODOS LOS COLORES, PERO HAY QUE PODER
@@ -78,7 +86,9 @@ export function ColorSelector({
           PlayerCountSelector's own matching comment (same fix, reported on this exact screen -
           screenshot showed no board at all, just this vignette over solid black) for why. */}
       <div style={{ position: 'absolute', inset: 0, backgroundColor: '#05070c' }}>
-        <StartScreenBackground />
+        <Suspense fallback={null}>
+          <StartScreenBackground />
+        </Suspense>
       </div>
       <div
         style={{
