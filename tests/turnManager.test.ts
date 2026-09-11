@@ -512,22 +512,25 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     expect(grants).toHaveLength(1)
   })
 
-  // Reported directly ("장벽이 형성되였을때 주사위가 더블이 되지도않앗는데 장벽에서 나오는경황이있었다" -
-  // a piece came out of a barrier even though the dice weren't a double): a reward can be granted on
-  // any roll, completely independent of whether that roll was a double - the rulebook's own "OPENING
-  // A BARRIER" page names exactly two ways to open one (a double, or an opposing Parki), and a bonus
-  // move spending accumulated reward squares is neither, so it must never be able to move a piece
-  // sitting in the player's own barrier, on a double roll or not.
-  it('a reward move never offers a piece sitting in the player own barrier, even on a non-double roll', () => {
+  // Reported directly, twice: first ("장벽이 형성되였을때 주사위가 더블이 되지도않앗는데 장벽에서
+  // 나오는경황이있었다" - a piece came out of a barrier even though the dice weren't a double) led to
+  // a reward move unconditionally excluding any piece sitting in the player's own barrier, on the
+  // theory that a bonus move spending accumulated reward squares was neither of the rulebook's own
+  // two ways to open one (a double, or an opposing Parki). Reported again once that exclusion itself
+  // caused a real game to forfeit a whole reward and hand the turn to the next player because every
+  // eligible piece happened to be barrier-locked ("el tema de las barreras sigue sin funcionar") -
+  // corrected the same way offerMoves()'s own dieA/dieB/sum moves already were: a barrier only ever
+  // blocks *other* pieces, never its own occupants moving voluntarily, reward included.
+  it('a reward move can move a piece sitting in the player own barrier, same as any other move', () => {
     const board = buildBigTestBoard()
     const red = createPlayerState('Red', board)
     const blue = createPlayerState('Blue', board)
     red.pieces[0].state = 'OnTrack'
-    red.pieces[0].trackPosition = 30
+    red.pieces[0].trackPosition = 2
     red.pieces[1].state = 'OnTrack'
-    red.pieces[1].trackPosition = 30 // pieces[0] and pieces[1] form a barrier at 30 - well ahead
-    // of pieces[2]'s own reward path below, so it's excluded by the barrier check itself, not
-    // incidentally blocked as a path obstacle it would otherwise have to cross.
+    red.pieces[1].trackPosition = 2 // pieces[0] and pieces[1] form a barrier at 2 - clear of
+    // pieces[2]'s own capturing move (5 -> 8) and its own later reward path (8 -> 28), so nothing
+    // here incidentally blocks pieces[2] in transit the way a barrier legitimately would.
     red.pieces[2].state = 'OnTrack'
     red.pieces[2].trackPosition = 5 // the one that actually captures
     blue.pieces[0].state = 'OnTrack'
@@ -543,19 +546,18 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     const result = manager.submitMove(red.pieces[2]) // 5 -> 8 (dieA=3), captures blue.pieces[0]
     expect(result?.capturedPiece).toBe(blue.pieces[0])
 
-    // The reward is genuinely offered (not forfeited) - pieces[0]/pieces[1], sitting in their own
-    // barrier at 30, never appear as candidates for it at all, for either amount, while pieces[2]
-    // (not barrier-locked) does. This exclusion stays unconditional regardless of double or not -
-    // see excludeBarrierAndSpentPiece's own doc comment - unlike an ordinary dieA/dieB/sum move,
-    // which this describe block's own header comment covers separately.
+    // The reward is offered to every eligible piece, barrier-locked or not - pieces[0]/pieces[1]
+    // (sitting in their own barrier at 30) appear as candidates right alongside pieces[2].
     expect(latestMoves.every((m) => m.diceSource === 'reward')).toBe(true)
-    expect(latestMoves.some((m) => m.piece === red.pieces[0])).toBe(false)
-    expect(latestMoves.some((m) => m.piece === red.pieces[1])).toBe(false)
+    expect(latestMoves.some((m) => m.piece === red.pieces[0])).toBe(true)
+    expect(latestMoves.some((m) => m.piece === red.pieces[1])).toBe(true)
     expect(latestMoves.some((m) => m.piece === red.pieces[2])).toBe(true)
 
-    // The barrier itself really is still there - unaffected, still stacked at 30.
-    expect(red.pieces[0].trackPosition).toBe(30)
-    expect(red.pieces[1].trackPosition).toBe(30)
+    // Taking the reward with a barrier piece actually breaks the barrier - it's a real, voluntary
+    // move, not a no-op.
+    manager.submitMove(red.pieces[0], 20)
+    expect(red.pieces[0].trackPosition).toBe(22)
+    expect(red.pieces[1].trackPosition).toBe(2)
   })
 
   it('finishing a piece grants a 10-square reward', () => {

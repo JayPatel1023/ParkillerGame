@@ -31,9 +31,9 @@ type BarrierLocation = { kind: 'track'; position: number } | { kind: 'corridor';
 /** Why moveNotPossible fired - reported directly (Carlos: "Cuando hay una barrera no se quieren
  * mover ninguno de los dos peones... no ha manera"): a wasted roll used to look identical to a
  * roll that genuinely had nothing to move, and the turn just silently passed either way with zero
- * on-screen explanation. Only ever 'none' now - see pieceIsInOwnBarrier's own doc comment on why a
- * barrier no longer has a distinct reason of its own: a normal roll can freely move a barrier piece
- * (the player's own choice), so a barrier alone no longer forces a wasted roll the way it used to.
+ * on-screen explanation. Only ever 'none' now - see offerMoves()'s own doc comment on barriers: a
+ * normal roll can freely move a barrier piece (the player's own choice), so a barrier alone no
+ * longer forces a wasted roll the way it used to.
  * Kept as a named reason (rather than inlining a plain boolean) since GameBoardScreen still branches
  * on it to show an explanatory message instead of the turn just silently advancing, and a future
  * distinct reason may still want to reuse this same plumbing. */
@@ -575,40 +575,24 @@ export class TurnManager {
   // obligates it per PK9.1, a Parki simply eliminates one pawn outright), not the *only* ways it
   // can ever open at all. "La barrera se abre 'obligatoriamente e involuntariamente' si sale un
   // doble, pero el jugador puede abrirla cuando quiera" (the barrier opens "mandatorily and
-  // involuntarily" on a double, but the player can open it whenever they want): an ordinary,
-  // non-double roll can still move either barrier piece normally, by the player's own choice - see
-  // offerMoves() below, which no longer excludes a barrier piece from dieA/dieB/sum moves the way
-  // it used to. This method's own two remaining callers are unaffected by that correction:
-  // offerMoves()'s double-forces-open branch still needs to know exactly this "is there currently
-  // an own barrier" answer (to force the choice rather than leave it optional on a double), and
-  // offerReward's own excludeBarrierAndSpentPiece still unconditionally excludes a barrier piece
-  // from a *bonus/reward* move specifically (a separate, previously-reported bug - a reward move
-  // isn't a die's own face value, and was never one of the rulebook's own ways to move a barrier
-  // piece at all, voluntarily or not). Computed fresh on every call, not cached, since a barrier
-  // can form or break mid-roll.
+  // involuntarily" on a double, but the player can open it whenever they want): a barrier only
+  // ever blocks *other* pieces from landing on or passing through it - never its own occupants
+  // from leaving voluntarily, on any kind of move (an ordinary die, the sum, or a reward - see
+  // offerReward's own matching comment for why that one took a second, separate report to fix).
+  //
   // Reported directly, via a systematic rules audit Carlos himself requested: `ownBarrierCorridor`
-  // used to only ever get computed `ownBarrierTrack === null ? ... : null` - the instant a player
-  // also had a barrier on the shared track, their own separate corridor barrier (a fully legitimate
-  // simultaneous state, using all 4 of a color's own pieces - 2 in each) went completely invisible
-  // to this check. Both barrier kinds are independent detectors (ownBarrierTrackPosition/
+  // below used to only ever get computed `ownBarrierTrack === null ? ... : null` - the instant a
+  // player also had a barrier on the shared track, their own separate corridor barrier (a fully
+  // legitimate simultaneous state, using all 4 of a color's own pieces - 2 in each) went completely
+  // invisible to this check. Both barrier kinds are independent detectors (ownBarrierTrackPosition/
   // ownCorridorBarrierPosition each only ever scan this same player's own 4 pieces) and can
-  // coexist - computing both unconditionally fixes this for both remaining callers.
-  private pieceIsInOwnBarrier(piece: Piece): boolean {
-    const ownBarrierTrack = ownBarrierTrackPosition(this.currentPlayer)
-    const ownBarrierCorridor = ownCorridorBarrierPosition(this.currentPlayer)
-    return (
-      (ownBarrierTrack !== null && piece.state === 'OnTrack' && piece.trackPosition === ownBarrierTrack) ||
-      (ownBarrierCorridor !== null && piece.state === 'InHomeCorridor' && piece.corridorPosition === ownBarrierCorridor)
-    )
-  }
-
+  // coexist - computing both unconditionally fixes this.
   private offerMoves() {
     const state = this.diceState
     if (!state) return
 
-    // Corrected directly by the client (see pieceIsInOwnBarrier's own doc comment): a barrier
-    // piece is never excluded from an ordinary dieA/dieB/sum move just for sitting in a barrier -
-    // the player can always choose to move it normally, on any roll. Only the double-forces-open
+    // A barrier piece is never excluded from an ordinary dieA/dieB/sum move just for sitting in a
+    // barrier - the player can always choose to move it normally, on any roll. Only the double-forces-open
     // obligation further down (barrierLocation/applyObligations) ever *restricts* moves down to a
     // barrier-break when a barrier already exists, and that's a double-only, mandatory narrowing,
     // not an exclusion on every other roll.
@@ -954,13 +938,17 @@ export class TurnManager {
   // own dieA/dieB/sum moves, this never excluded a piece sitting in the player's own barrier at
   // all - a reward can be granted on *any* roll (a regular capturing move, or even a Parkiller-vs-
   // Parkiller kill resolved before offerMoves() ever runs), completely independent of whether that
-  // roll happened to be a double. Since "roll a double" and "an opposing Parki" are the rulebook's
-  // own *only* two ways to open a barrier (rules.pdf, "OPENING A BARRIER") - a bonus/reward move,
-  // spending accumulated squares rather than a die's own face value, is neither - this always
-  // excludes a barrier piece, with no double-based exception the way offerMoves() has one: even on
-  // a double roll, by the time any reward could be offered the mandatory barrier-break obligation
-  // (PK9.1, handled entirely inside offerMoves() before a capturing move could even be submitted)
-  // has already necessarily run its course.
+  // roll happened to be a double. This used to always exclude a barrier piece from a reward move on
+  // the theory that "roll a double" and "an opposing Parki" were the rulebook's own *only* ways to
+  // open a barrier, so a bonus/reward move (spending accumulated squares, not a die's own face
+  // value) could never be one of them - since corrected directly by the client, the same way as
+  // offerMoves()'s own dieA/dieB/sum moves (see pieceIsInOwnBarrier's own doc comment): a barrier
+  // only ever blocks *other* pieces from landing on or passing through it, never its own occupants
+  // from leaving voluntarily, on any kind of move, reward included. Reported directly again once
+  // this specific case (a capture's own reward, with every eligible piece sitting in a barrier)
+  // came up: excluding them here still forfeited the whole reward and handed the turn to the next
+  // player, "el tema de las barreras sigue sin funcionar" - the barrier voluntary-movement fix
+  // never actually reached this path.
   //
   // A splittable grant (a fresh capture's own 20 - see PendingReward's own comment for why this
   // isn't forced down one fixed path) offers *both* amounts together: every piece that can move
@@ -972,13 +960,10 @@ export class TurnManager {
   private offerReward(grant: PendingReward) {
     const canSplit = grant.reason === 'capture' && grant.amount > REWARD_UNIT
     const excludePiece = grant.excludePiece
-    const excludeBarrierAndSpentPiece = (moves: MoveOption[]) =>
-      moves.filter((m) => m.piece !== excludePiece && !this.pieceIsInOwnBarrier(m.piece))
-    const fullMoves = excludeBarrierAndSpentPiece(
-      getValidMoves(this.board, this.currentPlayer, this.players, grant.amount, this.settings, 'reward'),
-    )
+    const excludeSpentPiece = (moves: MoveOption[]) => moves.filter((m) => m.piece !== excludePiece)
+    const fullMoves = excludeSpentPiece(getValidMoves(this.board, this.currentPlayer, this.players, grant.amount, this.settings, 'reward'))
     const splitMoves = canSplit
-      ? excludeBarrierAndSpentPiece(getValidMoves(this.board, this.currentPlayer, this.players, REWARD_UNIT, this.settings, 'reward'))
+      ? excludeSpentPiece(getValidMoves(this.board, this.currentPlayer, this.players, REWARD_UNIT, this.settings, 'reward'))
       : []
 
     const byPieceAndAmount = new Map<string, MoveOption>()
