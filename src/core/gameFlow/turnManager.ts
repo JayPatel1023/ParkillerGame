@@ -775,6 +775,20 @@ export class TurnManager {
     // single-die-reachable capture is mandatory) - independently reinforced by the corrected PDF's
     // own "CAPTURE OR JUMP" page ("if you have no other legal move *using that die*, you must
     // capture"). A capture only reachable via the sum stays a genuine option, never a forced one.
+    //
+    // Reported directly, with the client's own corrected rules doc ("eliminar al Parki con un peón
+    // NO ES OBLIGATORIO" - eliminating the Parki with a pawn is NOT mandatory): unlike an ordinary
+    // pawn capture, landing a common piece on the enemy Parki during its own capture window (PK6/
+    // PK8) is a free choice, not a forced one - confirmed directly against the reference
+    // implementation's own two, deliberately different tutorial messages for the two cases:
+    // ordinary capture's own activarFichasMovibles() message reads "debes comer obligadamente" (you
+    // MUST capture, mandatorily), while the Parki-capture-during-a-barrier-lock message reads
+    // "PUEDES mover fichas... si tienes posibilidad de comer al parkiller" (you CAN move pieces...
+    // if you have the chance to eat the Parkiller) - "puedes", not "debes". Passing false here
+    // (instead of this.parkillerCapturableThisRoll) keeps a Parki-eliminating move fully offered
+    // alongside this piece's other options rather than forcing it out as the only choice - it still
+    // resolves as a real elimination if the player actually picks it (applyMove's own
+    // allowParkillerCapture handles that separately, untouched by this).
     const optionsByPiece = new Map<Piece, MoveOption[]>()
     for (const move of options) {
       const list = optionsByPiece.get(move.piece)
@@ -782,9 +796,7 @@ export class TurnManager {
       else optionsByPiece.set(move.piece, [move])
     }
     options = [...optionsByPiece.values()].flatMap((pieceOptions) => {
-      const capturing = pieceOptions.filter(
-        (m) => m.diceSource !== 'sum' && wouldCapture(this.board, m, this.players, this.parkillerCapturableThisRoll),
-      )
+      const capturing = pieceOptions.filter((m) => m.diceSource !== 'sum' && wouldCapture(this.board, m, this.players, false))
       return capturing.length > 0 ? capturing : pieceOptions
     })
 

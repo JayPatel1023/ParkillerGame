@@ -1316,6 +1316,36 @@ describe('TurnManager - landing on an unprotected opposing Parkiller (PK5)', () 
     expect(blue.parkiller.state).toBe('InPlay')
     expect(rewardOffered).toBe(false)
   })
+
+  // Reported directly, with the client's own corrected rules doc ("eliminar al Parki con un peón
+  // NO ES OBLIGATORIO" - eliminating the Parki with a pawn is NOT mandatory): confirmed directly
+  // against the reference implementation's own two, deliberately different tutorial messages -
+  // ordinary capture's own "debes comer obligadamente" (you MUST capture) vs. this specific case's
+  // own "PUEDES mover fichas... si tienes posibilidad de comer al parkiller" (you CAN). Unlike an
+  // ordinary pawn capture, a move that would eliminate the enemy Parki during its own capture
+  // window (a double, single die only) must never be the *only* option offered for that piece -
+  // any other legal move (even a non-capturing one) for the same piece stays a genuine choice.
+  it('does not force a piece into eliminating the enemy Parkiller - a non-capturing alternative stays offered (PK6/PK8)', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 0
+    blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+    blue.parkiller.trackPosition = 4 // exactly reachable by either half of the double below
+
+    const dice = new ScriptedDice([4, 4, 1]) // a double - opens PK6's Parkiller-kill window
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let offered: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((moves) => (offered = moves))
+    manager.requestRoll()
+
+    // The Parki-eliminating move (amount 4) is offered, but so is the sum (8, landing somewhere
+    // else entirely, no capture at all) - a real choice, not narrowed down to just the elimination.
+    expect(offered.some((m) => m.piece === red.pieces[0] && m.amount === 4)).toBe(true)
+    expect(offered.some((m) => m.piece === red.pieces[0] && m.amount === 8)).toBe(true)
+  })
 })
 
 // Requested directly ("para empezar la partida cada jugador y los bots lanzan los dados blancos

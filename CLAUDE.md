@@ -180,7 +180,12 @@ wherever the rulebook's prose alone was ambiguous.
   direction from regular pawns. Landing on an opposing pawn sends it home with no reward; landing
   on an opposing Parkiller on an *unprotected* square eliminates it and grants the same 20-square
   choice-based reward as a regular capture, but only via a single die's own value during the roll
-  that just produced doubles (PK6) — never the sum. On a *protected/safe* square the two Parkillers
+  that just produced doubles (PK6) — never the sum. Unlike an ordinary pawn capture (PC3/PK8 below),
+  this one is never mandatory — confirmed directly against the reference implementation's own two
+  deliberately different tutorial messages: an ordinary capture's own "debes comer obligadamente"
+  (you MUST capture) vs. this specific case's own "puedes mover fichas... si tienes posibilidad de
+  comer al parkiller" (you CAN) — a piece that could eliminate the Parkiller this way always keeps
+  its other, non-capturing options too. On a *protected/safe* square the two Parkillers
   simply form a barrier together instead (client's own "BARRIERS" rules page, case 4: "Two Parkis -
   can only be formed on a safe space") — no elimination, no reward. Reported directly: this
   safe-square exception used to be missing entirely for this one collision, unlike every other
