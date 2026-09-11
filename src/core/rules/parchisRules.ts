@@ -306,10 +306,40 @@ export function wouldCapture(
       return true
   }
 
-  // PC2.2: safe zones protect pawns from capture *except* on a player's own starting square, the
-  // instant that player exits a pawn onto it - an ExitYard landing always targets the mover's own
-  // lane's entry square, so this exception never needs a color check of its own.
-  if (move.kind !== 'ExitYard' && board.safeTrackIndices.has(pos)) return false
+  // PC2.1: an ExitYard landing does NOT always capture a lone opposing pawn already on the entry
+  // square the way a plain TrackMove does - see applyMove's own three actual pawn-capturing shapes
+  // (joining an own piece already there, exposing a genuine 2-pawn foreign pair, or a pawn paired
+  // with a foreign Parkiller): a first, lone exit onto a single opposing pawn with nothing else
+  // there simply coexists (PC2.1's own "conviven" rule) - it does not capture at all. Reported
+  // directly, found via a systematic rules audit: the generic loop below (correct for TrackMove,
+  // whose own getValidMoves already blocks landing on a 2+-occupant square and whose safe-zone
+  // check just above already excludes a protected square, so the only way to reach it there is a
+  // genuinely unprotected lone opponent, always captured) used to run for ExitYard too, reporting
+  // "capture" for that same lone-opponent-coexists case - wrongly flagging a plain exit as
+  // mandatory-capturing. Concrete impact confirmed directly: PK9.1's own barrier-break obligation
+  // (turnManager.ts's restrictToBarrierBreakOrCapture) treats *any* wouldCapture-true move as an
+  // equally valid alternative to breaking the barrier - this false positive let a player dodge that
+  // obligation by exiting instead, whenever a lone opponent happened to already sit on their entry
+  // square. The pawn+foreign-Parkiller case doesn't need its own double-vs-color check here (unlike
+  // applyMove's own version of it) - by the time getValidMoves has already produced this exact
+  // ExitYard move, a same-color pairing could only ever have survived that gate on a double in the
+  // first place (pawnPlusOwnParkillerBarrierOpenedByDouble), so this move existing at all already
+  // guarantees the capture condition applyMove itself would separately re-check.
+  if (move.kind === 'ExitYard') {
+    const owner = allPlayers.find((p) => p.color === move.piece.color)
+    const ownPawnsAlreadyThere = piecesOfColorOnTrackSquare(allPlayers, move.piece.color, pos)
+    const ownParkillerAlreadyThere = !!owner && isParkillerOnTrack(owner.parkiller) && owner.parkiller.trackPosition === pos
+    const opposingPawnsThere = piecesAtTrackSquare(allPlayers, pos).filter((p) => p.color !== move.piece.color)
+    if (ownPawnsAlreadyThere > 0 || ownParkillerAlreadyThere) return opposingPawnsThere.length > 0
+    if (opposingPawnsThere.length === 2) return true
+    const opposingParkillerAlreadyThere = allPlayers.some(
+      (p) => p.color !== move.piece.color && isParkillerOnTrack(p.parkiller) && p.parkiller.trackPosition === pos,
+    )
+    return opposingPawnsThere.length === 1 && opposingParkillerAlreadyThere
+  }
+
+  // PC2.2: safe zones protect pawns from capture (TrackMove only - ExitYard already returned above).
+  if (board.safeTrackIndices.has(pos)) return false
   for (const opponent of allPlayers) {
     if (opponent.color === move.piece.color) continue
     for (const opponentPiece of opponent.pieces) {

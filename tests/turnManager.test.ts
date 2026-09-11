@@ -781,6 +781,39 @@ describe('TurnManager - mandatory barrier removal on doubles (PK9.1)', () => {
     expect(offered.some((m) => m.piece === red.pieces[2])).toBe(false)
   })
 
+  // Reported directly, found via a systematic rules audit: restrictToBarrierBreakOrCapture treats
+  // any wouldCapture()-true move as an equally valid alternative to breaking the barrier - correct
+  // when it's a genuine capture, but wouldCapture() used to also flag a fresh ExitYard onto a
+  // single lone opponent as "capturing" (it doesn't - they simply coexist, PC2.1's own "conviven"
+  // rule). That false positive let a player dodge this whole obligation by exiting instead,
+  // whenever a lone opponent happened to already sit on their own entry square - see
+  // parchisRules.test.ts's own matching wouldCapture regression test for the narrower unit-level
+  // version of this same bug.
+  it('does not let a player dodge the barrier-break obligation by exiting onto a lone opponent instead', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 5 // own barrier at 5
+    red.pieces[2].state = 'InYard'
+    red.pieces[3].state = 'InYard'
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 0 // lone Blue pawn on Red's own entry square
+
+    const dice = new ScriptedDice([5, 5, 1]) // double 5-5 - also the exit roll
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let offered: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((moves) => (offered = moves))
+
+    manager.requestRoll()
+
+    expect(offered.every((m) => m.kind !== 'ExitYard')).toBe(true)
+    expect(offered.map((m) => m.piece)).toEqual(expect.arrayContaining([red.pieces[0], red.pieces[1]]))
+  })
+
   it('frees the second (identical-value) die once the first has already broken the barrier', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)

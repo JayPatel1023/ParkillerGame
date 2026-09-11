@@ -780,5 +780,70 @@ describe('parchisRules', () => {
 
       expect(wouldCapture(board, sumMove, [attacker, defender], true)).toBe(false)
     })
+
+    // Reported directly, found via a systematic rules audit: a fresh ExitYard onto a single lone
+    // opponent simply coexists (PC2.1's own "conviven" rule, see the "exiting the yard onto a lone
+    // opponent" test above) - it was still being flagged as a capture here, which let a player
+    // dodge PK9.1's own mandatory barrier-break obligation on a double by exiting instead (see
+    // turnManager.test.ts's own matching regression test for that concrete downstream effect).
+    it('does not flag a fresh ExitYard onto a single lone opponent as a capture - they simply coexist', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+      red.pieces[0].state = 'InYard'
+      blue.pieces[0].state = 'OnTrack'
+      blue.pieces[0].trackPosition = 0 // Red's own entry square
+
+      const settings = defaultRuleSettings()
+      const exitMove = getValidMoves(board, red, [red, blue], 5, settings).find((m) => m.kind === 'ExitYard')!
+      expect(wouldCapture(board, exitMove, [red, blue], false)).toBe(false)
+    })
+
+    it('does flag an ExitYard as a capture when joining an own pawn already on the entry square', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+      red.pieces[0].state = 'OnTrack'
+      red.pieces[0].trackPosition = 0
+      red.pieces[1].state = 'InYard'
+      blue.pieces[0].state = 'OnTrack'
+      blue.pieces[0].trackPosition = 0
+
+      const settings = defaultRuleSettings()
+      const exitMove = getValidMoves(board, red, [red, blue], 5, settings).find((m) => m.kind === 'ExitYard')!
+      expect(wouldCapture(board, exitMove, [red, blue], false)).toBe(true)
+    })
+
+    it('does flag an ExitYard as a capture when it exposes a genuine 2-pawn foreign pair', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+      const gold = createPlayerState('Gold', board)
+      red.pieces[0].state = 'InYard'
+      blue.pieces[0].state = 'OnTrack'
+      blue.pieces[0].trackPosition = 0
+      gold.pieces[0].state = 'OnTrack'
+      gold.pieces[0].trackPosition = 0
+
+      const settings = defaultRuleSettings()
+      const exitMove = getValidMoves(board, red, [red, blue, gold], 5, settings).find((m) => m.kind === 'ExitYard')!
+      expect(wouldCapture(board, exitMove, [red, blue, gold], false)).toBe(true)
+    })
+
+    it('does flag an ExitYard as a capture when a pawn is already paired with a foreign Parkiller', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+      const gold = createPlayerState('Gold', board)
+      red.pieces[0].state = 'InYard'
+      gold.pieces[0].state = 'OnTrack'
+      gold.pieces[0].trackPosition = 0
+      blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+      blue.parkiller.trackPosition = 0
+
+      const settings = defaultRuleSettings()
+      const exitMove = getValidMoves(board, red, [red, blue, gold], 5, settings).find((m) => m.kind === 'ExitYard')!
+      expect(wouldCapture(board, exitMove, [red, blue, gold], false)).toBe(true)
+    })
   })
 })
