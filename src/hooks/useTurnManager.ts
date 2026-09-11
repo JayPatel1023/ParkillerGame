@@ -28,7 +28,14 @@ export type MoveAnimationRequest = MoveAnimationInfo
 // entirely, so `rolling` never turned true and the dice values just snapped in with no spin at
 // all. Moved the spin here instead, into the *event* every roll fires regardless of who
 // triggered it, so it's no longer tied to which code path made the call.
-const DICE_SPIN_MS = 450
+// Reported directly ("Va demasiado rápido. No se ha puesto la pantalla y ya están saltando los
+// peones" - it goes too fast, the screen hasn't even settled and the pawns are already jumping;
+// "una latencia de 2-3 segundos bastaría... para ver y poder pensar" - a 2-3 second latency would
+// be enough to see and think): 450ms was only ever tuned as a dice-spin *reveal* duration, not as
+// real viewing time - and it's the one gate every hop everywhere waits on (see diceSettledAt's own
+// doc comment below), including the Parkiller's fully automatic move, which needs no player click
+// at all and so had nothing else slowing it down. Bumped to the client's own stated minimum.
+const DICE_SPIN_MS = 2000
 
 // Reported directly (Carlos: "Cuando hay una barrera no se quieren mover ninguno de los dos
 // peones... no ha manera" - when there's a barrier neither pawn wants to move, no way out): a
