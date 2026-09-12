@@ -29,7 +29,7 @@ import {
 } from './piecePosition'
 import { toWorldPosition, estimateSquareSize, computeTileCorners, BASE_HEIGHT, FLAT_SURFACE_HEIGHT, BOARD_SIZE } from './boardGeometry'
 import { getColor } from '../core/colorPalette'
-import { watchForContextLoss } from './webglContextRecovery'
+import { useCanvasRemountOnStuckContext } from './webglContextRecovery'
 
 // Requested look is a real tabletop perspective shot (dramatic near/far foreshortening, board
 // filling the frame edge to edge) rather than the flatter, evenly-scaled orthographic view this
@@ -557,6 +557,11 @@ export function BoardScene({
   onChoosePieceAmount,
   botHighlightedPiece,
 }: BoardSceneProps) {
+  // See useCanvasRemountOnStuckContext's own doc comment (webglContextRecovery.ts) - forces a fresh
+  // <Canvas>/WebGLRenderer if a context loss doesn't self-restore in time, rather than trusting the
+  // browser to always eventually fire 'webglcontextrestored' on its own.
+  const { canvasKey, onCreated } = useCanvasRemountOnStuckContext('BoardScene')
+
   // While a move is still animating, its `hops` reconstruction runs against the piece's already-
   // fully-updated logical state (game rules apply moves instantly; only the visual hop-by-hop
   // playback takes time). If a second move were submitted before that playback finishes,
@@ -812,21 +817,16 @@ export function BoardScene({
 
   return (
     <Canvas
+      key={canvasKey}
       shadows
       gl={{ alpha: true }}
       // Reported directly, via a browser console screenshot ("THREE.WebGLRenderer: Context
       // Lost.") - see webglContextRecovery.ts's own doc comment for why a lost context needs an
-      // explicit preventDefault() to ever be restorable at all, and why nothing further is needed
-      // here beyond allowing that to happen - the board went permanently blank with a perfectly
-      // healthy Photon connection still running right alongside it, confirming this specific
-      // failure has nothing to do with the network or file sizes.
-      onCreated={({ gl }) => {
-        watchForContextLoss(
-          gl,
-          () => console.warn('BoardScene: WebGL context lost - waiting for the browser to restore it'),
-          () => console.info('BoardScene: WebGL context restored'),
-        )
-      }}
+      // explicit preventDefault() to ever be restorable at all. Reported again later, still
+      // permanently blank ("SIGUE HABIENDO VACIOS DE PANTALLA SIN TABLERO") - restoration isn't
+      // guaranteed by the WebGL spec, only possible; useCanvasRemountOnStuckContext's own `key`
+      // above forces a fresh canvas if the browser's own restore event never actually comes.
+      onCreated={onCreated}
     >
       {/* Orthographic, exactly vertically overhead instead of the earlier angled perspective
           camera: a piece sits at some height above the flat board (BASE_HEIGHT + its own
