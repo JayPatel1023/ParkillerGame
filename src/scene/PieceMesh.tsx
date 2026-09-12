@@ -100,7 +100,13 @@ export const PIECE_PROFILE_RAW: [number, number][] = [
 // PAWN_HEIGHT (currently 2.2275x, via its own 1.65 base scale times its 1.35 height boost), so
 // growing PIECE_BASE_RADIUS grows both pawn and Parkiller height together in lockstep, never
 // closing that ratio - no separate change needed there to keep pawns the smaller of the two.
-export const PIECE_BASE_RADIUS = 0.5
+// Bumped a fourteenth time, 0.5 -> 0.46 - reported directly ("Pakii and pown's size is too big,
+// reduce a little"): a mild pullback in the opposite direction from the thirteenth round above,
+// not a revert to that round's own 0.45 (a bigger step than "a little" asked for). The Parkiller
+// shrinks right along with the pawn automatically, same reasoning as every round before this one -
+// its own height is still a fixed multiple of PAWN_HEIGHT below, so the two stay in proportion
+// with no separate change needed in ParkillerMesh.tsx.
+export const PIECE_BASE_RADIUS = 0.46
 export const PROFILE_SCALE = PIECE_BASE_RADIUS / Math.max(...PIECE_PROFILE_RAW.map(([r]) => r))
 // Stretches the profile taller without widening the base - requested directly, twice now ("peones
 // más alargados" both times), each time with a reference photo of taller pawns. Applied only to
