@@ -6,6 +6,7 @@ import { getColor } from '../core/colorPalette'
 import { BoardMesh } from './BoardMesh'
 import { PIECE_PROFILE_RAW, PROFILE_SCALE, PIECE_HEIGHT_SCALE } from './PieceMesh'
 import { toWorldPosition, FLAT_SURFACE_HEIGHT, BOARD_SIZE } from './boardGeometry'
+import { watchForContextLoss } from './webglContextRecovery'
 
 // Requested directly: a flat photo (blurred or not) or a CSS pattern both read as "not
 // three-dimensional" - a real background needs actual depth (perspective, lighting, shadows), which
@@ -78,7 +79,24 @@ function DecorativePieces() {
 
 export function StartScreenBackground() {
   return (
-    <Canvas shadows gl={{ antialias: true }} dpr={[1, 1.5]} camera={{ fov: 45 }}>
+    <Canvas
+      shadows
+      gl={{ antialias: true }}
+      dpr={[1, 1.5]}
+      camera={{ fov: 45 }}
+      // See webglContextRecovery.ts's own doc comment - this component mounts a fresh <Canvas>
+      // on every navigation between PlayerCountSelector/ColorSelector/OnlineLobbyScreen's own
+      // several phases, the most likely place for WebGL contexts to pile up across one session if
+      // the browser (or GPU driver) is ever slow to reclaim an old one - exactly the kind of real,
+      // ordinary pressure that can trigger a context loss with no error on this app's own part.
+      onCreated={({ gl }) => {
+        watchForContextLoss(
+          gl,
+          () => console.warn('StartScreenBackground: WebGL context lost - waiting for the browser to restore it'),
+          () => console.info('StartScreenBackground: WebGL context restored'),
+        )
+      }}
+    >
       <RotatingCamera />
       <ambientLight intensity={0.6} />
       <directionalLight position={[4, 8, 2]} intensity={1.1} castShadow />

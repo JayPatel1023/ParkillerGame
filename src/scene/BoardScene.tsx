@@ -29,6 +29,7 @@ import {
 } from './piecePosition'
 import { toWorldPosition, estimateSquareSize, computeTileCorners, BASE_HEIGHT, FLAT_SURFACE_HEIGHT, BOARD_SIZE } from './boardGeometry'
 import { getColor } from '../core/colorPalette'
+import { watchForContextLoss } from './webglContextRecovery'
 
 // Requested look is a real tabletop perspective shot (dramatic near/far foreshortening, board
 // filling the frame edge to edge) rather than the flatter, evenly-scaled orthographic view this
@@ -810,7 +811,23 @@ export function BoardScene({
   }
 
   return (
-    <Canvas shadows gl={{ alpha: true }}>
+    <Canvas
+      shadows
+      gl={{ alpha: true }}
+      // Reported directly, via a browser console screenshot ("THREE.WebGLRenderer: Context
+      // Lost.") - see webglContextRecovery.ts's own doc comment for why a lost context needs an
+      // explicit preventDefault() to ever be restorable at all, and why nothing further is needed
+      // here beyond allowing that to happen - the board went permanently blank with a perfectly
+      // healthy Photon connection still running right alongside it, confirming this specific
+      // failure has nothing to do with the network or file sizes.
+      onCreated={({ gl }) => {
+        watchForContextLoss(
+          gl,
+          () => console.warn('BoardScene: WebGL context lost - waiting for the browser to restore it'),
+          () => console.info('BoardScene: WebGL context restored'),
+        )
+      }}
+    >
       {/* Orthographic, exactly vertically overhead instead of the earlier angled perspective
           camera: a piece sits at some height above the flat board (BASE_HEIGHT + its own
           bounce/geometry), and under a perspective camera an elevated object visibly shifts away

@@ -30,9 +30,16 @@
          these three specific fetches immediately on HTML parse, in parallel with the JS bundle
          rather than after it - by the time App.tsx's own preloadTexture call runs, these are
          already well underway (or done), so it becomes a same-URL cache hit instead of a fresh
-         fetch. board_4p.jpg matches PlayerCountSelector's own default selection (App.tsx's
+         fetch. board_4p.webp matches PlayerCountSelector's own default selection (App.tsx's
          `useState(4)`) - the single most likely board a first-time visitor actually needs; the two
          tile images are shared by every board regardless of player count.
+
+         Reported directly, via a browser console screenshot ("preloaded... but not used" warning):
+         this still pointed at board_4p.jpg after generated-boards.json's own boardImage field
+         switched to board_4p.webp (see that file's own git history) - the preload fetched a file
+         nothing in the running app ever actually requests anymore, silently defeating its entire
+         purpose (the real board_4p.webp got no early-start head start at all) while still spending
+         real bandwidth on a fetch that goes completely unused.
 
          crossorigin="anonymous" matters, not decorative - confirmed directly via a console warning
          ("preload... not used because the request credentials mode does not match") without it:
@@ -41,7 +48,7 @@
          preload's credentials mode has to match the real request's exactly or the browser treats
          them as different resources entirely, fetching the image *twice* - once for the unused
          preload, once for real - which silently defeated this whole preload's own purpose. -->
-    <link rel="preload" href="/boards/board_4p.jpg" as="image" crossorigin="anonymous" />
+    <link rel="preload" href="/boards/board_4p.webp" as="image" crossorigin="anonymous" />
     <link rel="preload" href="/tiles/tile-fill.png" as="image" crossorigin="anonymous" />
     <link rel="preload" href="/tiles/tile-border.png" as="image" crossorigin="anonymous" />
     <!-- Requested directly, for the "Jugar online" redesign (a reference mockup: a bold rounded
