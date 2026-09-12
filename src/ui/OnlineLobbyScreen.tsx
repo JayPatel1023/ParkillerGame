@@ -405,6 +405,9 @@ export default function OnlineLobbyScreen() {
   // when the game starts - a client that started the game *as* Master (already running
   // HostTurnManagerBridge) has nothing to do here even if this fires again later.
   const wasMasterRef = useRef(false)
+  // Guards the onConnectionLost effect below against overlapping reconnectAndRejoin() attempts -
+  // see that effect's own doc comment for why this is needed at all.
+  const reconnectingRef = useRef(false)
   useEffect(() => {
     const connection = connectionRef.current
     if (!connection || phase !== 'game') return
@@ -448,12 +451,29 @@ export default function OnlineLobbyScreen() {
   // interruption beyond the "Reconectando..." overlay GameBoardScreen's own wrapper shows for it -
   // only a reconnect that genuinely fails (or times out past that same grace window) falls through
   // to the original teardown.
+  //
+  // Reported directly again, still frequent even with the above shipped ("소켓통신의 문제인가? 너무
+  //빨리 꺼지는적이많아" - is it a socket issue? it turns off too quickly, often): onConnectionLost's
+  // own underlying subscription (photonClient.ts's stateChangeListeners) stays live for as long as
+  // this effect is mounted - it never paused itself while a reconnectAndRejoin() attempt was
+  // already in flight. reconnectAndRejoin() itself necessarily cycles the client's own state through
+  // Disconnected/Error again as a normal part of tearing down the old game-server connection before
+  // establishing the new one (confirmed directly in the SDK source) - each of those transient,
+  // expected transitions re-fired this same callback, which called reconnectAndRejoin() *again* on
+  // top of the attempt already running, repeatedly resetting it before it could ever actually
+  // stabilize. From the player's own perspective that reads as rapid, repeated disconnects during
+  // otherwise normal play, not a single brief one. reconnectingRef guards against exactly this - a
+  // disconnect event that arrives while a reconnection is already in progress is the SDK's own
+  // internal churn, not a new, independent failure to react to.
   useEffect(() => {
     const connection = connectionRef.current
     if (!connection || (phase !== 'lobby' && phase !== 'game')) return
     return connection.onConnectionLost(() => {
+      if (reconnectingRef.current) return
+      reconnectingRef.current = true
       setReconnecting(true)
       connection.reconnectAndRejoin().then((reconnected) => {
+        reconnectingRef.current = false
         setReconnecting(false)
         if (reconnected) return
         botControllerRef.current?.dispose()
