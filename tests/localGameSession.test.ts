@@ -61,6 +61,10 @@ describe('beginLocalGame - vs bots (humanColor provided)', () => {
     // this test calls requestRoll for a human seat), which would test "the game is stuck", not
     // "the bot plays autonomously".
     const session = beginLocalGame(BOARD_DEFINITIONS[2], TURN_ORDER_BY_COUNT[2], 'Blue', new Dice(BOT_TEST_SEED))
+    // beginLocalGame no longer calls start() itself (see its own doc comment - GameBoardScreen now
+    // calls this once its own pre-game roll-off modal is dismissed) - this test drives the session
+    // directly, with no such modal in the picture, so it has to call it explicitly instead.
+    session.turnManager.start()
 
     let redExited = false
     let blueEverMoved = false
@@ -88,6 +92,8 @@ describe('beginLocalGame - vs bots (humanColor provided)', () => {
 
   it('stops all further bot action once disposed', () => {
     const session = beginLocalGame(BOARD_DEFINITIONS[2], TURN_ORDER_BY_COUNT[2], 'Blue', new Dice(BOT_TEST_SEED))
+    // See the "auto-plays" test above's own matching comment.
+    session.turnManager.start()
 
     let redMoveCount = 0
     session.turnManager.moveApplied.on((result) => {

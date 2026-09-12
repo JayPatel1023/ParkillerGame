@@ -115,6 +115,14 @@ export interface GameSession {
    * startGame()/startAsRemote()) - shown once via StartingPlayerModal on mount, after colorDraw's
    * own modal (if present) is dismissed. */
   startingPlayerResult?: StartingPlayerResult
+  /** True for local play only (beginLocalGame's own doc comment) - turnManager.start() (the call
+   * that actually activates the game: emits turnStarted, which in vs-bots mode is what schedules a
+   * bot's own first roll) is deliberately *not* already called by the time this session exists, so
+   * StartingPlayerModal's own onDone handler below has to call it once the roll-off's reveal
+   * finishes, not before. Online play leaves this unset - its own bridge.start() already runs on
+   * its own timing (OnlineLobbyScreen.tsx), and calling start() again here would double-fire
+   * turnStarted for it. */
+  deferredStart?: true
   /** Only set for online games (OnlineLobbyScreen's own shuffleColorsByActorNr) - local play never
    * randomizes color, see ColorSelector's own "the player must be able to choose" requirement.
    * Shown once via ColorDrawModal on mount, before startingPlayerResult's own modal. */
@@ -500,7 +508,16 @@ export function GameBoardScreen({
       )}
 
       {!showingColorDraw && showingStartingPlayer && session.startingPlayerResult && (
-        <StartingPlayerModal result={session.startingPlayerResult} onDone={() => setShowingStartingPlayer(false)} />
+        <StartingPlayerModal
+          result={session.startingPlayerResult}
+          onDone={() => {
+            // See GameSession's own deferredStart doc comment - local play's game only actually
+            // activates now, once the roll-off's own reveal has genuinely finished and the player
+            // has dismissed it, not before.
+            if (session.deferredStart) session.turnManager.start()
+            setShowingStartingPlayer(false)
+          }}
+        />
       )}
 
       {confirmingExit && (

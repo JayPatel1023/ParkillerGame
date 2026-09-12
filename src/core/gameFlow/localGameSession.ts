@@ -101,10 +101,16 @@ export interface LocalGameSession {
   botPieceHighlighted?: Listenable<Piece | null>
   /** Requested directly ("cada jugador y los bots lanzan los dados blancos para indicar quien
    * comienza la partida"): every local game's own pre-game roll-off (see startingPlayer.ts),
-   * always run before the first real turn - GameBoardScreen shows this once on mount, then never
-   * again for this session (the game itself has already started by the time it's shown; nothing
-   * about game state depends on the player actually seeing it). */
+   * always run before the first real turn - GameBoardScreen shows this once on mount, right before
+   * calling turnManager.start() itself (see deferredStart just below - it no longer starts the game
+   * on its own). */
   startingPlayerResult: StartingPlayerResult
+  /** Always true here - see beginLocalGame's own doc comment on why turnManager.start() moved out
+   * of this function and into GameBoardScreen's own StartingPlayerModal onDone handler instead.
+   * Online play's own GameSession (OnlineLobbyScreen.tsx) never sets this - its bridge.start() call
+   * already happens on its own timing, before GameBoardScreen even mounts, and calling start() a
+   * second time here would double-fire turnStarted for it. */
+  deferredStart: true
 }
 
 // Entry point for milestone 1: same-device play, 2-6 real players, no networking. Two modes:
@@ -134,17 +140,28 @@ export function beginLocalGame(
   const turnManager = new TurnManager(board, players, defaultRuleSettings(), dice)
   const startingPlayerResult = turnManager.determineStartingPlayer()
 
+  // Reported directly ("결정되기도전에... 이미 결정되여있으며" - it's already decided before it's
+  // decided; "규칙적으로 돌아가는것같다" - the actual game already seems to be running): start() used
+  // to fire here, immediately, before GameBoardScreen's own StartingPlayerModal has even mounted to
+  // show the roll-off's "suspense" reveal - determineStartingPlayer() above already commits
+  // currentPlayerIndex to the real winner (needed by useTurnManager's very first render either way),
+  // but start() itself is what actually activates the game: it emits turnStarted, which in vs-bots
+  // mode is exactly what schedules BotController's own think-delay-then-roll sequence. If the winner
+  // happened to be a bot, that bot could already be counting down (or, if the reveal took long
+  // enough, already rolling) *while the modal was still theatrically "deciding" who starts* - a
+  // literal instance of the reported complaint, not just a perceived one. GameBoardScreen now calls
+  // this itself, once the modal's own reveal animation actually finishes and the player dismisses
+  // it - see StartingPlayerModal's own onDone.
   if (humanColor === undefined) {
-    turnManager.start()
-    return { turnManager, players, startingPlayerResult }
+    return { turnManager, players, startingPlayerResult, deferredStart: true }
   }
 
   const session = new LocalVsBotsSession(turnManager, humanColor)
   const botColors = new Set(participatingColors.filter((color) => color !== humanColor))
   const botController = botColors.size > 0 ? new BotController(session, botColors) : null
-  turnManager.start()
   return {
     startingPlayerResult,
+    deferredStart: true,
     turnManager: session,
     players,
     dispose: () => botController?.dispose(),
