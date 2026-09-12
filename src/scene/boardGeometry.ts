@@ -51,7 +51,16 @@
 //
 // Bumped a ninth time, 32 -> 41, alongside PIECE_BASE_RADIUS's own bigger 0.17 -> 0.22 jump -
 // reported directly, again, as still too small.
-export const BOARD_SIZE = 41
+//
+// Bumped a tenth time, 41 -> 50, alongside PIECE_BASE_RADIUS's own 0.46 -> 0.4 reduction
+// (PieceMesh.tsx) - see that constant's own matching comment for the full reasoning and the real
+// numbers. Direction reversed from every round above: PIECE_BASE_RADIUS kept growing for three more
+// rounds after this constant's own growth stopped at 41, drifting the piece-to-tile ratio the other
+// way until the Parkiller specifically overflowed its own tile ("파키의 크기가너무커서 칸대기의 크기를
+// 벗어난다"). Growing this alongside shrinking the piece (rather than only shrinking the piece,
+// which risked reopening ten rounds' worth of "still too small" reports) restores real room for a
+// Parkiller+pawn pair to fit - and stay visibly separated - in one square on every board.
+export const BOARD_SIZE = 50
 // Just enough clearance above TrackTile's own surface (which itself sits at this same height - see
 // TrackTile.tsx) to avoid z-fighting between a piece's base and the tile underneath it. Only
 // correct for pieces actually standing on a raised TrackTile, i.e. OnTrack - see FLAT_SURFACE_HEIGHT

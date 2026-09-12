@@ -106,7 +106,23 @@ export const PIECE_PROFILE_RAW: [number, number][] = [
 // shrinks right along with the pawn automatically, same reasoning as every round before this one -
 // its own height is still a fixed multiple of PAWN_HEIGHT below, so the two stay in proportion
 // with no separate change needed in ParkillerMesh.tsx.
-export const PIECE_BASE_RADIUS = 0.46
+//
+// Bumped a fifteenth time, 0.46 -> 0.4, alongside BOARD_SIZE's own 41 -> 50 (boardGeometry.ts) -
+// reported directly, with a screenshot, that the Parkiller specifically now overflowed its own
+// tile ("파키의 크기가너무커서 칸대기의 크기를 벗어난다"), and asked for pieces to shrink a little AND
+// the board to grow a little, together, so a Parkiller+pawn pair genuinely fits in one square
+// ("한칸에 파키와 말이 같이 두래의 말이 들어갈수잇는 크기로"). Measured directly rather than guessed:
+// the eleventh round above already established BOARD_SIZE=41's own tightest (6-player) tile radius
+// at ~0.739, and PARKILLER_FOOTPRINT_RADIUS (ParkillerMesh.tsx) had drifted to ~0.806 by this
+// constant's own three later rounds (twelfth/thirteenth/fourteenth) growing it without any matching
+// BOARD_SIZE change - the Parkiller *alone*, centered, already exceeded that tile's own half-width
+// by itself, with zero room left to also offset a second occupant (confirmed directly: the existing
+// stacking-clamp formula computed exactly 0 available offset on that board). 0.4 restores
+// PARKILLER_FOOTPRINT_RADIUS to ~0.70, and BOARD_SIZE=50 grows the tightest board's own tile radius
+// to ~0.90 - a comfortable ~78% ratio (matching the eleventh round's own "clearly separated, not
+// touching" checkpoint, ~66% at the time) with real stacking-offset room (~0.17) restored on every
+// board, not just the tightest one.
+export const PIECE_BASE_RADIUS = 0.4
 export const PROFILE_SCALE = PIECE_BASE_RADIUS / Math.max(...PIECE_PROFILE_RAW.map(([r]) => r))
 // Stretches the profile taller without widening the base - requested directly, twice now ("peones
 // más alargados" both times), each time with a reference photo of taller pawns. Applied only to
