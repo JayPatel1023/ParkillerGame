@@ -389,7 +389,8 @@ function localStackOffset(
   index: number,
   along: number,
   across: number,
-  tileSize: number,
+  alongTileSize: number,
+  acrossTileSize: number,
   maxOccupantRadius: number,
 ): [number, number] {
   // Reported directly, with a screenshot: two stacked pieces spilling past the tile's own border,
@@ -400,14 +401,33 @@ function localStackOffset(
   // fractions were last tuned by eye). Clamping the offset's own magnitude against the tile's real
   // half-width minus the larger occupant's own radius makes this correct by construction regardless
   // of how big pieces get from here, instead of needing another by-eye re-tune each time.
-  const maxOffsetMagnitude = Math.max(0, tileSize / 2 - maxOccupantRadius) * STACK_CLEARANCE_FACTOR
-  const rawMagnitude = Math.hypot(along, across) * tileSize
-  const clampScale = rawMagnitude > maxOffsetMagnitude && rawMagnitude > 0 ? maxOffsetMagnitude / rawMagnitude : 1
+  //
+  // Reported directly again, with a screenshot at a color's own yard-exit square specifically (a
+  // safe square on every board except 6-player - safeTrackIndexSet): still spilling past the tile,
+  // this time along the *track* direction, not across it. Root cause: both call sites used to pass
+  // one single `effectiveTileSize` (tileSize * SAFE_TILE_WIDTH_MULTIPLIER on a safe square) for
+  // both axes here - but that multiplier only ever widens a safe tile's *across* half-width
+  // (computeTileCorners' own `halfWidth` param, boardGeometry.ts) to fit two full-size occupants
+  // shoulder-to-shoulder; a tile's *along*-track length is set entirely by its real neighboring
+  // waypoints' own spacing (computeTileCorners' own prevMid/nextMid), completely unrelated to that
+  // multiplier. Scaling the along offset by the same 1.8x meant for the across dimension pushed a
+  // piece up to 1.8x further along the track than that tile's own real length could ever contain -
+  // exactly the reported overspill, and exactly why it only ever showed up on a *safe* square
+  // (elsewhere alongTileSize === acrossTileSize, so the old single-scalar math still happened to be
+  // correct by coincidence). Each axis now clamps against its own real extent instead of one
+  // shared magnitude, which also better matches the tile's own actual shape once the two extents
+  // genuinely differ (a circular clamp doesn't fit a rectangle whose sides aren't equal).
+  const maxAlongMagnitude = Math.max(0, alongTileSize / 2 - maxOccupantRadius) * STACK_CLEARANCE_FACTOR
+  const maxAcrossMagnitude = Math.max(0, acrossTileSize / 2 - maxOccupantRadius) * STACK_CLEARANCE_FACTOR
+  const rawAlong = along * alongTileSize
+  const rawAcross = across * acrossTileSize
+  const alongScale = Math.abs(rawAlong) > maxAlongMagnitude && Math.abs(rawAlong) > 0 ? maxAlongMagnitude / Math.abs(rawAlong) : 1
+  const acrossScale = Math.abs(rawAcross) > maxAcrossMagnitude && Math.abs(rawAcross) > 0 ? maxAcrossMagnitude / Math.abs(rawAcross) : 1
+  const scaledAlong = rawAlong * alongScale
+  const scaledAcross = rawAcross * acrossScale
 
-  if (!waypoints || !waypoints[index]) return [along * tileSize * clampScale, across * tileSize * clampScale]
+  if (!waypoints || !waypoints[index]) return [scaledAlong, scaledAcross]
   const { tangent, normal } = localTangentNormal(waypoints, index)
-  const scaledAlong = along * tileSize * clampScale
-  const scaledAcross = across * tileSize * clampScale
   return [scaledAlong * tangent[0] + scaledAcross * normal[0], scaledAlong * tangent[1] + scaledAcross * normal[1]]
 }
 
@@ -916,6 +936,7 @@ export function BoardScene({
             stackWp?.index ?? -1,
             along,
             across,
+            tileSize,
             effectiveTileSize,
             maxRadiusForGroup(group),
           )
@@ -1005,6 +1026,7 @@ export function BoardScene({
             player.parkiller.trackPosition,
             along,
             across,
+            tileSize,
             parkillerEffectiveTileSize,
             maxRadiusForGroup(parkillerGroup),
           )
