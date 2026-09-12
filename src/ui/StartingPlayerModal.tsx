@@ -126,13 +126,17 @@ export function StartingPlayerModal({ result, onDone }: { result: StartingPlayer
   )
 }
 
+// See ColorDrawModal's own backdropStyle doc comment - same bleed-through bug, same fix. Online
+// play shows this modal right after that one, over a board that's been live since before either
+// one mounted (bridge.start() already ran in OnlineLobbyScreen.tsx) - a translucent backdrop let
+// that first move visibly play out through it, exactly what was reported.
 const backdropStyle: React.CSSProperties = {
   position: 'absolute',
   inset: 0,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  background: 'rgba(0,0,0,0.6)',
+  background: '#05070c',
   zIndex: 25,
   padding: 16,
 }

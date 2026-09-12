@@ -88,13 +88,22 @@ export function ColorDrawModal({
   )
 }
 
+// Reported directly ("MUEVE SIN HABER NI SIQUIERA LIMPIADO LA PANTALLA DEL SORTEO DE COLORES" -
+// it moves without even having cleared the color-draw screen): online play's own bridge.start()
+// (OnlineLobbyScreen.tsx) already runs the instant the room's game actually begins, well before
+// this modal even mounts - unlike local play, which holds off via GameSession's own deferredStart
+// specifically so nothing changes underneath its own equivalent reveal. A translucent backdrop
+// here let a bot's (or another player's) very first move visibly play out right through it. Solid
+// instead of see-through - same #05070c the rest of the app already uses as its own "known-safe"
+// opaque background (see StartScreenBackground.tsx's fog color, GameBoardScreen.tsx's own
+// screenWrapperStyle) - so nothing behind this card is visible until it's actually dismissed.
 const backdropStyle: React.CSSProperties = {
   position: 'absolute',
   inset: 0,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  background: 'rgba(0,0,0,0.6)',
+  background: '#05070c',
   zIndex: 25,
   padding: 16,
 }
