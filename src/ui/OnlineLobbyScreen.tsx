@@ -858,9 +858,19 @@ export default function OnlineLobbyScreen() {
   return (
     <div style={wrapperStyle}>
       {/* backgroundColor here matches StartScreenBackground's own internal fog color - see
-          PlayerCountSelector's own matching comment (same fix) for why. */}
+          PlayerCountSelector's own matching comment (same fix) for why.
+          Reported directly, with a screenshot: this exact 'stopped' screen's own board rendered as
+          a plain flat gray plane instead of the real board art - not a rare glitch, but the direct,
+          expected consequence of the network outage that put the player here in the first place.
+          StartScreenBackground's own board texture is fetched over that same network (see
+          BoardMesh/useRobustTexture) - depending on a fresh network fetch to render the *background
+          of the screen reporting that the network just failed* is fragile by construction, not
+          something worth chasing as a one-off rendering bug. 'error'/'stopped' specifically (both
+          reachable only via a real connectivity failure) skip the 3D scene entirely and fall back
+          to this same dark tone plus the radial vignette below, which need nothing from the
+          network to render correctly every time. */}
       <div style={{ position: 'absolute', inset: 0, backgroundColor: '#05070c' }}>
-        <StartScreenBackground />
+        {phase !== 'error' && phase !== 'stopped' && <StartScreenBackground />}
       </div>
       <div
         style={{
