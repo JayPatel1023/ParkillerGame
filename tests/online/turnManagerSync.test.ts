@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BoardData } from '../../src/core/board/boardData'
 import { createPlayerState, type PlayerState } from '../../src/core/gameFlow/playerState'
 import { TurnManager } from '../../src/core/gameFlow/turnManager'
@@ -128,6 +128,17 @@ describe('online starting-player roll-off sync', () => {
 })
 
 describe('HostTurnManagerBridge + RemoteTurnManager convergence', () => {
+  // RemoteTurnManager now paces its own broadcast replay (REMOTE_MOVE_PACING_MS - reported
+  // directly, "no es fácil seguir el juego si va tan rápido") instead of applying every incoming
+  // message synchronously the instant it arrives - real time has to actually pass for its queue to
+  // drain before asserting convergence below.
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('a Master-initiated roll and move converge on both sides', () => {
     const board = buildTestBoard()
     const network = new FakeRoomNetwork(MASTER_ACTOR)
@@ -148,6 +159,9 @@ describe('HostTurnManagerBridge + RemoteTurnManager convergence', () => {
 
     host.bridge.submitMove(moves[0].piece)
 
+    // Generous - well past REMOTE_MOVE_PACING_MS, draining however many broadcasts this move
+    // chain actually produced.
+    vi.advanceTimersByTime(20000)
     expect(snapshot(remote.players)).toEqual(snapshot(host.players))
   })
 
@@ -188,6 +202,9 @@ describe('HostTurnManagerBridge + RemoteTurnManager convergence', () => {
     // moveNotPossible fires instead. That's fine - convergence is what's being tested, not that a
     // move actually happened. Assert state matches either way.
 
+    // Generous - well past REMOTE_MOVE_PACING_MS, draining every broadcast this whole sequence
+    // (Red's exit, Red's second move, and Blue's own roll) actually produced.
+    vi.advanceTimersByTime(20000)
     expect(snapshot(remote.players)).toEqual(snapshot(host.players))
   })
 

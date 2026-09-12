@@ -9,6 +9,20 @@ import { findPiece } from './findPiece'
 import type { GameMessage } from './protocol'
 import type { RoomTransport } from './roomTransport'
 
+// Reported directly ("Tienes que dejar una latencia de dos segundos entre movimientos. No es
+// fácil seguir el juego si va tan rápido" - you have to leave a 2-second latency between moves,
+// it's not easy to follow the game if it goes so fast): matches useTurnManager.ts's own
+// DICE_SPIN_MS, which already paces "roll -> first action" the same way for every roll regardless
+// of source - this is the other half, for however many *moveChosen* broadcasts land within that
+// same roll (a double's second die, a reward chain, ...). Applied here, not left to
+// handleBroadcast's own arrival timing, specifically because a broadcast's *arrival* time reflects
+// nothing but real network latency, not how long the previous move's own hop is still visually
+// playing - a fast remote player (or a same-device Master relaying its own quick clicks) can
+// legitimately submit two moves a fraction of a second apart, and this client would otherwise
+// replay both almost simultaneously with nothing but each hop's own short animation time between
+// them.
+const REMOTE_MOVE_PACING_MS = 2000
+
 /**
  * Runs on every non-master client. Owns its own real, unmodified TurnManager (constructed with a
  * QueueDice instead of a real random source) and replays whatever the Master broadcasts against
@@ -43,6 +57,15 @@ export class RemoteTurnManager implements TurnManagerLike {
    * own UI can gate the roll button/piece selection instead of only finding out its intent was
    * silently rejected by the Master after the fact. */
   readonly localPlayerColor: PieceColor | null
+  // See REMOTE_MOVE_PACING_MS's own doc comment. A real FIFO queue, not independent per-message
+  // timers - broadcasts have to stay strictly in the order they were sent (a dice roll can't be
+  // applied to this.inner before an earlier turn's own still-queued moves are, or its internal
+  // dice/turn state would desync from what actually happened) - only one drain loop is ever
+  // running at a time, each iteration waiting out the pacing before applying the next message and
+  // scheduling the one after it.
+  private readonly pendingMessages: GameMessage[] = []
+  private draining = false
+  private drainTimeout: ReturnType<typeof setTimeout> | null = null
 
   constructor(
     inner: TurnManager,
@@ -91,10 +114,32 @@ export class RemoteTurnManager implements TurnManagerLike {
 
   dispose(): void {
     this.unsubscribeMessage()
+    if (this.drainTimeout) clearTimeout(this.drainTimeout)
   }
 
   private handleBroadcast(data: unknown): void {
-    const msg = data as GameMessage
+    this.pendingMessages.push(data as GameMessage)
+    if (!this.draining) this.drainQueue(0)
+  }
+
+  // `waitMs` is 0 for the very first message of a fresh drain (nothing to pace against yet -
+  // there's no previous action in this run for a delay to be "between") and
+  // REMOTE_MOVE_PACING_MS for every one after it.
+  private drainQueue(waitMs: number): void {
+    this.draining = true
+    this.drainTimeout = setTimeout(() => {
+      this.drainTimeout = null
+      const msg = this.pendingMessages.shift()
+      if (!msg) {
+        this.draining = false
+        return
+      }
+      this.applyMessage(msg)
+      this.drainQueue(REMOTE_MOVE_PACING_MS)
+    }, waitMs)
+  }
+
+  private applyMessage(msg: GameMessage): void {
     if (msg.type === 'diceRolled') {
       this.diceQueue.push(msg.dieA, msg.dieB, msg.blackDie)
       this.inner.requestRoll()
