@@ -5,6 +5,7 @@ import type { TurnManagerLike } from '../core/gameFlow/turnManagerLike'
 import type { PieceColor } from '../core/pieceColor'
 import type { Piece } from '../core/pieces/piece'
 import type { MoveOption, MoveResult } from '../core/rules/moveOption'
+import { playDiceRollSound } from '../ui/diceSound'
 
 /**
  * The opponent piece a move captured, if any. Rules apply a capture the instant the move is
@@ -189,6 +190,10 @@ export function useTurnManager(turnManager: TurnManagerLike) {
         // already happened synchronously by the time this event fires, same as every other event
         // here - only the reveal is delayed, spinning first so the values don't just snap in.
         setRolling(true)
+        // Fires here (not tied to who/what triggered the roll) so every roll gets the sound
+        // regardless of source - a human's own click, a bot's own roll, or a remote client
+        // replaying someone else's broadcast - same reasoning as the dice-spin reveal itself below.
+        playDiceRollSound()
         // See diceSettledAt's own doc comment above - computed immediately (not read back inside
         // the setTimeout below) so it's available to the scene layer the instant moveAnimation/
         // parkillerAnimation themselves are set, which can happen before this timeout ever fires.
