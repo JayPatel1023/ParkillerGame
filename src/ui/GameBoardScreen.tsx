@@ -4,6 +4,7 @@ import type { PlayerState } from '../core/gameFlow/playerState'
 import { getColor } from '../core/colorPalette'
 import type { StartingPlayerResult } from '../core/gameFlow/startingPlayer'
 import type { Listenable, TurnManagerLike } from '../core/gameFlow/turnManagerLike'
+import type { PieceColor } from '../core/pieceColor'
 import type { Piece } from '../core/pieces/piece'
 import type { MoveOption } from '../core/rules/moveOption'
 import { useTurnManager } from '../hooks/useTurnManager'
@@ -59,6 +60,15 @@ const ALERT_HOLD_MS = 2000
 function useHeldAlert<T>(value: T | null, holdMs: number = ALERT_HOLD_MS): T | null {
   const [held, setHeld] = useState<T | null>(value)
   const shownAtRef = useRef(0)
+  // Requested directly - see HUMAN_REVEAL_HOLD_MS's own doc comment: a human's own turn now holds
+  // its dice/reward reveals far longer than a bot's, so callers pass a `holdMs` that changes from
+  // render to render (whoever's turn is currently live), not the fixed constant this hook
+  // originally always got. Captured here only at the exact moment `value` goes from null to fresh -
+  // not read again from `holdMs` directly during the decay countdown below - so a *later* render
+  // where the caller's own holdMs has already moved on to a different player's speed (most notably
+  // once currentPlayer itself has advanced to whoever's turn is next) can't retroactively shrink or
+  // stretch a countdown that's already running for the value it was actually shown for.
+  const holdMsRef = useRef(holdMs)
   const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -72,10 +82,11 @@ function useHeldAlert<T>(value: T | null, holdMs: number = ALERT_HOLD_MS): T | n
       // inheriting whatever was left of the first one's countdown.
       setHeld(value)
       shownAtRef.current = Date.now()
+      holdMsRef.current = holdMs
       return
     }
     const elapsed = Date.now() - shownAtRef.current
-    const remaining = Math.max(0, holdMs - elapsed)
+    const remaining = Math.max(0, holdMsRef.current - elapsed)
     clearTimerRef.current = setTimeout(() => setHeld(null), remaining)
     return () => {
       if (clearTimerRef.current) clearTimeout(clearTimerRef.current)
@@ -97,6 +108,19 @@ function useHeldAlert<T>(value: T | null, holdMs: number = ALERT_HOLD_MS): T | n
 // two or three numbers to read and cross-reference against which pieces just moved takes longer to
 // register than a single toast message.
 const DICE_DISPLAY_HOLD_MS = 2800
+
+// Reported directly ("hay que dejar 20 segundos de espacio de tiempo entre cada movimiento de cada
+// peón... para poder contar donde caen los dados y las recompensas. Al bot déjale 2 o 3 segundos
+// nada más" - leave a 20-second gap between each pawn's own movement, to be able to count where
+// the dice land and the rewards; for the bot, leave just 2 or 3 seconds): ALERT_HOLD_MS/
+// DICE_DISPLAY_HOLD_MS above were already bumped once for the same class of complaint, but both
+// are flat constants applied identically regardless of whose turn produced the value - fine for a
+// bot (2-2.8s already lands in the client's own stated "2 o 3 segundos" range, matching
+// botController.ts's own BOT_THINK_DELAY_MS pacing, so nothing changes there), nowhere near enough
+// for a real person told explicitly to leave 20 seconds. Only wired up for local play (see
+// isLocalGame below) - online's own pacing was addressed separately (RemoteTurnManager.ts) and
+// this ask, read in full, is specifically about a shared local device ("el juego local").
+const HUMAN_REVEAL_HOLD_MS = 20_000
 
 /** A local game builds this via beginLocalGame (src/core/gameFlow/localGameSession.ts); an online
  * game builds it from a HostTurnManagerBridge/RemoteTurnManager (src/online/) plus the players
@@ -127,6 +151,12 @@ export interface GameSession {
    * randomizes color, see ColorSelector's own "the player must be able to choose" requirement.
    * Shown once via ColorDrawModal on mount, before startingPlayerResult's own modal. */
   colorDraw?: ColorDrawEntry[]
+  /** See LocalGameSession's own doc comment (src/core/gameFlow/localGameSession.ts) - only set for
+   * a local vs-bots session. Undefined for classic hotseat (nothing to freeze) and for every online
+   * session (pausing one player's own screen can't pause a shared network game for everyone else in
+   * the room - Pause is a local-play-only feature, see the Pause button's own doc comment below). */
+  pauseBots?: () => void
+  resumeBots?: () => void
 }
 
 export function GameBoardScreen({
@@ -189,20 +219,6 @@ export function GameBoardScreen({
     clearMoveAnimation,
     clearParkillerAnimation,
   } = useTurnManager(session.turnManager)
-  // See ALERT_HOLD_MS's own doc comment above - held so a fast-following move can't clear this
-  // again before there's been real time to read it. Not animation-gated the way the reward toasts
-  // are (this one never was, even before this fix), so no equivalent "stale value resurfacing"
-  // risk here - it only ever changes when useTurnManager's own raw value actually does.
-  const eliminatedByDoubles = useHeldAlert(rawEliminatedByDoubles)
-
-  // See GameSession's own botPieceHighlighted doc comment - undefined for hotseat play and for any
-  // session with no bot seats at all, in which case this just stays null forever, same as if no
-  // piece were ever highlighted.
-  const [botHighlightedPiece, setBotHighlightedPiece] = useState<Piece | null>(null)
-  useEffect(() => {
-    setBotHighlightedPiece(null)
-    return session.botPieceHighlighted?.on((piece) => setBotHighlightedPiece(piece))
-  }, [session.botPieceHighlighted])
 
   // Reported directly, from a real two-player online test: a player could click "roll" (or a
   // board piece) during someone else's turn - the Master correctly rejects the resulting network
@@ -214,6 +230,39 @@ export function GameBoardScreen({
   // TurnManagerLike's own doc comment.
   const localColor = session.turnManager.localPlayerColor
   const isMyTurn = localColor == null || localColor === currentPlayer.color
+
+  // See HUMAN_REVEAL_HOLD_MS's own doc comment - session.deferredStart is only ever set by
+  // beginLocalGame (localGameSession.ts's own doc comment on that field), so this is a reliable,
+  // already-existing way to tell local play apart from online without a new flag.
+  const isLocalGame = session.deferredStart === true
+  // `color` is whichever player's turn produced the value being held - eliminatedByDoubles/
+  // pendingReward/forfeitedReward/lastRoll are all set (and held) *before* any turn-ending
+  // transition can move currentPlayer on to someone else (a pending reward or an unresolved
+  // "which piece do I move" choice both block the turn from ending at all - see turnManager.ts's
+  // own PENDING_REWARD handling; a forfeit is resolved mid-turn for the same reason, well before
+  // any handoff - see useTurnManager.ts's own rewardForfeited comment), so currentPlayer.color is
+  // still correct for this at the point each of this hook's own useHeldAlert calls below first
+  // captures a fresh value.
+  function holdMsFor(defaultMs: number, color: PieceColor): number {
+    if (!isLocalGame) return defaultMs
+    const isBotTurn = localColor != null && color !== localColor
+    return isBotTurn ? defaultMs : HUMAN_REVEAL_HOLD_MS
+  }
+
+  // See ALERT_HOLD_MS's own doc comment above - held so a fast-following move can't clear this
+  // again before there's been real time to read it. Not animation-gated the way the reward toasts
+  // are (this one never was, even before this fix), so no equivalent "stale value resurfacing"
+  // risk here - it only ever changes when useTurnManager's own raw value actually does.
+  const eliminatedByDoubles = useHeldAlert(rawEliminatedByDoubles, holdMsFor(ALERT_HOLD_MS, rawEliminatedByDoubles?.color ?? currentPlayer.color))
+
+  // See GameSession's own botPieceHighlighted doc comment - undefined for hotseat play and for any
+  // session with no bot seats at all, in which case this just stays null forever, same as if no
+  // piece were ever highlighted.
+  const [botHighlightedPiece, setBotHighlightedPiece] = useState<Piece | null>(null)
+  useEffect(() => {
+    setBotHighlightedPiece(null)
+    return session.botPieceHighlighted?.on((piece) => setBotHighlightedPiece(piece))
+  }, [session.botPieceHighlighted])
 
   // Reported directly ("차례차례대로... 앞장지르는 일이없도록"): the next move's piece choices and any
   // reward it earned were exposed the instant the underlying events fired - the same synchronous
@@ -229,44 +278,72 @@ export function GameBoardScreen({
   // currentPlayer/pendingMoves haven't visibly changed yet, so canRoll's other conditions alone
   // would let the roller click again mid-hold - the real TurnManager has already moved on
   // internally by that point, so a second roll here would land on the wrong player's turn.
-  const canRoll = isMyTurn && pendingMoves.length === 0 && !winner && !rolling && !turnEndingSoon && animationsSettled
+  // Requested directly ("로컬 게임에는 Pause 기능을 넣어라" - add a Pause feature to local games):
+  // blocks the roll button and piece clicks below (same as any other canRoll/visiblePendingMoves
+  // gate already does for "not your turn"), and freezes whichever bots are mid-turn via
+  // session.pauseBots - see that field's own doc comment. Only ever toggled by the Pause button
+  // itself (topRightButtonRowStyle below), which only renders for isLocalGame - staying false
+  // forever for online play, where one player's own screen has no business freezing anyone else's.
+  const [paused, setPaused] = useState(false)
+  function togglePause() {
+    setPaused((wasPaused) => {
+      const nowPaused = !wasPaused
+      if (nowPaused) session.pauseBots?.()
+      else session.resumeBots?.()
+      return nowPaused
+    })
+  }
+
+  const canRoll = isMyTurn && pendingMoves.length === 0 && !winner && !rolling && !turnEndingSoon && animationsSettled && !paused
+  // Same conditions as canRoll, but for the *other* half of a human's own turn - already rolled,
+  // still needs to pick which piece to move. canRoll alone (the only thing the idle timers below
+  // used to watch) left this half of a turn with no idle coverage at all. Reads the raw
+  // `pendingMoves` rather than the visiblePendingMoves declared further below (same isMyTurn/
+  // animationsSettled gating either way, just declared before this point instead of after it).
+  const awaitingPieceChoice = isMyTurn && !winner && !rolling && !turnEndingSoon && animationsSettled && !paused && pendingMoves.length > 0
 
   // Idle nudge: reported directly - a player who steps away or just spaces out mid-turn leaves
   // everyone else staring at a board that never visibly asks for input. Restarts whenever canRoll
   // flips (a fresh chance to roll appeared, or this one just got used/left) or the turn itself
   // changes, so it can't fire mid-roll or carry over onto the next player's turn.
-  const IDLE_NUDGE_MS = 60_000
+  //
+  // Reported directly, for local play specifically ("TE ECHA FUERA CON SOLO 10 SEGUNDOS DE
+  // INACTIVIDAD... el paso al bot siguiente al cabo de 20 segundos de inactividad" - kicks you out
+  // after only 10 seconds of inactivity; there should be a pass to the next [player/bot] after 20
+  // seconds of inactivity): online's own 60s-nudge/90s-warning/20s-countdown pacing (110s total) was
+  // never meant for local play, which has no network/room lifecycle to protect at all - only ever
+  // tuned for how long a real multiplayer room should tolerate someone going quiet. Local gets a
+  // much tighter, and *enforced*, 20-second budget instead: an 8-second nudge, then a 10-second
+  // countdown that actually plays the idle turn out (autoPlayIdleTurn below) rather than just
+  // sitting there forever the way online's own countdown deliberately still does (nothing else in
+  // this app can rejoin a local player the way reconnectAndRejoin covers an online drop, so there's
+  // no equivalent "wait for them to come back" option to fall back to here).
+  const IDLE_NUDGE_MS = isLocalGame ? 8_000 : 60_000
   const [nudgeDice, setNudgeDice] = useState(false)
 
-  // Idle disconnect warning: reported directly ("오락을 하던도중하다가 하지않고 시간이 어느정도
-  // 좀지나면 오락련결이 끊어지는데 이것을 알려주는 효과" - during play, if you stop for a while the
-  // connection cuts off, and there should be an effect warning about it) - a longer idle stretch
-  // than the dice nudge above now escalates into an explicit full-screen countdown, since the
-  // subtle dice pulse alone was easy to miss entirely if a player had actually stepped away.
-  // idleResetToken is bumped by a click anywhere on the warning overlay (see dismissIdleWarning
-  // below) purely to re-run this same effect and restart both timers, without needing canRoll or
-  // the turn itself to change first - clicking through the warning should buy another full
-  // IDLE_WARNING_MS, not just silently freeze the countdown in place.
-  const IDLE_WARNING_MS = 90_000
-  const IDLE_WARNING_COUNTDOWN_S = 20
+  const IDLE_WARNING_MS = isLocalGame ? 10_000 : 90_000
+  const IDLE_WARNING_COUNTDOWN_S = isLocalGame ? 10 : 20
   const [idleWarningSecondsLeft, setIdleWarningSecondsLeft] = useState<number | null>(null)
   const [idleResetToken, setIdleResetToken] = useState(0)
+
+  const idleTriggerActive = canRoll || awaitingPieceChoice
 
   useEffect(() => {
     setNudgeDice(false)
     setIdleWarningSecondsLeft(null)
-    if (!canRoll) return
+    if (!idleTriggerActive) return
     const nudgeTimer = setTimeout(() => setNudgeDice(true), IDLE_NUDGE_MS)
     const warningTimer = setTimeout(() => setIdleWarningSecondsLeft(IDLE_WARNING_COUNTDOWN_S), IDLE_WARNING_MS)
     return () => {
       clearTimeout(nudgeTimer)
       clearTimeout(warningTimer)
     }
-  }, [canRoll, currentPlayer.color, idleResetToken])
+  }, [idleTriggerActive, currentPlayer.color, idleResetToken])
 
-  // Ticks the on-screen countdown down to 0 once the warning above has appeared, then just holds
-  // there - no explicit request to force any auto-skip/kick action once it hits zero, so it stays
-  // up (still dismissible by the same click-anywhere handler) rather than doing anything drastic.
+  // Ticks the on-screen countdown down to 0 once the warning above has appeared. Online: no
+  // explicit request to force any auto-skip/kick action once it hits zero, so it stays up (still
+  // dismissible by the same click-anywhere handler) rather than doing anything drastic. Local: the
+  // separate effect just below actually acts once this reaches 0.
   useEffect(() => {
     if (idleWarningSecondsLeft === null || idleWarningSecondsLeft <= 0) return
     const timer = setTimeout(() => setIdleWarningSecondsLeft((seconds) => (seconds === null ? null : seconds - 1)), 1000)
@@ -275,10 +352,36 @@ export function GameBoardScreen({
 
   const dismissIdleWarning = () => setIdleResetToken((token) => token + 1)
 
+  // "el paso al bot siguiente al cabo de 20 segundos de inactividad" - pass to the next player
+  // after 20 seconds of inactivity. Parchís has no "pass without rolling" move to fall back on, so
+  // this plays the idle turn out with the simplest available choice instead - a real roll and a
+  // real (if unconsidered) move, exactly the same "first option" fallback botController.ts itself
+  // uses when nothing smarter applies - rather than literally skipping the human's own turn.
+  function autoPlayIdleTurn(): void {
+    if (pieceChoice) {
+      confirmPieceChoice(pieceChoice.options[0].amount)
+      return
+    }
+    if (visiblePendingMoves.length > 0) {
+      const first = visiblePendingMoves[0]
+      chooseMove(first.piece, first.amount)
+      return
+    }
+    if (canRoll) rollDice()
+  }
+
+  useEffect(() => {
+    if (!isLocalGame) return
+    if (idleWarningSecondsLeft !== 0) return
+    autoPlayIdleTurn()
+    dismissIdleWarning()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLocalGame, idleWarningSecondsLeft])
+
   // See DICE_DISPLAY_HOLD_MS's own doc comment above - holds the last roll's numbers on screen for
   // a minimum viewing window instead of blanking the instant the turn moves on. Shows a fresh roll
   // immediately once its own spin/reveal actually completes, same as the reward/elimination toasts.
-  const visibleRoll = useHeldAlert(lastRoll, DICE_DISPLAY_HOLD_MS)
+  const visibleRoll = useHeldAlert(lastRoll, holdMsFor(DICE_DISPLAY_HOLD_MS, currentPlayer.color))
   const diceValues: [number | null, number | null, number | null] = [
     visibleRoll?.dieA ?? null,
     visibleRoll?.dieB ?? null,
@@ -292,11 +395,11 @@ export function GameBoardScreen({
   // is. Without this gate, a piece would glow as selectable (and be clickable) on a client whose
   // turn it isn't - the Master would reject the resulting move intent, but the clicking player's
   // own board never should have offered it in the first place.
-  const visiblePendingMoves = isMyTurn && animationsSettled ? pendingMoves : []
+  const visiblePendingMoves = isMyTurn && animationsSettled && !paused ? pendingMoves : []
   // See ALERT_HOLD_MS's own doc comment above - held so a fast-following move can't clear these
   // again before there's been real time to read them.
-  const visiblePendingReward = useHeldAlert(animationsSettled ? pendingReward : null)
-  const visibleForfeitedReward = useHeldAlert(animationsSettled ? forfeitedReward : null)
+  const visiblePendingReward = useHeldAlert(animationsSettled ? pendingReward : null, holdMsFor(ALERT_HOLD_MS, currentPlayer.color))
+  const visibleForfeitedReward = useHeldAlert(animationsSettled ? forfeitedReward : null, holdMsFor(ALERT_HOLD_MS, currentPlayer.color))
 
   // Requested directly ("cuando se elimina a un peón o un peón llega a la meta debe haber alguna
   // celebración con música"): every capture (a regular pawn's own move, or a Parki eliminating an
@@ -345,6 +448,7 @@ export function GameBoardScreen({
   }, [pendingMoves])
 
   function handleSelectPiece(piece: Piece) {
+    if (paused) return
     // Clicking the same piece a choice is already open for backs out of it - the only "cancel"
     // affordance for the floating markers (see BoardScene's own PieceChoiceMarkers), since there's
     // no dialog chrome here to put a Cancelar button on.
@@ -377,7 +481,9 @@ export function GameBoardScreen({
   // is set well before that, see useTurnManager's own NO_MOVE_HOLD_MS comment for why) - showing
   // this text while the dice are still visibly spinning would read as answering a question the
   // player hasn't even been shown yet.
-  const statusLine = eliminatedByDoubles
+  const statusLine = paused
+    ? 'Partida en pausa'
+    : eliminatedByDoubles
     ? `Tercer dobles seguido: ${eliminatedByDoubles.color} pierde una ficha`
     : !isMyTurn
       ? `Esperando el turno de ${currentPlayer.color}...`
@@ -418,11 +524,15 @@ export function GameBoardScreen({
 
       <div style={frameOverlayStyle} />
 
-      {idleWarningSecondsLeft !== null && (
+      {idleWarningSecondsLeft !== null && !paused && (
         <div style={idleWarningOverlayStyle} onClick={dismissIdleWarning}>
           <div style={idleWarningCountdownStyle}>{idleWarningSecondsLeft}</div>
           <div style={idleWarningTitleStyle}>¿Sigue ahí?</div>
-          <div style={hintTextStyle}>La partida podría desconectarse por inactividad.</div>
+          {isLocalGame ? (
+            <div style={hintTextStyle}>Se jugará este turno en su lugar por inactividad.</div>
+          ) : (
+            <div style={hintTextStyle}>La partida podría desconectarse por inactividad.</div>
+          )}
           <div style={hintTextStyle}>Toque la pantalla para continuar.</div>
         </div>
       )}
@@ -457,6 +567,12 @@ export function GameBoardScreen({
       </div>
 
       <div style={topRightButtonRowStyle}>
+        {isLocalGame && (
+          <button className="chunky-btn" onClick={togglePause} title={paused ? 'Reanudar' : 'Pausa'} style={medallionButtonStyle}>
+            {paused ? '▶' : '⏸'}
+          </button>
+        )}
+
         <button className="chunky-btn" onClick={() => setShowingSoundSettings(true)} title="Sonido" style={medallionButtonStyle}>
           ♪
         </button>
@@ -518,6 +634,16 @@ export function GameBoardScreen({
             setShowingStartingPlayer(false)
           }}
         />
+      )}
+
+      {paused && !showingColorDraw && !showingStartingPlayer && !confirmingExit && (
+        <div style={overlayStyle}>
+          <div style={{ fontSize: 22, fontWeight: 800, color: '#f2ede0' }}>Pausa</div>
+          <div style={hintTextStyle}>El juego está detenido - nadie puede tirar ni mover.</div>
+          <button className="chunky-btn" onClick={togglePause} style={rollButtonStyle(true)}>
+            Reanudar
+          </button>
+        </div>
       )}
 
       {confirmingExit && (

@@ -132,10 +132,21 @@ export class BotController {
   private readonly hopDurationMs: number
   private readonly diceSpinMs: number
   private readonly unsubscribers: Array<() => void>
-  private readonly pendingTimeouts = new Set<ReturnType<typeof setTimeout>>()
+  private readonly pendingTimeouts = new Map<ReturnType<typeof setTimeout>, () => void>()
   // Real time (Date.now()-based, so it advances correctly under vitest's fake timers too) before
   // which this class won't schedule its *next* action - see this file's own top comment.
   private busyUntilMs = 0
+  // Requested directly ("로컬 게임에는 Pause 기능을 넣어라" - add a Pause feature to local games):
+  // pause() cancels whatever this class currently has scheduled (a bot's own think-delay before
+  // rolling, or before submitting its already-decided move) without losing track of *what* that
+  // action was - each cancelled callback moves here instead of just being dropped, so resume() can
+  // put it back on the clock with a fresh think-delay rather than the bot silently never acting
+  // again for the rest of the game. schedule() itself refuses to arm a new timeout at all while
+  // paused, straight into this same list, so an event that fires *during* a pause (shouldn't
+  // normally happen, since GameBoardScreen also blocks human input while paused, but session state
+  // isn't itself frozen) can't sneak a running timer past it either.
+  private paused = false
+  private frozenActions: Array<() => void> = []
   // Reported directly ("봇이게임할때 말을 이동할차례가되여서 이동시킬때에도 자기 차례를 알리는 효과를
   // 넣어달라" - add the same turn-announcing effect for bot moves too): a human's own choosable
   // piece gets a whole flashy ring/glow/beam indicator (PieceMesh.tsx) the instant it becomes
@@ -456,16 +467,46 @@ export class BotController {
   }
 
   private schedule(action: () => void, delayMs: number): void {
+    if (this.paused) {
+      this.frozenActions.push(action)
+      return
+    }
     const handle = setTimeout(() => {
       this.pendingTimeouts.delete(handle)
       action()
     }, delayMs)
-    this.pendingTimeouts.add(handle)
+    this.pendingTimeouts.set(handle, action)
+  }
+
+  // See this class's own `paused` doc comment above - every currently-armed timeout is cancelled
+  // and its action kept (not dropped), so resume() can re-arm it instead of that bot just going
+  // silent for the rest of the game.
+  pause(): void {
+    if (this.paused) return
+    this.paused = true
+    for (const [handle, action] of this.pendingTimeouts) {
+      clearTimeout(handle)
+      this.frozenActions.push(action)
+    }
+    this.pendingTimeouts.clear()
+  }
+
+  resume(): void {
+    if (!this.paused) return
+    this.paused = false
+    const actions = this.frozenActions
+    this.frozenActions = []
+    // Fresh thinkDelayMs, not whatever was left of the original wait - the point of a pause is a
+    // real break, not a stopwatch the player can strategically time. Each action re-checks its own
+    // staleness (currentPlayer.color) before doing anything, same as every other scheduled action
+    // here, so this is safe even if the game's turn somehow moved on while paused.
+    actions.forEach((action) => this.schedule(action, this.thinkDelayMs))
   }
 
   dispose(): void {
     this.unsubscribers.forEach((off) => off())
-    this.pendingTimeouts.forEach((handle) => clearTimeout(handle))
+    this.pendingTimeouts.forEach((_action, handle) => clearTimeout(handle))
     this.pendingTimeouts.clear()
+    this.frozenActions = []
   }
 }

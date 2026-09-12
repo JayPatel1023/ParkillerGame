@@ -99,6 +99,15 @@ export interface LocalGameSession {
    * (see that field's own doc comment) so GameBoardScreen can run the same selectable-piece
    * indicator for a bot's just-decided move that a human's own choosable piece already gets. */
   botPieceHighlighted?: Listenable<Piece | null>
+  /** Requested directly ("로컬 게임에는 Pause 기능을 넣어라" - add a Pause feature to local games):
+   * GameBoardScreen's own Pause button calls these when it toggles, so a paused game genuinely
+   * stops - not just blocking the human's own clicks (which it does unconditionally, hotseat
+   * included) but also freezing whichever bots are mid-turn, rather than letting them keep playing
+   * against a player who can't respond. Only set in vs-bots mode, same as botPieceHighlighted -
+   * classic hotseat has no bot timers to freeze at all, so GameBoardScreen's optional-call (`?.()`)
+   * is a deliberate no-op there. */
+  pauseBots?: () => void
+  resumeBots?: () => void
   /** Requested directly ("cada jugador y los bots lanzan los dados blancos para indicar quien
    * comienza la partida"): every local game's own pre-game roll-off (see startingPlayer.ts),
    * always run before the first real turn - GameBoardScreen shows this once on mount, right before
@@ -166,5 +175,7 @@ export function beginLocalGame(
     players,
     dispose: () => botController?.dispose(),
     botPieceHighlighted: botController?.pieceHighlighted,
+    pauseBots: botController ? () => botController.pause() : undefined,
+    resumeBots: botController ? () => botController.resume() : undefined,
   }
 }

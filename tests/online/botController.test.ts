@@ -665,6 +665,42 @@ describe('BotController', () => {
     bots.dispose()
   })
 
+  // Requested directly ("로컬 게임에는 Pause 기능을 넣어라" - add a Pause feature to local games):
+  // pause() must cancel whatever this bot currently has scheduled (here, its very first roll,
+  // still mid-think-delay) so it genuinely stops acting - not just visually, the way a UI-only
+  // overlay would - and resume() must eventually replay that exact same action rather than the bot
+  // going silent for the rest of the game.
+  it('pause() cancels a bot\'s pending action and resume() eventually replays it', () => {
+    const board = buildTestBoard()
+    const players = [createPlayerState('Red', board), createPlayerState('Blue', board)]
+    const dice = new RecordingDice()
+    const inner = new TurnManager(board, players, defaultRuleSettings(), dice)
+    const network = new FakeRoomNetwork(MASTER_ACTOR)
+    const transport = network.createTransport(MASTER_ACTOR)
+    const host = new HostTurnManagerBridge(inner, dice, players, transport, new Map<number, PieceColor>())
+    const thinkDelayMs = 50
+    const bots = new BotController(host, new Set<PieceColor>(['Red', 'Blue']), thinkDelayMs, 2, 2)
+
+    let rollCount = 0
+    inner.diceRolled.on(() => rollCount++)
+
+    host.start()
+    vi.advanceTimersByTime(20) // well short of thinkDelayMs - the roll hasn't fired yet
+    expect(rollCount).toBe(0)
+
+    bots.pause()
+    // Well past when the original think-delay would have elapsed, had it not been cancelled.
+    vi.advanceTimersByTime(200)
+    expect(rollCount).toBe(0) // still nothing - a real pause, not merely a UI overlay on top of it
+
+    bots.resume()
+    expect(rollCount).toBe(0) // resume itself doesn't act instantly - it re-arms a fresh think-delay
+    vi.advanceTimersByTime(thinkDelayMs)
+    expect(rollCount).toBe(1) // the same originally-scheduled roll finally goes through
+
+    bots.dispose()
+  })
+
   it('a color not in botColors never receives an automatic roll', () => {
     const board = buildTestBoard()
     const players = [createPlayerState('Red', board), createPlayerState('Blue', board)]
