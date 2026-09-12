@@ -1,7 +1,7 @@
 {
   "2": {
     "playerCount": 2,
-    "boardImage": "/boards/board_2p.jpg",
+    "boardImage": "/boards/board_2p.webp",
     "trackWaypoints": [
       [
         0.867,
@@ -365,7 +365,7 @@
   },
   "3": {
     "playerCount": 3,
-    "boardImage": "/boards/board_3p.jpg",
+    "boardImage": "/boards/board_3p.webp",
     "trackWaypoints": [
       [
         0.8146,
@@ -759,7 +759,7 @@
   },
   "4": {
     "playerCount": 4,
-    "boardImage": "/boards/board_4p.jpg",
+    "boardImage": "/boards/board_4p.webp",
     "trackWaypoints": [
       [
         0.316,
@@ -1281,7 +1281,7 @@
   },
   "5": {
     "playerCount": 5,
-    "boardImage": "/boards/board_5p.jpg",
+    "boardImage": "/boards/board_5p.webp",
     "trackWaypoints": [
       [
         0.283,
@@ -1826,7 +1826,7 @@
   },
   "6": {
     "playerCount": 6,
-    "boardImage": "/boards/board_6p.jpg",
+    "boardImage": "/boards/board_6p.webp",
     "trackWaypoints": [
       [
         0.511,

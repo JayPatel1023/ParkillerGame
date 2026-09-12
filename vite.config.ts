@@ -60,8 +60,11 @@ export default defineConfig({
         // the game (boards included) works fully offline right after the first load, not just
         // the app shell. mp3 added alongside hopSound.ts's own hop.mp3 - same reasoning, a few KB
         // is nothing against the budget below, and a move's own sound shouldn't depend on network
-        // timing any more than the board art it plays alongside does.
-        globPatterns: ['**/*.{js,css,html,jpg,png,svg,ico,mp3}'],
+        // timing any more than the board art it plays alongside does. webp added alongside the
+        // board textures' own jpg -> webp conversion (see boards/board_*.jpg's own globIgnores
+        // entry below) - without this, the smaller files this precache exists to serve wouldn't
+        // even match the pattern.
+        globPatterns: ['**/*.{js,css,html,jpg,png,webp,svg,ico,mp3}'],
         // public/music/ holds the intro/background music track (introMusic.ts) - several MB,
         // unlike every other mp3 here (a few KB to ~70KB apiece). Unlike hop/capture/finish
         // sounds, nothing about actually playing the game depends on it - same "don't force every
@@ -77,7 +80,17 @@ export default defineConfig({
         // download (reported directly as slow loading, and confirmed by the built dist/sw.js
         // precache manifest - ~14.8MB total, of which this one directory alone was well over a
         // quarter) for art no player's own device ever renders.
-        globIgnores: ['music/**', 'reference/**'],
+        //
+        // boards/board_*.jpg: reported directly, with a screenshot, that the board still failed to
+        // render (a flat gray plane) on a poor connection even after the earlier reconnect fix -
+        // these 5 files are still real inputs scripts/generate-waypoints.mjs reads directly (its
+        // own hardcoded `public/boards/board_${playerCount}p.jpg` path), so they stay in the repo,
+        // but generated-boards.json's own boardImage field now points at a same-art .webp sibling
+        // instead (~45% smaller, converted directly - see that JSON's own git history) for what the
+        // live app actually fetches. Left unexcluded, these superseded originals would still match
+        // globPatterns' own jpg extension and get precached anyway, on top of the smaller webp
+        // files nothing in the running app ever asks for - pure wasted download for every player.
+        globIgnores: ['music/**', 'reference/**', 'boards/board_*.jpg'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         // Reported directly ("직접 문서로 가게 만들라" - make it go directly to the document):
         // clicking the help card's own rulebook PDF link opened the app's start screen instead of
