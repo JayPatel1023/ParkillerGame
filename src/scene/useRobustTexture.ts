@@ -14,12 +14,29 @@ import * as THREE from 'three'
 // their own) kept rendering fine on top of that missing board, exactly the reported symptom.
 //
 // This hook manages its own retry loop instead of throwing a promise for Suspense to catch: a
-// failed load retries automatically (with backoff) up to MAX_ATTEMPTS times, and returns a plain
-// texture-or-null value rather than suspending - callers render a real (if plain) fallback while
-// waiting/retrying, so a slow or even a fully failed load still shows *something* recognizable as
-// "the board, still settling in" instead of empty space with pieces floating over nothing.
-const MAX_ATTEMPTS = 5
+// failed load retries automatically (with backoff, see MAX_RETRY_DELAY_MS below), and returns a
+// plain texture-or-null value rather than suspending - callers render a real (if plain) fallback
+// while waiting/retrying, so a slow or even a currently-failing load still shows *something*
+// recognizable as "the board, still settling in" instead of empty space with pieces floating over
+// nothing.
 const RETRY_BASE_DELAY_MS = 800
+// Reported directly, again, still permanently blank on the very first screen a session ever shows
+// ("아직 같은현상이다" - it's still the same thing) - a board image is essential, always-valid,
+// permanently-hosted content, never a real 404 the way an arbitrary user-supplied URL might be, so
+// there's no scenario where giving up on it forever is the right call. The one real failure mode
+// this actually protects against - a brief, ordinary squeeze on the network right at page load,
+// while the JS bundle, PWA precache, board texture, and every other board's own preloadTexture call
+// (App.tsx) are all competing for the same limited number of concurrent connections - is exactly
+// the kind of thing that clears up on its own within seconds, well within a real player's own
+// session; the old fixed 5-attempt backoff (summing to ~8s total) can plausibly run out before that
+// squeeze does, especially on a slow connection, and once it gave up nothing here would ever try
+// again for the rest of that mount's lifetime unless the component happens to remount for an
+// unrelated reason (a navigation, or webglContextRecovery's own forced remount on a stuck context -
+// neither of which this specific report's own screen, sitting still on the online menu, would ever
+// trigger). Retries now continue indefinitely instead of stopping - MAX_RETRY_DELAY_MS caps how
+// slow that gets, so a genuinely dead network still only costs one attempt every 15s, not a
+// runaway loop, while a temporary one clears itself up automatically the next time this fires.
+const MAX_RETRY_DELAY_MS = 15_000
 
 const textureCache = new Map<string, THREE.Texture>()
 const loader = new THREE.TextureLoader()
@@ -59,11 +76,10 @@ function loadWithRetry(url: string, attempt: number) {
     },
     undefined,
     () => {
-      if (attempt >= MAX_ATTEMPTS) {
-        inFlight.delete(url) // gives up - every subscriber's own fallback stays showing
-        return
-      }
-      setTimeout(() => loadWithRetry(url, attempt + 1), RETRY_BASE_DELAY_MS * attempt)
+      // See MAX_RETRY_DELAY_MS's own doc comment above - never actually gives up; the fallback
+      // stays showing only until whichever attempt finally lands.
+      const delay = Math.min(RETRY_BASE_DELAY_MS * attempt, MAX_RETRY_DELAY_MS)
+      setTimeout(() => loadWithRetry(url, attempt + 1), delay)
     },
   )
 }
