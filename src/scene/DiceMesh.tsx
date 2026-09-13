@@ -38,13 +38,13 @@ declare global {
 // the gap between that badge and the fleur-de-lis ornament above it instead, checked clear of both
 // the real track (nearest point 0.091 normalized units away on the tightest board, 4p) and the
 // artwork.
-const CORNER_X = 2.37 * DICE_SCALE
-const CORNER_Z = 1.98 * DICE_SCALE
+const CORNER_X = 2.1 * DICE_SCALE
+const CORNER_Z = 1.55 * DICE_SCALE
 const DIE_SPACING = 0.55 * DICE_SCALE
 // The black die sits on its own row behind the two white ones (see `row` below) - a taller row
 // gap than the plain column spacing, since the black die is now physically bigger and would
 // otherwise overlap the white dice's row.
-const ROW_SPACING = 0.66 * DICE_SCALE
+const ROW_SPACING = 0.55 * DICE_SCALE
 // Reported directly, twice now: the dice read as too large on the board - not by a lot, just
 // enough to feel oversized next to the pieces. Trimmed about a sixth off (0.5 -> 0.42) the first
 // time, then further (0.42 -> 0.34) the second - keeping DIE_SPACING/ROW_SPACING as-is (smaller
