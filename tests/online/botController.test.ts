@@ -266,7 +266,11 @@ describe('BotController', () => {
     expect(red.pieces[0].trackPosition).toBe(6)
     expect(blue.pieces[0].state).toBe('InYard') // confirms the capture actually happened
 
-    vi.advanceTimersByTime(thinkDelayMs) // the reward move fires
+    // See CELEBRATION_HOLD_MS's own doc comment (botController.ts) - a capturing move now also
+    // holds the bot's own busy window open an extra 2000ms (fixed, not one of this test's own
+    // overridden constructor args) so its capture's celebration has time to actually play, on top
+    // of the plain thinkDelayMs this test used to only need here.
+    vi.advanceTimersByTime(thinkDelayMs + 2000) // the reward move fires
     // pieces[0] (the capturing piece itself, still eligible for the reward like any other piece in
     // play) moved by 10 more - 6 -> 16 - not the full 20 from its own position (6 -> 26). Confirms
     // the split path was picked over the lump sum, not just that *some* move happened.
@@ -321,7 +325,9 @@ describe('BotController', () => {
     host.start()
     vi.advanceTimersByTime(thinkDelayMs) // the roll fires
     vi.advanceTimersByTime(thinkDelayMs) // the capturing move submits, offering the 20-square reward
-    vi.advanceTimersByTime(thinkDelayMs) // the reward move fires
+    // See CELEBRATION_HOLD_MS's own doc comment (botController.ts) - the capture just above holds
+    // the bot's own busy window open an extra fixed 2000ms for its own celebration.
+    vi.advanceTimersByTime(thinkDelayMs + 2000) // the reward move fires
 
     // The full 20 in one move (6 -> 26), not the 10-split that would have nowhere to send its other
     // half - pieces[1] stays exactly where it was, and nothing was ever forfeited.
@@ -526,7 +532,11 @@ describe('BotController', () => {
     vi.advanceTimersByTime(150) // the capturing move (piece0, dieA=3: 3 -> 6) submits, offering the reward
     expect(blue.pieces[0].state).toBe('InYard') // confirms the triggering capture happened
 
-    vi.advanceTimersByTime(thinkDelayMs + hopDurationMs * 20) // the reward move fires (up to 20 squares)
+    // See CELEBRATION_HOLD_MS's own doc comment (botController.ts) - that same capturing move also
+    // holds the bot's own busy window open an extra fixed 2000ms for its own celebration, on top of
+    // its own hop (amount(3)*hopDurationMs(100)=300) - 2300ms total, not just the reward's own
+    // up-to-20-squares hop time this test used to only need to clear here.
+    vi.advanceTimersByTime(2300) // the reward move fires (up to 20 squares)
 
     // The full 20 was taken specifically because it captures blue.pieces[1] - not the 10-split
     // this same scenario's sibling test above would otherwise prefer.
@@ -807,6 +817,65 @@ describe('BotController', () => {
     // bigger, unsafe 6 - piece1 stays exactly where it started.
     expect(red.pieces[0].trackPosition).toBe(10)
     expect(red.pieces[1].trackPosition).toBe(3)
+
+    bots.dispose()
+  })
+
+  // Requested directly ("EL BOT TIENE QUE HACER ETAPAS EN SUS MOVIMIENTOS PARA QUE QUEDEN BIEN
+  // MARCADOS... LA ELIMINACION DE UN PEON... DEBEN SER FESTEJADAS Y CADA MOVIMIENTO SEPARADO POR
+  // UNOS SEGUNDOS UNOS DE OTROS" - the bot has to make clearly-marked stages in its moves; a pawn
+  // elimination should be celebrated, with a few seconds between one movement and the next):
+  // captures/finishes now hold the bot's own busy window open an extra fixed 2000ms so the
+  // celebration effect this triggers (RewardBurst/RewardToast, GameBoardScreen.tsx - invisible to
+  // this class itself) has real time to play before the bot's own next, entirely unrelated move.
+  it('holds its own busy window open an extra beat after a capture, before its own next move', () => {
+    const board = buildTestBoard() // trackLength 20
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5 // dieA(2) -> 7, capturing blue.pieces[0] there - this alone
+    // (PC5) queues and immediately offers a reward, so whatever fires next is that reward move,
+    // not dieB's own separate option for a different piece - this test only cares that *something*
+    // further is held back for the celebration, not specifically which move that turns out to be.
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 7
+    // Every other Red piece defaults to InYard otherwise - dieA+dieB (2+3=5) happens to equal this
+    // board's own exit roll, which would otherwise force a mandatory exit instead of the capturing
+    // move this test actually means to exercise (see the exit-priority test above, and PC2.1's own
+    // applyObligations in turnManager.ts). Not what this test is about.
+    red.pieces[1].state = 'Finished'
+    red.pieces[2].state = 'Finished'
+    red.pieces[3].state = 'Finished'
+
+    const dice = new RecordingDice(new ScriptedDice([2, 3, 1]))
+    const inner = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+    const network = new FakeRoomNetwork(MASTER_ACTOR)
+    const transport = network.createTransport(MASTER_ACTOR)
+    const host = new HostTurnManagerBridge(inner, dice, [red, blue], transport, new Map<number, PieceColor>())
+    const thinkDelayMs = 10
+    const hopDurationMs = 2
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), thinkDelayMs, hopDurationMs, 2)
+
+    let moveCount = 0
+    inner.moveApplied.on(() => moveCount++)
+
+    host.start()
+    vi.advanceTimersByTime(thinkDelayMs) // the roll fires
+    vi.advanceTimersByTime(thinkDelayMs) // the capturing move (piece0, dieA=2: 5 -> 7) submits
+    expect(blue.pieces[0].state).toBe('InYard') // confirms the capture happened
+    expect(moveCount).toBe(1)
+
+    // The capturing move's own busy window is amount(2)*hopDurationMs(2)=4ms plus the celebration
+    // hold (2000ms) = 2004ms total. Short of that, no further move must have fired yet - the
+    // celebration is still supposed to be playing.
+    vi.advanceTimersByTime(1000)
+    expect(moveCount).toBe(1)
+
+    // Past the full 2004ms now - the reward move (or moves - a 20-square reward from here may
+    // itself resolve in more than one MoveResult) finally fires. Not pinned to an exact count -
+    // this test only cares that the hold above is a genuine, bounded delay, not a permanent one.
+    vi.advanceTimersByTime(1100)
+    expect(moveCount).toBeGreaterThan(1)
 
     bots.dispose()
   })

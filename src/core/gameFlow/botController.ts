@@ -70,6 +70,24 @@ const DICE_SPIN_MS = 2000
 // neighboring comment above).
 const HOP_DURATION_MS = 480
 
+// Requested directly ("EL BOT TIENE QUE HACER ETAPAS EN SUS MOVIMIENTOS PARA QUE QUEDEN BIEN
+// MARCADOS... LA ENTRADA DE UN PEON EN LA META, LA ELIMINACION DE UN PEON, LA ELIMINACION DE UN
+// PARKI.... DEBEN SER FESTEJADAS Y CADA MOVIMIENTO SEPARADO POR UNOS SEGUNDOS UNOS DE OTROS. PARA
+// QUE SE VEAN Y SE PUEDAN CONTAR" - the bot has to make clearly-marked stages in its moves; a pawn
+// reaching home, a pawn elimination, a Parki elimination should each be celebrated, with a few
+// seconds between one movement and the next, so they can be seen and counted): busyUntilMs already
+// covers the hop's own real animation time (amount*hopDurationMs) so the *next* action can't cut a
+// plain move's hop short, but a capture, a Parki elimination, or a finish additionally triggers its
+// own separate celebration - RewardBurst/RewardToast/EliminationToast/FinishCelebrationEffect,
+// GameBoardScreen.tsx - with its own hold time this class has no visibility into at all (that's
+// presentation-layer state, read from useTurnManager's own events, not this session's narrow
+// BotDrivableSession interface). Without an extra allowance here, the bot's own next roll or move
+// could fire while that celebration was still only partway through playing. Long enough to read as
+// "a moment to look," short of the human-turn-specific 20s hold (this is about the bot's own pace
+// staying legible, not matching a human's own much longer reveal window - the client's own separate
+// "al bot dejale 2 o 3 segundos nada mas" already drew that same line for reveals in general).
+const CELEBRATION_HOLD_MS = 2000
+
 // Same minimal pub-sub as turnManager.ts's own EventEmitter (not exported from there, so
 // duplicated here rather than reaching into a peer module for an implementation detail - see this
 // file's own DICE_SPIN_MS/HOP_DURATION_MS above for the same "small, deliberate duplication over a
@@ -424,7 +442,17 @@ export class BotController {
       // this class's own onMoveChoicesReady for that second die would then compute its own schedule
       // against whatever busyUntilMs was set *before* this move, not this move's own hop duration,
       // if that update happened after submitting instead of before.
-      this.markBusy(chosen.amount * this.hopDurationMs)
+      // See CELEBRATION_HOLD_MS's own doc comment - predictable *before* submitting from the move
+      // itself (allowParkillerCapture: true here, unlike capturingMoves' own preference-ranking use
+      // of this same helper just above - this is a real elimination this move is about to cause
+      // either way, whichever piece the earlier preference chain actually ended up choosing, not a
+      // ranking decision between candidates). The one celebration-worthy outcome this can't see
+      // coming is a fully automatic Parkiller-vs-Parkiller elimination (PK6/PK7 via the black die,
+      // not a pawn's own move) - session.diceRolled's own busy-window extension just above already
+      // covers that hop's *animation* time, but has no way to know a Parki actually died from it;
+      // BotDrivableSession's narrow interface has no event for that at all.
+      const triggersCelebration = chosen.kind === 'FinishMove' || wouldCapture(this.session.board, chosen, this.session.players, true)
+      this.markBusy(chosen.amount * this.hopDurationMs + (triggersCelebration ? CELEBRATION_HOLD_MS : 0))
       this.pieceHighlighted.emit(null)
       this.session.submitMoveForBot(chosen.piece, chosen.amount)
     })
