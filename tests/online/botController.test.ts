@@ -701,6 +701,48 @@ describe('BotController', () => {
     bots.dispose()
   })
 
+  // Reported directly, with a screenshot ("6 + 1 DEBÍA HABER ELIMININADO AL QUE TENÍA A TIRO DE 1
+  // EN VEZ DE MOVER 7 CON OTRO PEÓN" - it should have eliminated the one it had lined up with the
+  // 1, instead of moving 7 with another pawn): a capturing move that also happens to leave the
+  // capturing piece itself exposed afterward used to get filtered out by the ordinary exposure
+  // checks exactly like any other risky-but-not-capturing move - as long as some other, unrelated
+  // piece had a genuinely safe move available (here, piece1's own safe 7), that idle safe move won
+  // by default and the capture was never even offered to the later capturingMoves preference.
+  it('takes an available capture even when it leaves the capturing piece exposed afterward, over a safer unrelated move', () => {
+    const board = buildBigTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5 // dieB(1) -> 6, capturing blue.pieces[0] there
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 15 // dieA(6)/sum(7) -> 21/22, both totally safe - the idle alternative
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 6 // the capture target
+    blue.pieces[1].state = 'OnTrack'
+    blue.pieces[1].trackPosition = 2 // a second, separate Blue piece - distance to 6 is 4, so
+    // capturing there leaves red.pieces[0] exposed to *this* piece's own next roll
+    blue.parkiller.state = 'Eliminated' // isolates this from the Parkiller-exposure heuristic entirely
+
+    const dice = new RecordingDice(new ScriptedDice([6, 1, 1]))
+    const inner = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+    const network = new FakeRoomNetwork(MASTER_ACTOR)
+    const transport = network.createTransport(MASTER_ACTOR)
+    const host = new HostTurnManagerBridge(inner, dice, [red, blue], transport, new Map<number, PieceColor>())
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2)
+
+    host.start()
+    vi.advanceTimersByTime(10) // the roll fires
+    vi.advanceTimersByTime(10) // the first move fires
+
+    // The capture was taken - piece0 moved to 6 and blue.pieces[0] went home - not the safer,
+    // unrelated 7-move with piece1 (still exactly where it started).
+    expect(red.pieces[0].trackPosition).toBe(6)
+    expect(blue.pieces[0].state).toBe('InYard')
+    expect(red.pieces[1].trackPosition).toBe(15)
+
+    bots.dispose()
+  })
+
   it('a color not in botColors never receives an automatic roll', () => {
     const board = buildTestBoard()
     const players = [createPlayerState('Red', board), createPlayerState('Blue', board)]

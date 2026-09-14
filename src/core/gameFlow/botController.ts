@@ -257,7 +257,19 @@ export class BotController {
     // piece exposed to next roll's danger when an equally legal move would clear it entirely is the
     // same avoidable class of risk, one step earlier. Same layering/fallback pattern as the two
     // preferences above it.
-    const unexposedToParkillerMoves = safeMoves.filter((m) => !this.wouldLeavePieceExposedToParkiller(m))
+    // Reported directly, with a screenshot ("6 + 1 DEBÍA HABER ELIMININADO AL QUE TENÍA A TIRO DE 1
+    // EN VEZ DE MOVER 7 CON OTRO PEÓN" - it should have eliminated the one it had lined up with the
+    // 1, instead of moving 7 with another pawn): reproduced directly - a capturing move that also
+    // happens to leave the *capturing* piece exposed afterward got filtered out here exactly like
+    // any other exposed-but-not-capturing move, so as long as some other, unrelated piece had a
+    // genuinely safe move available, that safe-but-idle move won by default and the capture was
+    // never even offered to the capturingMoves preference further down - it only ever saw whatever
+    // survived this filter. keepsProtectedPiecesSheltered (below) already carries this exact "unless
+    // it captures" exception for giving up a protected square; missing it here for ordinary
+    // Parkiller-exposure meant a real material gain (sending an opponent's pawn all the way home)
+    // was being silently traded away for a comparatively minor, speculative future risk to the
+    // capturing piece itself.
+    const unexposedToParkillerMoves = safeMoves.filter((m) => !this.wouldLeavePieceExposedToParkiller(m) || wouldCapture(this.session.board, m, this.session.players, false))
     const safeFromParkiller = unexposedToParkillerMoves.length > 0 ? unexposedToParkillerMoves : safeMoves
     // Reported directly ("El bot en vez de mover dos peones diferentes, con la suma de los dados
     // 'se suicida el que va en cabeza'" - the bot, instead of moving two different pawns, suicides
@@ -269,7 +281,10 @@ export class BotController {
     // that used each die on a different piece. Same layering/fallback pattern as the Parkiller
     // check right above - only actually prefers dodging this once dodging the Parkiller is also
     // satisfied (or impossible), never the other way around.
-    const unexposedMoves = safeFromParkiller.filter((m) => !this.wouldLeavePieceExposedToPawn(m))
+    // See unexposedToParkillerMoves' own comment just above - same "unless it captures" exception,
+    // for the exact same reason and the exact same reported bug (that report's own board state
+    // specifically exposed the capturing piece to an ordinary pawn, not the Parkiller).
+    const unexposedMoves = safeFromParkiller.filter((m) => !this.wouldLeavePieceExposedToPawn(m) || wouldCapture(this.session.board, m, this.session.players, false))
     const riskAwareMoves = unexposedMoves.length > 0 ? unexposedMoves : safeFromParkiller
     // Requested directly ("si algún peón del bot está en una casilla protegida no debería
     // arriesgarse a ser eliminado salvo para eliminar a otro peón. Es mejor que se mueva otro
