@@ -428,6 +428,20 @@ export function GameBoardScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parkillerAnimation])
 
+  // Reported directly, again ("ELIMINA SIN QUE HAYA SIGNO NI CELEBRACION NI SONIDO ESPECIAL...
+  // DEBE HABER ALGO ESPECIAL CUANDO UN PEON O EL PARKI ELIMINA A UN PEON" - it eliminates with no
+  // sign, no celebration, no special sound at all - there should be something special whenever a
+  // pawn or the Parki eliminates a pawn): the two effects above already cover exactly those two
+  // cases (an ordinary capture via the reward it grants; a Parki eating a pawn directly), but a
+  // third, separate way a piece gets sent home - rolling three doubles in a row (PK3) - was missed
+  // by both: it grants no reward at all (nothing for the first effect to see) and isn't a Parki
+  // eating a pawn either (nothing for the second). EliminationToast already shows something for
+  // this case, but silently - no sound at all, exactly the reported gap.
+  useEffect(() => {
+    if (eliminatedByDoubles) playCaptureSound()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eliminatedByDoubles])
+
   // Pairs a sound with the existing Confetti visual (below) for the game's own final celebration -
   // client's own original prototype plays sound_partida_finalizada alongside its win banner too
   // (obj_cartel_ganaste/Create_0.gml).
