@@ -202,7 +202,7 @@ describe('TurnManager - two-dice rulebook flow', () => {
     expect(manager.currentPlayer.color).toBe('Blue') // turn passed on after the elimination
   })
 
-  it('a piece in the home corridor is exempt from third-double elimination', () => {
+  it('a piece in the home corridor is exempt from third-double elimination, and the streak keeps granting rerolls', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)
     const blue = createPlayerState('Blue', board)
@@ -211,9 +211,13 @@ describe('TurnManager - two-dice rulebook flow', () => {
 
     // Two doubles of 1,1 move the piece from corridor position 0 to 4 (one square short of the
     // finish at index 5), so it's still InHomeCorridor - not Finished - when the third double
-    // (1,1 again) hits the elimination check. What that third roll's dice do afterward isn't the
-    // point of this test, only that the exemption fires instead of sending the piece to the yard.
-    const dice = new ScriptedDice([1, 1, 1, 1, 1, 1, 1, 1, 1])
+    // (1,1 again) hits the elimination check. A fourth double (1,1 again) moves it the rest of the
+    // way home - reachable at all only if the third double's own exemption genuinely granted
+    // another reroll instead of silently ending Red's turn, which is the actual point of this test
+    // (the sibling "eliminated: false" assertion below was already covered before this fix - it
+    // never caught this, since the streak ending anyway looks identical from "was eliminated"
+    // alone).
+    const dice = new ScriptedDice([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
     const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
 
     let eliminated = false
@@ -224,10 +228,45 @@ describe('TurnManager - two-dice rulebook flow', () => {
 
     manager.requestRoll()
     manager.requestRoll()
-    manager.requestRoll()
+    manager.requestRoll() // the exempt third double - must not end Red's own turn
+    expect(manager.currentPlayer.color).toBe('Red')
+    manager.requestRoll() // only reachable if the reroll above actually happened
 
     expect(eliminated).toBe(false)
     expect(red.pieces[0].state).not.toBe('InYard')
+    expect(red.pieces[0].state).toBe('Finished')
+  })
+
+  it('rolling double after double with every piece stuck in the yard keeps granting rerolls, never eliminating anything', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board) // every piece defaults to InYard
+    const blue = createPlayerState('Blue', board)
+
+    // Reported directly ("SI SALEN DOBLES Y NO SE PUEDE MOVER PORQUE ESTAN EN CASA SE LANZAN LOS
+    // DADOS DE NUEVO...NO SOLO TRES VECES...HASTA QUE NO SALGAN DOBLES" - if doubles come up and
+    // you can't move because your pieces are still at home, roll again - not capped at three
+    // times, keep going until doubles stop coming up): none of these doubles (1,1 / 2,2 / 3,3 /
+    // 4,4) match the exit roll (5), so every single one of these four *consecutive* doubles offers
+    // no legal move at all - nothing ever gets moved, so lastMovedPiece never becomes non-null.
+    const dice = new ScriptedDice([1, 1, 1, 2, 2, 1, 3, 3, 1, 4, 4, 1])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let eliminated = false
+    let noMoveCount = 0
+    manager.pieceEliminatedByDoubles.on(() => (eliminated = true))
+    manager.moveNotPossible.on(() => noMoveCount++)
+
+    manager.requestRoll()
+    manager.requestRoll()
+    manager.requestRoll() // the third straight double with nothing ever moved - must not eliminate
+    // or end the turn
+    expect(manager.currentPlayer.color).toBe('Red')
+    manager.requestRoll() // a fourth straight double - only reachable if the reroll above happened
+
+    expect(noMoveCount).toBe(4)
+    expect(eliminated).toBe(false)
+    expect(manager.currentPlayer.color).toBe('Red')
+    expect(red.pieces.every((p) => p.state === 'InYard')).toBe(true)
   })
 })
 

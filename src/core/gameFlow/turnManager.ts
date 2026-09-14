@@ -327,18 +327,42 @@ export class TurnManager {
 
     if (dieA === dieB) {
       this.consecutiveDoubles++
-      if (this.settings.thirdConsecutiveDoubleEliminatesLastMoved && this.consecutiveDoubles >= 3) {
+      // Reported directly ("SI SALEN DOBLES Y NO SE PUEDE MOVER PORQUE ESTAN EN CASA SE LANZAN LOS
+      // DADOS DE NUEVO... NO SOLO TRES VECES...HASTA QUE NO SALGAN DOBLES" - if doubles come up and
+      // you can't move because your pieces are still at home, roll again; not capped at three times,
+      // keep going until doubles stop coming up): this used to reset consecutiveDoubles to 0 the
+      // instant the streak hit 3, regardless of whether an elimination actually happened - a stuck
+      // player (every piece still in the yard, none of three straight doubles matching the exit
+      // roll) has no lastMovedPiece at all, so the elimination below never fires, but the streak
+      // still silently reset - and finishDiceUsage()'s own `grantExtraTurn = consecutiveDoubles > 0`
+      // read that fresh 0 right afterward, on this exact roll, ending the turn instead of granting
+      // the bonus reroll a double is always owed regardless of what could be done with it. The same
+      // reset-without-eliminating bug affected the home-corridor exemption right below it too,
+      // directly contradicting that branch's own comment ("the streak just continues"). Only
+      // resetting the counter at the same point elimination actually happens - never independently
+      // of it - fixes both: consecutiveDoubles keeps climbing on every further stuck (or exempt)
+      // double, and finishDiceUsage() sees it's still > 0 and keeps granting rerolls until a
+      // genuinely non-double roll or a real, eligible lastMovedPiece finally ends the streak.
+      // Found while testing the fix above: a piece that already reached Finished is not
+      // 'InHomeCorridor' either, so the exemption above alone would let a later, unrelated double
+      // streak reach back and un-finish an already-completed piece - sending a piece that already
+      // made it home *backward* isn't a sensible reading of this penalty under any rulebook
+      // interpretation. Exempt for the same reason home-corridor pieces already are.
+      if (
+        this.settings.thirdConsecutiveDoubleEliminatesLastMoved &&
+        this.consecutiveDoubles >= 3 &&
+        this.lastMovedPiece &&
+        this.lastMovedPiece.state !== 'InHomeCorridor' &&
+        this.lastMovedPiece.state !== 'Finished'
+      ) {
         this.consecutiveDoubles = 0
-        // Home-corridor pieces are exempt - the streak just continues instead of costing a piece.
-        if (this.lastMovedPiece && this.lastMovedPiece.state !== 'InHomeCorridor') {
-          this.lastMovedPiece.state = 'InYard'
-          this.lastMovedPiece.trackPosition = -1
-          this.lastMovedPiece.corridorPosition = -1
-          this.pieceEliminatedByDoubles.emit(this.lastMovedPiece)
-          this.lastMovedPiece = null
-          this.endTurn(false)
-          return
-        }
+        this.lastMovedPiece.state = 'InYard'
+        this.lastMovedPiece.trackPosition = -1
+        this.lastMovedPiece.corridorPosition = -1
+        this.pieceEliminatedByDoubles.emit(this.lastMovedPiece)
+        this.lastMovedPiece = null
+        this.endTurn(false)
+        return
       }
     } else {
       this.consecutiveDoubles = 0
