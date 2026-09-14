@@ -221,6 +221,34 @@ export class BotController {
     if (moves.length === 0) return
     const color = this.session.currentPlayer.color
     if (!this.botColors.has(color)) return
+    // Requested directly ("sale 5 + cualquier otro numero....MUEVE PRIMERO EL CINCO PARA SALIR DEL
+    // REFUGIO (orden de prioridades) PRIMERO SALIR" - when a 5 comes up alongside any other number,
+    // move the 5 first to exit the yard - priority order, exit first): PC2.1 already makes a die
+    // matching the exit roll unusable for anything *but* the exit when a yard piece can use it (see
+    // offerMoves' own applyObligations), so this was never about *whether* the exit eventually
+    // happens - it always does. It's the *order* the bot spends multiple still-unused dice in when
+    // more than one is independently legal this roll: nothing below this point steers toward
+    // resolving an available exit before some unrelated piece's own move on a different die, so a
+    // bigger non-exit amount could win the largestAmount tie-break further down and get submitted
+    // first, leaving the exit for later in the same roll instead of leading with it. Skips the rest
+    // of this method entirely when one's available - an exit is never risky (PC2.2's own entry
+    // square is always a safe square) and never something to weigh against forming a barrier,
+    // Parkiller exposure, or anything else this function otherwise guards against.
+    const exitMoves = moves.filter((m) => m.kind === 'ExitYard')
+    if (exitMoves.length > 0) {
+      const chosen = exitMoves[0]
+      this.pieceHighlighted.emit(chosen.piece)
+      this.scheduleRespectingBusy(this.thinkDelayMs, () => {
+        if (this.session.currentPlayer.color !== color) {
+          this.pieceHighlighted.emit(null)
+          return
+        }
+        this.markBusy(chosen.amount * this.hopDurationMs)
+        this.pieceHighlighted.emit(null)
+        this.session.submitMoveForBot(chosen.piece, chosen.amount)
+      })
+      return
+    }
     // Reported directly, client visibly frustrated: a color could get stuck for many consecutive
     // turns after a bot carelessly walked itself into forming its own barrier with no strategic
     // reason to. Once formed, a barrier's own two pieces are locked in place until a double breaks
@@ -301,7 +329,20 @@ export class BotController {
       if (!leavesProtectedSquare) return true
       return wouldCapture(this.session.board, m, this.session.players, false)
     })
-    const finalMoves = keepsProtectedPiecesSheltered.length > 0 ? keepsProtectedPiecesSheltered : riskAwareMoves
+    const notAbandoningShelter = keepsProtectedPiecesSheltered.length > 0 ? keepsProtectedPiecesSheltered : riskAwareMoves
+    // Requested directly ("EL BOT DEBE DE INTENTAR COLOCAR LOS PEONES EN CASILLAS PROTEGIDAS Y NO
+    // ABANDONARLAS SI NO ES NECESARIO PARA NO ARRIESGAR Y ELIMINAR SI LES ES POSIBLE" - the bot
+    // should try to place pawns on protected squares, and not abandon them unless necessary, to
+    // avoid risk, and eliminate if possible): keepsProtectedPiecesSheltered right above only ever
+    // stops a piece from *leaving* a protected square it already occupies - nothing anywhere in
+    // this chain ever preferred *landing* on one over an equally-legal non-safe destination in the
+    // first place. Same "unless it captures" exemption as every risk-avoidance preference above -
+    // a capture landing on an unprotected square must never lose out to a purely defensive,
+    // non-capturing move just because the latter happens to land somewhere safer.
+    const preferSafeLanding = notAbandoningShelter.filter(
+      (m) => (m.resultingTrackPosition !== -1 && this.session.board.safeTrackIndices.has(m.resultingTrackPosition)) || wouldCapture(this.session.board, m, this.session.players, false),
+    )
+    const finalMoves = preferSafeLanding.length > 0 ? preferSafeLanding : notAbandoningShelter
     // Reported directly, with the client's own rulebook page: a capture's 20-square reward is a
     // genuine choice - "Move one Pawn 20 spaces" OR "Move one Pawn 10 spaces and another pawn 10
     // spaces" - both are real, already-working options (verified directly: turnManager.ts's own

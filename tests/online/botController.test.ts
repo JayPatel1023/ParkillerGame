@@ -743,6 +743,74 @@ describe('BotController', () => {
     bots.dispose()
   })
 
+  // Requested directly ("sale 5 + cualquier otro numero....MUEVE PRIMERO EL CINCO PARA SALIR DEL
+  // REFUGIO (orden de prioridades) PRIMERO SALIR" - when a 5 comes up alongside any other number,
+  // move the 5 first to exit the yard - priority order, exit first): with both an exit (via the
+  // exit-roll die) and a completely unrelated, bigger-amount move for an already-in-play piece
+  // legal this same roll, the exit must be the one submitted first, not whichever has the larger
+  // amount.
+  it('submits an available exit before any other, larger-amount move', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board) // pieces[0] defaults to InYard
+    const blue = createPlayerState('Blue', board)
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 3 // dieB(6) -> 9, a much bigger amount than the exit's own 5
+
+    const dice = new RecordingDice(new ScriptedDice([5, 6, 1])) // dieA is this board's own exit roll
+    const inner = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+    const network = new FakeRoomNetwork(MASTER_ACTOR)
+    const transport = network.createTransport(MASTER_ACTOR)
+    const host = new HostTurnManagerBridge(inner, dice, [red, blue], transport, new Map<number, PieceColor>())
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2)
+
+    host.start()
+    vi.advanceTimersByTime(10) // the roll fires
+    vi.advanceTimersByTime(10) // the first move fires
+
+    // The exit went through - piece0 left the yard - and piece1 (the bigger, unrelated amount)
+    // hasn't moved yet, confirming the exit was submitted first, not merely submitted at all.
+    expect(red.pieces[0].state).toBe('OnTrack')
+    expect(red.pieces[0].trackPosition).toBe(0) // buildTestBoard's own Red entryTrackIndex
+    expect(red.pieces[1].trackPosition).toBe(3)
+
+    bots.dispose()
+  })
+
+  // Requested directly ("EL BOT DEBE DE INTENTAR COLOCAR LOS PEONES EN CASILLAS PROTEGIDAS Y NO
+  // ABANDONARLAS SI NO ES NECESARIO PARA NO ARRIESGAR Y ELIMINAR SI LES ES POSIBLE" - the bot
+  // should try to place pawns on protected squares, and not abandon them unless necessary, to
+  // avoid risk, and eliminate if possible): given a choice between a smaller move that lands on a
+  // safe square and a bigger, unrelated move that doesn't (neither one a capture), the bot should
+  // prefer the safe landing over the bigger amount - the opposite of the plain largestAmount
+  // tie-break's own default preference.
+  it('prefers landing on a safe square over a bigger, unrelated non-capturing move', () => {
+    const board = buildTestBoard() // safeTrackIndices: {0, 10}
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 8 // dieA(2) -> 10, a safe square, amount 2
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 3 // dieB(6) -> 9, not safe, amount 6 - bigger, but unsafe
+
+    const dice = new RecordingDice(new ScriptedDice([2, 6, 1]))
+    const inner = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+    const network = new FakeRoomNetwork(MASTER_ACTOR)
+    const transport = network.createTransport(MASTER_ACTOR)
+    const host = new HostTurnManagerBridge(inner, dice, [red, blue], transport, new Map<number, PieceColor>())
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2)
+
+    host.start()
+    vi.advanceTimersByTime(10) // the roll fires
+    vi.advanceTimersByTime(10) // the first move fires
+
+    // piece0 took the smaller, safe move (8 -> 10) instead of the sum (8 -> 18) or piece1's own
+    // bigger, unsafe 6 - piece1 stays exactly where it started.
+    expect(red.pieces[0].trackPosition).toBe(10)
+    expect(red.pieces[1].trackPosition).toBe(3)
+
+    bots.dispose()
+  })
+
   it('a color not in botColors never receives an automatic roll', () => {
     const board = buildTestBoard()
     const players = [createPlayerState('Red', board), createPlayerState('Blue', board)]
