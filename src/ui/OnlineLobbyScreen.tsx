@@ -656,28 +656,31 @@ export default function OnlineLobbyScreen() {
   }
 
   // Reported directly, with a reference mockup image and a screenshot of the plain carved-wood
-  // card every other phase still uses: "make it match this style exactly". Scoped to the 'menu'
-  // phase only, as its own early return - every other phase (connecting/error/stopped/creating/
-  // joining/lobby, all reachable mid-flow, none of them what the mockup was actually of) keeps the
-  // original compact cardStyle rendering below completely untouched. logo-badge.png (the existing
-  // small circular badge) stands in for the mockup's own larger illustrated mascot/full logo
-  // lockup until that asset is dropped into the project - swap the header badge's src once it is.
+  // card every other phase still uses: "make it match this style exactly" for 'menu' specifically -
+  // every other phase (connecting/error/stopped/creating/joining/lobby, none of them what the
+  // mockup was actually of) keeps the original compact cardStyle rendering further below untouched.
+  // logo-badge.png (the existing small circular badge) stands in for the mockup's own larger
+  // illustrated mascot/full logo lockup until that asset is dropped into the project - swap the
+  // header badge's src once it is.
+  let menuContent: React.ReactNode = null
+  let connectingContent: React.ReactNode = null
+
+  // Reported directly, back and forth several times now: dropped, restored, dropped again, now
+  // restored again - the rotating 3D board scene (StartScreenBackground) stays across menu/
+  // connecting/creating/joining/lobby. Reported again separately, more than once, as a genuinely
+  // blank board ("SIGUE HABIENDO VACIOS DE PANTALLA SIN TABLERO") - each of those phases used to be
+  // its own early return with its own independent `<StartScreenBackground />` mount, so every
+  // ordinary phase transition during onboarding (menu -> creating a room -> lobby, say) tore down
+  // one WebGL context and stood up a brand new one, real GPU-context churn on exactly the path
+  // every online game passes through before a match even starts. One mount now, shared across every
+  // phase below except 'game' (GameBoardScreen's own BoardScene owns its own separate canvas by
+  // then) and 'error'/'stopped' (see the catch-all block's own comment on those two - a real
+  // connectivity failure is a bad moment to still depend on this same background's own network
+  // fetch). menuContent/connectingContent below hold only each phase's own *content* now - the
+  // wrapper, background, and gradient overlay all moved into the single shared return further down.
   if (phase === 'menu') {
-    return (
-      <div className="menu-wrapper" style={wrapperStyle}>
-        {/* Reported directly, back and forth several times now: dropped, restored, dropped again,
-            now restored again - the rotating 3D board scene (StartScreenBackground, same as every
-            other phase below) stays. Not touching this again without an explicit new request. */}
-        <div style={{ position: 'absolute', inset: 0, backgroundColor: '#05070c' }}>
-          <StartScreenBackground />
-        </div>
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'radial-gradient(ellipse at center, rgba(10,8,4,0.15) 0%, rgba(6,8,14,0.7) 100%)',
-          }}
-        />
+    menuContent = (
+      <>
         {/* See useScaleToFit's own doc comment - this sizing div reserves exactly the panel's own
             post-scale footprint (natural size × scale) in the flex-centered wrapper above, since
             `transform` alone doesn't shrink the space an absolutely-positioned element would
@@ -797,7 +800,7 @@ export default function OnlineLobbyScreen() {
           </button>
           </div>
         </div>
-      </div>
+      </>
     )
   }
 
@@ -816,19 +819,8 @@ export default function OnlineLobbyScreen() {
   // - a fill blends any leftover imprecision softly into the backdrop, where transparency would
   // have shown it as a visible hole.
   if (phase === 'connecting') {
-    return (
-      <div style={wrapperStyle}>
-        <div style={{ position: 'absolute', inset: 0, backgroundColor: '#05070c' }}>
-          <StartScreenBackground />
-        </div>
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'radial-gradient(ellipse at center, rgba(10,8,4,0.15) 0%, rgba(6,8,14,0.7) 100%)',
-          }}
-        />
-        <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '0 16px', boxSizing: 'border-box' }}>
+    connectingContent = (
+      <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '0 16px', boxSizing: 'border-box' }}>
           {/* Reported directly, with a screenshot showing the dots/"Preparando la partida" pushed
               below the fold: sized by *width* only (min(460px, 82vw)), same class of bug as the
               menu screen's own mascot before it - a short-but-wide window never shrinks it, so it
@@ -870,10 +862,12 @@ export default function OnlineLobbyScreen() {
           >
             Preparando la partida
           </p>
-        </div>
       </div>
     )
   }
+
+  const showBackground = phase !== 'error' && phase !== 'stopped'
+  const showDefaultCard = phase !== 'menu' && phase !== 'connecting'
 
   return (
     <div style={wrapperStyle}>
@@ -889,9 +883,7 @@ export default function OnlineLobbyScreen() {
           reachable only via a real connectivity failure) skip the 3D scene entirely and fall back
           to this same dark tone plus the radial vignette below, which need nothing from the
           network to render correctly every time. */}
-      <div style={{ position: 'absolute', inset: 0, backgroundColor: '#05070c' }}>
-        {phase !== 'error' && phase !== 'stopped' && <StartScreenBackground />}
-      </div>
+      <div style={{ position: 'absolute', inset: 0, backgroundColor: '#05070c' }}>{showBackground && <StartScreenBackground />}</div>
       <div
         style={{
           position: 'absolute',
@@ -899,6 +891,11 @@ export default function OnlineLobbyScreen() {
           background: 'radial-gradient(ellipse at center, rgba(10,8,4,0.15) 0%, rgba(6,8,14,0.7) 100%)',
         }}
       />
+
+      {phase === 'menu' && menuContent}
+      {phase === 'connecting' && connectingContent}
+
+      {showDefaultCard && (
       <div style={cardStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 8 }}>
           <img
@@ -1033,6 +1030,7 @@ export default function OnlineLobbyScreen() {
           </div>
         )}
       </div>
+      )}
     </div>
   )
 }
