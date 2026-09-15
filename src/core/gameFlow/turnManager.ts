@@ -99,14 +99,16 @@ export interface RewardGrant {
   reason: RewardReason
 }
 
-// PENDING_REWARD's own internal bookkeeping, on top of RewardGrant: excludePiece is set only when
-// re-offering a capture's *remainder* after the player already split off part of it onto one piece
-// - "another pawn" (the client's own rulebook wording) means that same piece can't also take the
-// rest, so it's excluded from this specific re-offer rather than tracked as a broader "already
-// used this reward" flag that would outlive this one grant.
-interface PendingReward extends RewardGrant {
-  excludePiece?: Piece
-}
+// PENDING_REWARD's own internal bookkeeping, on top of RewardGrant - see PendingReward's own
+// history in this file's git log for why there's no excludePiece field here anymore: the
+// remaining half of a split reward used to be restricted to "another pawn" (the rulebook's own
+// wording for the split option), but reported directly - "PERO SI CAMBIAS DE OPINION Y QUEDAN 10
+// POR MOVER DEBES PODER HACERLO CON EL PEON QUE QUIERAS, INCLUSO CON EL MISMO" (but if you change
+// your mind and there are 10 left to move, you should be able to do it with whichever pawn you
+// want, even the same one) - the client's own explicit correction, overriding that earlier literal
+// reading. The remaining 10 is now offered to every eligible piece, the one that already took the
+// first 10 included.
+type PendingReward = RewardGrant
 
 // PC 3/PC 4/PK7/PK8's reward size, in squares - a capture (own or via the Parkiller) is worth 20,
 // a finish worth 10 (a flat, non-splittable single unit either way).
@@ -114,15 +116,12 @@ interface PendingReward extends RewardGrant {
 // A capture's own 20 is a genuine *choice*, not a forced split - confirmed directly in the
 // client's own corrected rulebook (rules.pdf, "Bonus" pages, present on every one of Pawn
 // Capture/Parki Elimination/Bonuses): "Choose one: Move one Pawn 20 spaces. OR Move one Pawn 10
-// spaces and another pawn 10 spaces." This was previously always forced down the second path
-// (two independent, forced 10s) on the strength of an earlier, more literal client quote ("La
-// recompensa es de 10x2 ...si puede mover 10 debe hacerlo, se pierde el otro 10 si no se puede
-// mover") - the two aren't actually in conflict once read as "choice, with the always-split path
-// being *one* valid way to use it": offerReward now offers *both* a 20-in-one-piece move and a
+// spaces and another pawn 10 spaces." offerReward offers *both* a 20-in-one-piece move and a
 // 10-in-one-piece move together (same amount-keyed pattern offerMoves already uses for dieA/
-// dieB/sum), and only re-offers the remaining 10 - excluding whichever piece just moved - if the
-// player picks the smaller amount first. Picking the 20 outright resolves the whole reward in one
-// move, matching the rulebook's own first option exactly.
+// dieB/sum) - picking the 20 outright resolves the whole reward in one move, matching the
+// rulebook's own first option exactly; picking the 10 re-offers the remaining 10 to every still-
+// eligible piece (see PendingReward's own doc comment above - including the piece that just moved,
+// per the client's own direct correction).
 const REWARD_UNIT = 10
 
 function mod(value: number, modulus: number): number {
@@ -914,15 +913,15 @@ export class TurnManager {
     }
 
     // This move claimed (part of) an active reward grant - if it only took the smaller, split-off
-    // amount (10 out of a capture's own 20), the rest is still owed, excluding this piece from
-    // taking it too ("another pawn" - see PendingReward's own comment). Checked before queueing any
-    // *new* reward below, so a capture-during-a-reward-chain still stacks on top of this remainder
-    // rather than ahead of it (pendingRewardQueue is drained front-to-back).
+    // amount (10 out of a capture's own 20), the rest is still owed - see PendingReward's own
+    // doc comment for why this no longer excludes the piece that just moved. Checked before
+    // queueing any *new* reward below, so a capture-during-a-reward-chain still stacks on top of
+    // this remainder rather than ahead of it (pendingRewardQueue is drained front-to-back).
     if (isRewardMove && this.currentRewardGrant) {
       const grant = this.currentRewardGrant
       this.currentRewardGrant = null
       if (move.amount < grant.amount) {
-        this.pendingRewardQueue.push({ reason: grant.reason, amount: grant.amount - move.amount, excludePiece: chosenPiece })
+        this.pendingRewardQueue.push({ reason: grant.reason, amount: grant.amount - move.amount })
       }
     }
 
@@ -983,12 +982,8 @@ export class TurnManager {
   // picking the full amount resolves the whole grant in this one move.
   private offerReward(grant: PendingReward) {
     const canSplit = grant.reason === 'capture' && grant.amount > REWARD_UNIT
-    const excludePiece = grant.excludePiece
-    const excludeSpentPiece = (moves: MoveOption[]) => moves.filter((m) => m.piece !== excludePiece)
-    const fullMoves = excludeSpentPiece(getValidMoves(this.board, this.currentPlayer, this.players, grant.amount, this.settings, 'reward'))
-    const splitMoves = canSplit
-      ? excludeSpentPiece(getValidMoves(this.board, this.currentPlayer, this.players, REWARD_UNIT, this.settings, 'reward'))
-      : []
+    const fullMoves = getValidMoves(this.board, this.currentPlayer, this.players, grant.amount, this.settings, 'reward')
+    const splitMoves = canSplit ? getValidMoves(this.board, this.currentPlayer, this.players, REWARD_UNIT, this.settings, 'reward') : []
 
     const byPieceAndAmount = new Map<string, MoveOption>()
     const addMoves = (moves: MoveOption[]) => {

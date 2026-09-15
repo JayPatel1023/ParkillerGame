@@ -472,8 +472,10 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
   // on every one of Pawn Capture/Parki Elimination/Bonuses): "Choose one: Move one Pawn 20 spaces.
   // OR Move one Pawn 10 spaces and another pawn 10 spaces." Not a forced split into two independent
   // 10s (the previous version of this test, and this file's own history before it) - a genuine
-  // choice, with the always-split path being one valid way to use it, not the only one.
-  it('capturing an opponent grants a 20-square reward, offered as a choice between one pawn moving 20 or two different pawns moving 10 each', () => {
+  // choice, with the always-split path being one valid way to use it, not the only one. And per the
+  // client's own direct follow-up correction ("PERO SI CAMBIAS DE OPINION..."), the second 10 isn't
+  // restricted to "another pawn" either - see the dedicated test below for that case on its own.
+  it('capturing an opponent grants a 20-square reward, offered as a choice between one pawn moving 20 or splitting it into two 10s', () => {
     const board = buildBigTestBoard() // plenty of track room so a 20-square jump never nears home
     const red = createPlayerState('Red', board)
     const blue = createPlayerState('Blue', board)
@@ -510,20 +512,56 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     manager.submitMove(red.pieces[1], 10) // spends half the grant: track 0 -> 10
     expect(red.pieces[1].trackPosition).toBe(10)
 
-    // The remaining 10 is re-offered - excluding pieces[1] itself ("another pawn", not the same one
-    // taking both halves).
+    // The remaining 10 is re-offered to every still-eligible piece - including pieces[1] itself.
+    // Reported directly ("PERO SI CAMBIAS DE OPINION Y QUEDAN 10 POR MOVER DEBES PODER HACERLO CON
+    // EL PEON QUE QUIERAS, INCLUSO CON EL MISMO" - but if you change your mind and there are 10
+    // left to move, you should be able to do it with whichever pawn you want, even the same one):
+    // the client's own direct correction, overriding the earlier "another pawn" reading.
     expect(grants).toEqual([
       { amount: 20, reason: 'capture' },
       { amount: 10, reason: 'capture' },
     ])
-    expect(latestMoves.some((m) => m.piece === red.pieces[1])).toBe(false)
     expect(latestMoves.every((m) => m.amount === 10)).toBe(true)
     expect(latestMoves.some((m) => m.piece === red.pieces[0])).toBe(true)
+    expect(latestMoves.some((m) => m.piece === red.pieces[1])).toBe(true)
 
     manager.submitMove(red.pieces[0]) // spends the remaining 10: track 8 -> 18
     expect(red.pieces[0].trackPosition).toBe(18)
     // Nothing left owed - exactly the two grants above, no third.
     expect(grants).toHaveLength(2)
+  })
+
+  it('the same pawn that took the first 10 of a split reward can also take the remaining 10', () => {
+    // Client's own direct correction: "PERO SI CAMBIAS DE OPINION Y QUEDAN 10 POR MOVER DEBES PODER
+    // HACERLO CON EL PEON QUE QUIERAS, INCLUSO CON EL MISMO" (but if you change your mind and there
+    // are 10 left to move, you should be able to do it with whichever pawn you want, even the same
+    // one). The split is NOT "10 for this pawn, 10 for another" - it's 10, then a fresh choice of
+    // any eligible pawn for the remaining 10, the one that just moved included.
+    const board = buildBigTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 8
+
+    const dice = new ScriptedDice([3, 1, 1])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let latestMoves: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((m) => (latestMoves = m))
+
+    manager.requestRoll()
+    manager.submitMove(red.pieces[0]) // 5 -> 8, captures Blue's piece, grants 20
+
+    manager.submitMove(red.pieces[0], 10) // takes the first half itself: track 8 -> 18
+    expect(red.pieces[0].trackPosition).toBe(18)
+
+    // The remaining 10 is offered to pieces[0] again, not just to some other pawn.
+    expect(latestMoves.some((m) => m.piece === red.pieces[0] && m.amount === 10)).toBe(true)
+
+    manager.submitMove(red.pieces[0]) // takes the second half itself too: track 18 -> 28
+    expect(red.pieces[0].trackPosition).toBe(28)
   })
 
   it('capturing an opponent and taking the full 20 on one pawn resolves the whole grant in one move, no remainder', () => {

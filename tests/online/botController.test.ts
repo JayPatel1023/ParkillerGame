@@ -280,11 +280,15 @@ describe('BotController', () => {
     // The just-submitted 10-square move itself extends the bot's own busy window by
     // amount*hopDurationMs (10*2=20ms here) before it schedules the next decision - a single
     // thinkDelayMs (10ms) tick isn't enough to clear that on its own.
-    vi.advanceTimersByTime(30) // the remaining 10 fires, now offered to pieces[1] alone
-    // The split actually completes end to end - the other pawn genuinely receives its own half,
-    // not just "some move happened after the first half" (see the next test's own report for why
-    // a split that never completes is exactly the bug this whole preference exists to avoid).
-    expect(red.pieces[1].trackPosition).toBe(25)
+    vi.advanceTimersByTime(30) // the remaining 10 fires
+    // The remaining 10 is now offered to *both* pieces equally (see turnManager.ts's own
+    // PendingReward doc comment - the client's own direct correction: the same piece can take
+    // both halves too, not just "another pawn"), so either ending is correct. This one happened
+    // to land on pieces[0] taking both halves (6 -> 16 -> 26) via the plain largestAmount
+    // tie-break's own earliest-candidate rule, not a bug - the split mechanism itself still ran
+    // end to end either way (two real 10-square moves, not the full 20 in one).
+    expect(red.pieces[0].trackPosition).toBe(26)
+    expect(red.pieces[1].trackPosition).toBe(15)
 
     bots.dispose()
   })
