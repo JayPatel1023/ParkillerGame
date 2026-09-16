@@ -550,12 +550,26 @@ export function PieceMesh({
       elapsedRef.current += remainingDelta
       const t = Math.min(1, elapsedRef.current / HOP_DURATION)
       const from = hopIndexRef.current === 0 ? hopFrom : hops[hopIndexRef.current - 1]
-      const to = hops[hopIndexRef.current]
+      // Reported directly, repeatedly, as a piece "retrocediendo" (retreating) right as it
+      // settles: every hop but the last targets its own plain waypoint from `hops` (correct - see
+      // getHopWaypoints), but `hops` is built purely from board-layout indices and knows nothing
+      // about the two things restPosition (this piece's own real resting spot, below) *does*
+      // account for - a shared-square stacking offset (BoardScene's own localStackOffset, whenever
+      // this move lands on a square another piece/Parkiller already occupies) and a track-vs-
+      // corridor height change (BASE_HEIGHT vs FLAT_SURFACE_HEIGHT). Once hopIndexRef reaches
+      // hops.length, this component immediately snaps straight to restPosition (below) - so
+      // whenever the two differ, the piece used to visibly walk to the plain waypoint, then
+      // correct itself backward/sideways/up-or-down into its real slot one frame later, right as
+      // the hop finished. The last leg now walks directly into restPosition instead, so the hop
+      // itself ends exactly where the piece is about to be left sitting - no separate correction.
+      const isFinalHop = hopIndexRef.current === hops.length - 1
+      const to = isFinalHop ? restPosition : hops[hopIndexRef.current]
+      const baseY = isFinalHop ? THREE.MathUtils.lerp(BASE_HEIGHT, restPosition[1], t) : BASE_HEIGHT
 
       const x = THREE.MathUtils.lerp(from[0], to[0], t)
       const z = THREE.MathUtils.lerp(from[2], to[2], t)
       const bounce = Math.sin(t * Math.PI) * BOUNCE_HEIGHT
-      mesh.position.set(x, BASE_HEIGHT + bounce, z)
+      mesh.position.set(x, baseY + bounce, z)
 
       // See HOP_SQUASH_WINDOW's own comment: contactPulse is a brief spike at t=0/1 (squash right
       // at landing/takeoff), stretchPulse is a gentler sin(t*pi) bump through the middle,

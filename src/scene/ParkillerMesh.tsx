@@ -525,7 +525,14 @@ export function ParkillerMesh({
       elapsedRef.current += remainingDelta
       const t = Math.min(1, elapsedRef.current / HOP_DURATION)
       const from = hopIndexRef.current === 0 ? hopFrom : hops[hopIndexRef.current - 1]
-      const to = hops[hopIndexRef.current]
+      // See PieceMesh's own matching comment: `hops` is a plain board-layout walk with no idea
+      // whether this move lands on a square another piece already occupies (restPosition's own
+      // stacking offset, below) - the last leg now walks directly into restPosition instead of the
+      // raw waypoint, so there's no separate correction once hopIndexRef reaches hops.length and
+      // this component snaps straight to restPosition.
+      const isFinalHop = hopIndexRef.current === hops.length - 1
+      const to = isFinalHop ? restPosition : hops[hopIndexRef.current]
+      const baseY = isFinalHop ? THREE.MathUtils.lerp(BASE_HEIGHT, restPosition[1], t) : BASE_HEIGHT
 
       const hopYaw = yawTowards(from, to)
       if (hopYaw !== null) mesh.rotation.y = hopYaw
@@ -533,7 +540,7 @@ export function ParkillerMesh({
       const x = THREE.MathUtils.lerp(from[0], to[0], t)
       const z = THREE.MathUtils.lerp(from[2], to[2], t)
       const bounce = Math.sin(t * Math.PI) * BOUNCE_HEIGHT
-      mesh.position.set(x, BASE_HEIGHT + bounce, z)
+      mesh.position.set(x, baseY + bounce, z)
 
       if (t >= 1) {
         remainingDelta = elapsedRef.current - HOP_DURATION
