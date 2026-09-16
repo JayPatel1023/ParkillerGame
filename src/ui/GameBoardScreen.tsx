@@ -47,7 +47,7 @@ function shade(hex: string, percent: number): string {
 // (see useTurnManager.ts's own handler, which nulls pendingReward unconditionally on every move) or
 // the next roll, either of which can follow within a couple of seconds under bot play or a fast
 // human turn, well before there's been real time to actually read it. Same class of bug
-// useTurnManager.ts's own NO_MOVE_HOLD_MS already fixed for a different case (a barrier-locked
+// useTurnManager.ts's own TURN_CHANGE_HOLD_MS already fixed for a different case (a barrier-locked
 // roll) - reused as the same duration here for consistency.
 //
 // Applied to the already animation-gated visible* values (not the raw pendingReward/
@@ -274,7 +274,7 @@ export function GameBoardScreen({
   // both animations having cleared keeps everything landing in the order it visually happened.
   const animationsSettled = !moveAnimation && !parkillerAnimation
   // !turnEndingSoon: while a barrier-locked (or otherwise move-not-possible) roll's own
-  // "explanation, then advance" hold is playing out (see useTurnManager's own NO_MOVE_HOLD_MS),
+  // "explanation, then advance" hold is playing out (see useTurnManager's own TURN_CHANGE_HOLD_MS),
   // currentPlayer/pendingMoves haven't visibly changed yet, so canRoll's other conditions alone
   // would let the roller click again mid-hold - the real TurnManager has already moved on
   // internally by that point, so a second roll here would land on the wrong player's turn.
@@ -492,7 +492,7 @@ export function GameBoardScreen({
   // forfeits the turn outright used to fall straight through to the default "Dados: X y Y" line
   // with zero explanation of why nothing happened, indistinguishable from a silent freeze. Gated
   // on !rolling so it only appears once the dice themselves have finished revealing (noMoveReason
-  // is set well before that, see useTurnManager's own NO_MOVE_HOLD_MS comment for why) - showing
+  // is set well before that, see useTurnManager's own TURN_CHANGE_HOLD_MS comment for why) - showing
   // this text while the dice are still visibly spinning would read as answering a question the
   // player hasn't even been shown yet.
   const statusLine = paused

@@ -35,26 +35,32 @@ export type MoveAnimationRequest = MoveAnimationInfo
 // be enough to see and think): 450ms was only ever tuned as a dice-spin *reveal* duration, not as
 // real viewing time - and it's the one gate every hop everywhere waits on (see diceSettledAt's own
 // doc comment below), including the Parkiller's fully automatic move, which needs no player click
-// at all and so had nothing else slowing it down. Bumped to the client's own stated minimum, then
-// bumped again directly ("순서대로 움직일때 한말씩 시간차이를 20초를 유지하게해달라 현재는
-// 너무빨리 이어지는것으로하여 정확히 알수가없다" - keep a 20-second gap between each piece's move
-// when moving in sequence, it's currently too fast to follow precisely) - kept in sync with
-// botController.ts's own DICE_SPIN_MS and RemoteTurnManager.ts's REMOTE_MOVE_PACING_MS, which must
-// change together (see each of their own matching comments).
-const DICE_SPIN_MS = 20000
+// at all and so had nothing else slowing it down. Bumped to the client's own stated minimum.
+//
+// Deliberately NOT the same knob as the gap between two different players' own turns - corrected
+// directly after a first attempt conflated the two ("이영상에서와같이... 주사위가 돌아가는시간을
+// 길게 해달라는의미는전혀없다... 빨간팀이 움직인다음 파란팀이되였다고하자 이때 간격차이, 이간격차를
+// 10초로 달라는것이다" - I never meant to make the dice-spin time itself longer, it should spin a
+// normal length; what I meant is the gap specifically when it hands off from one team to a
+// different one). See TURN_CHANGE_HOLD_MS below for that separate knob - kept in sync with
+// botController.ts's own DICE_SPIN_MS, which must change together with this one (see its own
+// matching comment).
+const DICE_SPIN_MS = 2000
 
-// Reported directly (Carlos: "Cuando hay una barrera no se quieren mover ninguno de los dos
-// peones... no ha manera" - when there's a barrier neither pawn wants to move, no way out): a
-// barrier-forfeited roll used to look identical to a silent freeze, because moveNotPossible and
-// the turnStarted that immediately follows it (see finishDiceUsage/endTurn in turnManager.ts) both
-// fire synchronously within the same call to requestRoll() - React 18 batches every state update
-// from that whole synchronous chain into one commit, so a message set by moveNotPossible's own
-// handler was overwritten by turnStarted's handler before a single frame ever rendered it. Rather
-// than changing turnStarted's own timing everywhere (every other turn-ending path - a normal move,
-// doubles' extra turn, third-double-forfeit - already reads fine with no delay at all), only the
-// specific turnStarted that immediately follows a same-tick moveNotPossible gets held back, for
-// long enough to actually read the explanation, via sawNoMoveRef below.
-const NO_MOVE_HOLD_MS = 2000
+// See DICE_SPIN_MS's own doc comment for the direct correction this came from - specifically the
+// pause between one player's turn ending and a *different* player's turn becoming visible/rollable
+// (never applied when a double just grants the same player another roll - see the handler below).
+// Also now covers what NO_MOVE_HOLD_MS used to handle on its own (a barrier-forfeited roll that
+// used to look identical to a silent freeze, because moveNotPossible and the turnStarted that
+// immediately follows it - see finishDiceUsage/endTurn in turnManager.ts - both fire synchronously
+// within the same call to requestRoll(), batched into one React commit) - that was always a
+// *subset* of "handing off to a different player," just with a shorter, separately-tuned hold;
+// unified under this one constant since every genuine handoff now gets held the same way
+// regardless of whether a no-move message needs to stay readable through it too. Kept in sync with
+// botController.ts's own TURN_CHANGE_HOLD_MS, which must change together with this one (see its
+// own matching comment) - otherwise a bot could roll for its own turn before this hook's own hold
+// here finishes revealing it, desyncing the dice/board from what the screen still shows.
+const TURN_CHANGE_HOLD_MS = 10000
 
 export interface MoveLogEntry {
   id: number
@@ -129,13 +135,11 @@ export function useTurnManager(turnManager: TurnManagerLike) {
   const [eliminatedByDoubles, setEliminatedByDoubles] = useState<Piece | null>(null)
   const [pendingReward, setPendingReward] = useState<RewardGrant | null>(null)
   const [forfeitedReward, setForfeitedReward] = useState<RewardGrant | null>(null)
-  // See NO_MOVE_HOLD_MS's own comment - noMoveReason/turnEndingSoon are what the "no move
-  // possible" message and the disabled-until-it-clears roll button are driven from; sawNoMoveRef/
-  // deferredTurnTimeoutRef are the plumbing that holds turnStarted back only when it immediately
-  // follows a same-tick moveNotPossible.
+  // See TURN_CHANGE_HOLD_MS's own comment - noMoveReason/turnEndingSoon are what the "no move
+  // possible" message and the disabled-until-it-clears roll button are driven from;
+  // deferredTurnTimeoutRef is the plumbing that holds a genuine turn handoff back for the reveal.
   const [noMoveReason, setNoMoveReason] = useState<MoveNotPossibleReason | null>(null)
   const [turnEndingSoon, setTurnEndingSoon] = useState(false)
-  const sawNoMoveRef = useRef(false)
   const deferredTurnTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Stale-closure workaround for the turnStarted handler below (this effect only ever runs once
   // per turnManager instance, so reading the `currentPlayer` state variable directly inside it
@@ -157,12 +161,11 @@ export function useTurnManager(turnManager: TurnManagerLike) {
         // turn fires this exact same same-tick moveNotPossible -> turnStarted sequence whenever
         // that roll's own dice have nothing to move (see finishDiceUsage/endTurn in
         // turnManager.ts) - but `player` here is the SAME player continuing, not a different one to
-        // hold this reveal for. NO_MOVE_HOLD_MS's own delay only ever made sense for an actual turn
-        // handoff (see its own comment) - applying it here too disabled the roll button for
-        // NO_MOVE_HOLD_MS on a roll the player had already earned back, reading as "the game just
-        // won't let me roll again."
-        if (sawNoMoveRef.current && player.color !== currentPlayerColorRef.current) {
-          sawNoMoveRef.current = false
+        // hold this reveal for. TURN_CHANGE_HOLD_MS's own delay only ever makes sense for an actual
+        // turn handoff (see its own comment) - applying it here too would disable the roll button
+        // on a roll the player had already earned back, reading as "the game just won't let me roll
+        // again."
+        if (player.color !== currentPlayerColorRef.current) {
           setTurnEndingSoon(true)
           if (deferredTurnTimeoutRef.current) clearTimeout(deferredTurnTimeoutRef.current)
           deferredTurnTimeoutRef.current = setTimeout(() => {
@@ -173,10 +176,9 @@ export function useTurnManager(turnManager: TurnManagerLike) {
             setLastRoll(null)
             setNoMoveReason(null)
             setTurnEndingSoon(false)
-          }, NO_MOVE_HOLD_MS)
+          }, TURN_CHANGE_HOLD_MS)
           return
         }
-        sawNoMoveRef.current = false
         currentPlayerColorRef.current = player.color
         setCurrentPlayer(player)
         setPendingMoves([])
@@ -235,7 +237,6 @@ export function useTurnManager(turnManager: TurnManagerLike) {
       turnManager.moveNotPossible.on((reason) => {
         setPendingMoves([])
         setNoMoveReason(reason)
-        sawNoMoveRef.current = true
       }),
       turnManager.moveApplied.on((result) => {
         setPendingMoves([])

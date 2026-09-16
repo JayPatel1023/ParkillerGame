@@ -159,9 +159,9 @@ describe('HostTurnManagerBridge + RemoteTurnManager convergence', () => {
 
     host.bridge.submitMove(moves[0].piece)
 
-    // Generous - well past REMOTE_MOVE_PACING_MS (20000ms per message now), draining however many
-    // broadcasts this move chain actually produced.
-    vi.advanceTimersByTime(80000)
+    // Generous - well past REMOTE_MOVE_PACING_MS, draining however many broadcasts this move
+    // chain actually produced.
+    vi.advanceTimersByTime(20000)
     expect(snapshot(remote.players)).toEqual(snapshot(host.players))
   })
 
@@ -202,10 +202,9 @@ describe('HostTurnManagerBridge + RemoteTurnManager convergence', () => {
     // moveNotPossible fires instead. That's fine - convergence is what's being tested, not that a
     // move actually happened. Assert state matches either way.
 
-    // Generous - well past REMOTE_MOVE_PACING_MS (20000ms per message now), draining every
-    // broadcast this whole sequence (Red's exit, Red's second move, and Blue's own roll) actually
-    // produced.
-    vi.advanceTimersByTime(80000)
+    // Generous - well past REMOTE_MOVE_PACING_MS, draining every broadcast this whole sequence
+    // (Red's exit, Red's second move, and Blue's own roll) actually produced.
+    vi.advanceTimersByTime(20000)
     expect(snapshot(remote.players)).toEqual(snapshot(host.players))
   })
 
@@ -256,10 +255,11 @@ describe('HostTurnManagerBridge + RemoteTurnManager convergence', () => {
     vi.advanceTimersByTime(50) // drains the queue's first message (wait=0): Red's own diceRolled replays
     expect(rollCount).toBe(1)
 
-    // Just short of the move's own correctly-budgeted window (REMOTE_MOVE_PACING_MS=20000 to start
-    // replaying the move, then max(20000, 10*480=4800)=20000 more before the next message may
-    // replay - 40000ms total).
-    vi.advanceTimersByTime(40000 - 50 - 50)
+    // Just short of the move's own correctly-budgeted window (REMOTE_MOVE_PACING_MS=2000 to start
+    // replaying the move, then max(2000, 10*480=4800)=4800 more before the next message may
+    // replay - 6800ms total). Before the fix, a flat 2000ms would have let Blue's own roll replay
+    // by t=4000ms, well before this checkpoint.
+    vi.advanceTimersByTime(6800 - 50 - 50)
     expect(rollCount).toBe(1)
     expect(remote.players[0].pieces[0].trackPosition).toBe(10) // the long move itself did replay by now
 

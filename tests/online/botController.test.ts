@@ -72,7 +72,9 @@ describe('BotController', () => {
     const transport = network.createTransport(MASTER_ACTOR)
     // No actorColors entries at all - both seats are bots, nobody is a connected human actor.
     const host = new HostTurnManagerBridge(inner, dice, players, transport, new Map<number, PieceColor>())
-    const bots = new BotController(host, new Set<PieceColor>(['Red', 'Blue']), 10, 2, 2)
+    // turnChangeHoldMs=0 - this test checks autonomous play over many quick rounds, not the
+    // separate turn-handoff hold (TURN_CHANGE_HOLD_MS), which would dwarf its own short time budget.
+    const bots = new BotController(host, new Set<PieceColor>(['Red', 'Blue']), 10, 2, 2, 0)
 
     // Tracked via the moveApplied event, not a final-state snapshot: real gameplay can send an
     // exited piece straight back to the yard again (captured, or bounced by an opposing Parkiller -
@@ -652,7 +654,10 @@ describe('BotController', () => {
     const hopDurationMs = 50
     // Only Blue is a bot - Red's move below is submitted directly against `inner`, the same way a
     // real human's own click reaches the underlying TurnManager, never through submitMoveForBot.
-    const bots = new BotController(host, new Set<PieceColor>(['Blue']), thinkDelayMs, hopDurationMs, 2)
+    // turnChangeHoldMs=0 - this test isolates busyUntilMs's own hop-duration accounting for a
+    // human's move from the separate turn-handoff hold (TURN_CHANGE_HOLD_MS), which would otherwise
+    // dwarf the exact window this test means to check.
+    const bots = new BotController(host, new Set<PieceColor>(['Blue']), thinkDelayMs, hopDurationMs, 2, 0)
 
     let rollCount = 0
     inner.diceRolled.on(() => rollCount++)
@@ -675,6 +680,49 @@ describe('BotController', () => {
     // Past it now - Blue's roll should fire.
     vi.advanceTimersByTime(60)
     expect(rollCount).toBe(2)
+
+    bots.dispose()
+  })
+
+  // Corrected directly ("이영상에서와같이... 주사위가 돌아가는시간을 길게 해달라는의미는전혀없다...
+  // 빨간팀이 움직인다음 파란팀이되였다고하자 이때 간격차이, 이간격차를 10초로 달라는것이다" - never
+  // meant to lengthen the dice-spin time itself; the actual ask is the gap specifically when a
+  // *different* player's turn starts, e.g. red moves, then it becomes blue's turn - that gap should
+  // be 10 seconds): TURN_CHANGE_HOLD_MS holds a genuine handoff back by this extra stretch, but
+  // never a same-color double continuing its own bonus turn.
+  it('holds a genuine handoff to a different bot color back by turnChangeHoldMs, but never a same-color bonus turn', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 0
+    // dieA=3/dieB=4: sum=7, ends Red's turn in one move (not a double, no bonus turn) - Blue's turn
+    // starts next, a genuine handoff. Second triple is Blue's own bot-triggered roll.
+    const dice = new RecordingDice(new ScriptedDice([3, 4, 1, 2, 2, 1]))
+    const inner = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+    const network = new FakeRoomNetwork(MASTER_ACTOR)
+    const transport = network.createTransport(MASTER_ACTOR)
+    const host = new HostTurnManagerBridge(inner, dice, [red, blue], transport, new Map<number, PieceColor>())
+    const thinkDelayMs = 10
+    const hopDurationMs = 2
+    const turnChangeHoldMs = 500
+    const bots = new BotController(host, new Set<PieceColor>(['Red', 'Blue']), thinkDelayMs, hopDurationMs, 2, turnChangeHoldMs)
+
+    let rollCount = 0
+    inner.diceRolled.on(() => rollCount++)
+
+    host.start()
+    vi.advanceTimersByTime(thinkDelayMs) // Red's own roll (bot-driven)
+    expect(rollCount).toBe(1)
+    vi.advanceTimersByTime(thinkDelayMs) // Red's own move decision - spends the sum, ends its turn
+    expect(host.currentPlayer.color).toBe('Blue')
+
+    // Short move (7*2=14ms of hop time) - well before the *real* gate here, turnChangeHoldMs.
+    vi.advanceTimersByTime(thinkDelayMs + turnChangeHoldMs - 1)
+    expect(rollCount).toBe(1) // Blue still held back
+
+    vi.advanceTimersByTime(2)
+    expect(rollCount).toBe(2) // Blue's roll fires once the full handoff hold has passed
 
     bots.dispose()
   })

@@ -58,11 +58,9 @@ const BOT_THINK_DELAY_MS = 2400
 // the next one - this class has no direct access to the scene layer's own timing constants
 // (gameFlow/ and scene/ are peers in this project's own layering, neither depending on the
 // other), so the values below are duplicated from there and must be kept in sync: DICE_SPIN_MS
-// matches useTurnManager.ts's own constant of the same name (bumped to 20000ms there directly in
-// response to "keep a 20-second gap between each piece's move when moving in sequence" - see that
-// file's own matching comment), HOP_DURATION_MS matches PieceMesh.tsx's HOP_DURATION (in seconds,
-// *1000 here).
-const DICE_SPIN_MS = 20000
+// matches useTurnManager.ts's own constant of the same name, HOP_DURATION_MS matches
+// PieceMesh.tsx's HOP_DURATION (in seconds, *1000 here).
+const DICE_SPIN_MS = 2000
 // Kept in sync with PieceMesh.tsx's own HOP_DURATION (0.48s, *1000 here) - reported directly
 // ("말속도가 너무빠르므로 느리게 해달라" - the piece speed is too fast, slow it down): a slower hop
 // there with this constant left stale would under-count real animation time, reopening the exact
@@ -102,10 +100,21 @@ const CAPTURE_RETURN_HOPS = 3
 // presentation-layer state, read from useTurnManager's own events, not this session's narrow
 // BotDrivableSession interface). Without an extra allowance here, the bot's own next roll or move
 // could fire while that celebration was still only partway through playing. Long enough to read as
-// "a moment to look," short of the human-turn-specific 20s hold (this is about the bot's own pace
-// staying legible, not matching a human's own much longer reveal window - the client's own separate
-// "al bot dejale 2 o 3 segundos nada mas" already drew that same line for reveals in general).
+// "a moment to look," short of the human-turn-specific TURN_CHANGE_HOLD_MS below (this is about the
+// bot's own pace staying legible, not matching a human's own much longer reveal window - the
+// client's own separate "al bot dejale 2 o 3 segundos nada mas" already drew that same line for
+// reveals in general).
 const CELEBRATION_HOLD_MS = 2000
+
+// Matches useTurnManager.ts's own constant of the same name - corrected directly ("이영상에서와같이
+// ... 주사위가 돌아가는시간을 길게 해달라는의미는전혀없다 ... 빨간팀이 움직인다음 파란팀이되였다고
+// 하자 이때 간격차이, 이간격차를 10초로 달라는것이다" - never meant to lengthen the dice-spin time
+// itself, only the gap when a *different* player's turn actually starts) after an earlier attempt
+// conflated the two by bumping DICE_SPIN_MS instead. Applied here so this class's own scheduling of
+// the next bot's roll never gets ahead of useTurnManager.ts's own reveal for that same handoff (see
+// its own matching comment for why the two have to move together) - a bot rolling before that
+// hook's own hold clears would desync the dice/board from what the screen still shows.
+const TURN_CHANGE_HOLD_MS = 10000
 
 // Same minimal pub-sub as turnManager.ts's own EventEmitter (not exported from there, so
 // duplicated here rather than reaching into a peer module for an implementation detail - see this
@@ -168,6 +177,7 @@ export class BotController {
   private readonly thinkDelayMs: number
   private readonly hopDurationMs: number
   private readonly diceSpinMs: number
+  private readonly turnChangeHoldMs: number
   private readonly unsubscribers: Array<() => void>
   private readonly pendingTimeouts = new Map<ReturnType<typeof setTimeout>, () => void>()
   // Real time (Date.now()-based, so it advances correctly under vitest's fake timers too) before
@@ -184,6 +194,11 @@ export class BotController {
   // isn't itself frozen) can't sneak a running timer past it either.
   private paused = false
   private frozenActions: Array<() => void> = []
+  // See TURN_CHANGE_HOLD_MS's own doc comment - tracks whichever color last had a turn (regardless
+  // of bot/human), so onTurnStarted can tell a genuine handoff to a *different* player from a
+  // double's own bonus turn continuing for the same one. Null only before the very first
+  // turnStarted this instance ever sees, so that first turn is never mistaken for a handoff.
+  private lastTurnColor: PieceColor | null = null
   // Reported directly ("봇이게임할때 말을 이동할차례가되여서 이동시킬때에도 자기 차례를 알리는 효과를
   // 넣어달라" - add the same turn-announcing effect for bot moves too): a human's own choosable
   // piece gets a whole flashy ring/glow/beam indicator (PieceMesh.tsx) the instant it becomes
@@ -202,11 +217,13 @@ export class BotController {
     thinkDelayMs = BOT_THINK_DELAY_MS,
     hopDurationMs = HOP_DURATION_MS,
     diceSpinMs = DICE_SPIN_MS,
+    turnChangeHoldMs = TURN_CHANGE_HOLD_MS,
   ) {
     this.session = session
     this.botColors = botColors
     this.thinkDelayMs = thinkDelayMs
     this.hopDurationMs = hopDurationMs
+    this.turnChangeHoldMs = turnChangeHoldMs
     this.diceSpinMs = diceSpinMs
     this.unsubscribers = [
       session.turnStarted.on((player) => this.onTurnStarted(player.color)),
@@ -253,8 +270,15 @@ export class BotController {
   }
 
   private onTurnStarted(color: PieceColor): void {
+    // See TURN_CHANGE_HOLD_MS's own doc comment - a genuine handoff to a different player (never a
+    // double's own bonus turn continuing for the same one) holds this bot back the same extra
+    // stretch useTurnManager.ts holds its own reveal back for, so neither side gets ahead of the
+    // other.
+    const isHandoffToNewPlayer = this.lastTurnColor !== null && this.lastTurnColor !== color
+    this.lastTurnColor = color
     if (!this.botColors.has(color)) return
-    this.scheduleRespectingBusy(this.thinkDelayMs, () => {
+    const extraHoldMs = isHandoffToNewPlayer ? this.turnChangeHoldMs : 0
+    this.scheduleRespectingBusy(this.thinkDelayMs + extraHoldMs, () => {
       if (this.session.currentPlayer.color !== color) return // stale - state moved on before this fired
       this.session.rollForBot()
     })

@@ -34,12 +34,15 @@ import type { RoomTransport } from './roomTransport'
 // PieceMesh.tsx/piecePosition.ts (same reasoning as botController.ts's own matching constants -
 // this file can't import the scene layer) and must be kept in sync with them.
 //
-// Bumped from 2000 to 20000 directly ("순서대로 움직일때 한말씩 시간차이를 20초를 유지하게해달라
-// 현재는 너무빨리 이어지는것으로하여 정확히 알수가없다" - keep a 20-second gap between each piece's
-// move when moving in sequence, it's currently too fast to follow precisely) - kept in sync with
-// useTurnManager.ts's own DICE_SPIN_MS and botController.ts's own DICE_SPIN_MS, which must change
-// together (see each of their own matching comments).
-const REMOTE_MOVE_PACING_MS = 20000
+// This constant itself is scoped to *within-roll* replay pacing (a double's second die, a reward
+// chain) - the gap specifically when a turn hands off to a *different* player is a separate knob,
+// TURN_CHANGE_HOLD_MS, applied by useTurnManager.ts's own turnStarted handler regardless of which
+// TurnManagerLike implementation feeds it (this one included) - no separate handling needed here
+// for that case. An earlier attempt bumped this constant itself to 20000 in response to a request
+// for that turn-handoff gap, conflating the two; corrected directly ("주사위가 돌아가는시간을 길게
+// 해달라는의미는전혀없다" - never meant to lengthen the dice/move-reveal timing itself) back to its
+// original floor.
+const REMOTE_MOVE_PACING_MS = 2000
 const HOP_DURATION_MS = 480
 const CAPTURE_RETURN_HOPS = 3
 
