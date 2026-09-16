@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { BoardData } from '../src/core/board/boardData'
 import { createPlayerState, hasWon } from '../src/core/gameFlow/playerState'
 import { createPiece } from '../src/core/pieces/piece'
-import { applyMove, getValidMoves, resolveBarrierElimination, wouldCapture } from '../src/core/rules/parchisRules'
+import { applyMove, getValidMoves, ownBarrierTrackPosition, ownCorridorBarrierPosition, resolveBarrierElimination, wouldCapture } from '../src/core/rules/parchisRules'
 import { defaultRuleSettings } from '../src/core/rules/ruleSettings'
 
 function buildTestBoard(): BoardData {
@@ -699,6 +699,75 @@ describe('parchisRules', () => {
       expect(red.pieces[0].trackPosition).toBe(0)
       expect(red.parkiller.trackPosition).toBe(0) // untouched
       // Exactly 2 occupants remain (Red's new pawn + Red's own Parkiller) - never three.
+    })
+  })
+
+  // Reported directly ("LAS BARRERAS SEAN LAS QUE SEAN FORMADAS POR QUIEN SEA DEBEN DE ABRIRSE SI
+  // SE SACA UN DOBLE POR ALGUNO DE LOS COMPONENTES DE LA MISMA" - barriers, whatever they are and
+  // whoever forms them, must open if a double is rolled by one of their own components): these two
+  // functions are what turnManager.ts's own double-forces-open obligation (PK9.1) reads to decide
+  // whether a barrier exists at all - a gap here would silently exempt whichever combination it
+  // missed from ever being forced open, with no other check catching it. ownBarrierTrackPosition's
+  // own doc comment already explains why a pawn+own-Parkiller pair must count exactly the same as
+  // two pawns; these tests pin that down directly against the detector itself, not just indirectly
+  // through a full TurnManager roll.
+  describe('ownBarrierTrackPosition / ownCorridorBarrierPosition (PK9.1 - which barriers a double must open)', () => {
+    it('detects a plain two-pawn barrier on the track', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      red.pieces[0].state = 'OnTrack'
+      red.pieces[0].trackPosition = 7
+      red.pieces[1].state = 'OnTrack'
+      red.pieces[1].trackPosition = 7
+
+      expect(ownBarrierTrackPosition(red)).toBe(7)
+    })
+
+    it('detects a pawn sharing a track square with the player own Parkiller, same as two pawns', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      red.pieces[0].state = 'OnTrack'
+      red.pieces[0].trackPosition = 7
+      red.parkiller.corridorPosition = red.parkiller.corridorLength
+      red.parkiller.trackPosition = 7
+
+      expect(ownBarrierTrackPosition(red)).toBe(7)
+    })
+
+    it('detects a 3-stack (two pawns plus the player own Parkiller) as still needing to open', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      red.pieces[0].state = 'OnTrack'
+      red.pieces[0].trackPosition = 7
+      red.pieces[1].state = 'OnTrack'
+      red.pieces[1].trackPosition = 7
+      red.parkiller.corridorPosition = red.parkiller.corridorLength
+      red.parkiller.trackPosition = 7
+
+      expect(ownBarrierTrackPosition(red)).toBe(7)
+    })
+
+    it('does not flag a lone pawn sharing a square with a foreign Parkiller as the player own barrier', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+      red.pieces[0].state = 'OnTrack'
+      red.pieces[0].trackPosition = 7
+      blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+      blue.parkiller.trackPosition = 7
+
+      expect(ownBarrierTrackPosition(red)).toBeNull()
+    })
+
+    it('detects a plain two-pawn barrier in the home corridor', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      red.pieces[0].state = 'InHomeCorridor'
+      red.pieces[0].corridorPosition = 1
+      red.pieces[1].state = 'InHomeCorridor'
+      red.pieces[1].corridorPosition = 1
+
+      expect(ownCorridorBarrierPosition(red)).toBe(1)
     })
   })
 

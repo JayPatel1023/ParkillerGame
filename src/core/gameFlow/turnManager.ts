@@ -752,6 +752,19 @@ export class TurnManager {
     // just landed on - that would just recreate the barrier this same obligation forced open a
     // moment ago. Only that one specific (piece, destination) pairing is excluded - the piece is
     // still completely free to land anywhere else.
+    //
+    // Reported directly ("1+1 EN CAMINO DE LLEGADA SI ESTAN PARA LLEGAR, DEBEN ENTRAR LOS DOS" -
+    // with double 1, two pawns each one square from finishing must both be able to finish):
+    // m.kind !== 'FinishMove' below - every FinishMove uses the sentinel resultingTrackPosition=-1/
+    // resultingCorridorPosition=<lane's own final index> (see parchisRules.ts's own move-building),
+    // so two DIFFERENT pieces in the same lane both finishing via the barrier-breaking double's
+    // other half produce numerically identical resultingTrackPosition/resultingCorridorPosition
+    // values purely because they share a lane, not because they'd share a square - this filter was
+    // reading that coincidence as "recreating the barrier" and silently dropping the second pawn's
+    // own genuine FinishMove. A Finished piece can never be part of a barrier at all (see
+    // ownCorridorBarrierPosition's own doc comment - the final slot is deliberately excluded from
+    // barrier counting), so no FinishMove can ever actually recreate one; excluding this move kind
+    // outright is correct, not just a narrow patch for the double-1 case.
     if (this.brokenBarrierThisRoll) {
       const broken = this.brokenBarrierThisRoll
       options = options.filter((m) => {
@@ -759,7 +772,7 @@ export class TurnManager {
           broken.kind === 'track'
             ? m.piece.state === 'OnTrack' && m.piece.trackPosition === broken.position
             : m.piece.state === 'InHomeCorridor' && m.piece.corridorPosition === broken.position
-        return !(sameOrigin && m.resultingTrackPosition === broken.resultingTrackPosition && m.resultingCorridorPosition === broken.resultingCorridorPosition)
+        return !(m.kind !== 'FinishMove' && sameOrigin && m.resultingTrackPosition === broken.resultingTrackPosition && m.resultingCorridorPosition === broken.resultingCorridorPosition)
       })
     }
 

@@ -983,6 +983,36 @@ describe('TurnManager - mandatory barrier removal on doubles (PK9.1)', () => {
     expect(offered.some((m) => m.piece === red.pieces[2] && m.resultingTrackPosition === 3)).toBe(true)
   })
 
+  // Reported directly ("1+1 EN CAMINO DE LLEGADA SI ESTAN PARA LLEGAR, DEBEN ENTRAR LOS DOS" - with
+  // double 1, two pawns each one square from finishing must both be able to finish): the "don't
+  // recreate the barrier with the double's other half" exclusion just above matches moves by their
+  // resultingTrackPosition/resultingCorridorPosition - but every FinishMove in the same lane shares
+  // the exact same sentinel resulting position (see parchisRules.ts's own move-building), regardless
+  // of which piece is finishing. Two DIFFERENT pawns both breaking out of the same corridor barrier
+  // by finishing were colliding on that coincidence and the second pawn's own genuine FinishMove was
+  // silently dropped, even though finishing can never actually recreate a barrier (a Finished piece
+  // isn't part of any square's own occupant count - see ownCorridorBarrierPosition's own comment).
+  it('both pawns of a barrier can finish off the same double when each is exactly one square from home', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'InHomeCorridor'
+    red.pieces[0].corridorPosition = 4 // one square from the finish slot (index 5) - own corridor barrier with pieces[1]
+    red.pieces[1].state = 'InHomeCorridor'
+    red.pieces[1].corridorPosition = 4
+
+    const dice = new ScriptedDice([1, 1, 1])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    manager.requestRoll()
+    manager.submitMove(red.pieces[0]) // breaks the barrier by finishing
+    expect(red.pieces[0].state).toBe('Finished')
+
+    const secondResult = manager.submitMove(red.pieces[1])
+    expect(secondResult).not.toBeNull()
+    expect(red.pieces[1].state).toBe('Finished')
+  })
+
   // Reported directly by the client, with a chat transcript: "cuando la barrera se crea con una
   // tirada no hay obligación de abrirla con el valor del otro dado... tiene que haber la opción de
   // mover otro peón" (when the barrier is created by this same roll, there's no obligation to open
