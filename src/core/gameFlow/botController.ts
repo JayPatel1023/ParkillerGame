@@ -70,6 +70,25 @@ const DICE_SPIN_MS = 2000
 // neighboring comment above).
 const HOP_DURATION_MS = 480
 
+// Kept in sync with piecePosition.ts's own CAPTURE_RETURN_HOPS (3) - a captured pawn (PC3/PC4,
+// BoardScene.tsx's own captureFlights) or a self-eliminated mover (PK5, BoardScene.tsx's own
+// animatingHopData eliminatedByParkillerAt branch) plays a few extra "flung home" bounce hops
+// beyond the plain amount-hop walk this class otherwise budgets for below - only the *mover's own*
+// self-elimination case actually needs the extra accounting this constant drives (see
+// extraBounceMs' own doc comment for why an ordinary captured pawn's bounce is already covered
+// elsewhere, via CELEBRATION_HOLD_MS). Missing this exact accounting for self-elimination is the
+// root cause of a real reported bug, found by tracing this class's own busyUntilMs math against
+// the scene layer's actual playback time: whenever this bounce was still genuinely playing but
+// busyUntilMs had already elapsed (having never budgeted for it), the *next* turn's roll fired
+// mid-bounce - and BoardScene/PieceMesh's shared diceSettledAt gate (see useTurnManager.ts's own
+// doc comment, re-armed by that new roll) snapped the still-animating piece straight back to its
+// own hop's starting square until the new roll's reveal passed, then resumed exactly where it left
+// off. That reads as "the pawn that just moved reverts to its original position for a few seconds
+// while the next player's dice are rolling, then catches up" - reported directly, separately from
+// (and after) this file's own capture/celebration timing already covered most of this class's
+// other timing gaps.
+const CAPTURE_RETURN_HOPS = 3
+
 // Requested directly ("EL BOT TIENE QUE HACER ETAPAS EN SUS MOVIMIENTOS PARA QUE QUEDEN BIEN
 // MARCADOS... LA ENTRADA DE UN PEON EN LA META, LA ELIMINACION DE UN PEON, LA ELIMINACION DE UN
 // PARKI.... DEBEN SER FESTEJADAS Y CADA MOVIMIENTO SEPARADO POR UNOS SEGUNDOS UNOS DE OTROS. PARA
@@ -221,7 +240,13 @@ export class BotController {
       // comment on why it has to run *before* submitMoveForBot, not after).
       session.moveApplied.on((result) => {
         if (this.botColors.has(result.movedPiece.color)) return
-        this.markBusy(result.amount * this.hopDurationMs)
+        // See extraBounceMs' own doc comment (why only self-elimination, not an ordinary capture,
+        // needs extra accounting here) - a human move that self-eliminates (PK5) plays the same
+        // extra bounce-home hops a bot's own move does, and this is the only call site for a
+        // *human's* move (a bot's own is covered where it's chosen, above/below), read directly off
+        // the already-resolved MoveResult instead of predicted from a MoveOption.
+        const extraBounceMs = result.eliminatedByParkiller ? CAPTURE_RETURN_HOPS * this.hopDurationMs : 0
+        this.markBusy(result.amount * this.hopDurationMs + extraBounceMs)
       }),
       session.moveChoicesReady.on((moves) => this.onMoveChoicesReady(moves)),
     ]
@@ -261,7 +286,7 @@ export class BotController {
           this.pieceHighlighted.emit(null)
           return
         }
-        this.markBusy(chosen.amount * this.hopDurationMs)
+        this.markBusy(chosen.amount * this.hopDurationMs + this.extraBounceMs(chosen))
         this.pieceHighlighted.emit(null)
         this.session.submitMoveForBot(chosen.piece, chosen.amount)
       })
@@ -452,7 +477,7 @@ export class BotController {
       // covers that hop's *animation* time, but has no way to know a Parki actually died from it;
       // BotDrivableSession's narrow interface has no event for that at all.
       const triggersCelebration = chosen.kind === 'FinishMove' || wouldCapture(this.session.board, chosen, this.session.players, true)
-      this.markBusy(chosen.amount * this.hopDurationMs + (triggersCelebration ? CELEBRATION_HOLD_MS : 0))
+      this.markBusy(chosen.amount * this.hopDurationMs + this.extraBounceMs(chosen) + (triggersCelebration ? CELEBRATION_HOLD_MS : 0))
       this.pieceHighlighted.emit(null)
       this.session.submitMoveForBot(chosen.piece, chosen.amount)
     })
@@ -541,6 +566,21 @@ export class BotController {
 
   private markBusy(durationMs: number): void {
     this.busyUntilMs = Date.now() + durationMs
+  }
+
+  // See CAPTURE_RETURN_HOPS' own doc comment - the extra wall-clock hop time (beyond this move's
+  // own amount-hop walk) a self-eliminated mover's own bounce (PK5) adds, predicted from the same
+  // MoveOption this class already has *before* submitting it via wouldWalkIntoUnprotectedParki (a
+  // pre-existing helper already used elsewhere in this file for move selection, not new logic).
+  // Deliberately doesn't also cover an ordinary captured-*pawn*'s own bounce-home here - every call
+  // site below that can trigger one already adds the much larger, fixed CELEBRATION_HOLD_MS
+  // (2000ms) on top for the exact same real-world case, comfortably covering this bounce's real
+  // 3*HOP_DURATION (~1440ms) with margin to spare; adding both would double up for no real benefit
+  // and, confirmed directly, throws off tests/online/botController.test.ts's own reward-timing
+  // tests, which advance fake timers by an exact hand-computed duration tuned against
+  // CELEBRATION_HOLD_MS alone.
+  private extraBounceMs(move: MoveOption): number {
+    return this.wouldWalkIntoUnprotectedParki(move) ? CAPTURE_RETURN_HOPS * this.hopDurationMs : 0
   }
 
   // Waits at least `baseDelayMs` (the normal "thinking" pause) but never less than whatever's
