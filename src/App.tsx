@@ -44,8 +44,66 @@ const WaypointEditor = lazy(() => import('./tools/WaypointEditor'))
 const ComponentPreview = lazy(() => import('./tools/ComponentPreview'))
 const ParkillerEditor = lazy(() => import('./tools/ParkillerEditor'))
 const OnlineLobbyScreen = lazy(() => import('./ui/OnlineLobbyScreen'))
+// lazy() here (not a plain top-level import) keeps three.js/@react-three/fiber out of this file's
+// own eager main chunk - see PlayerCountSelector.tsx's own former comment on this exact bug for
+// why that matters (App.tsx itself is never lazy-loaded, so anything it imports statically ships
+// in the very first bundle every visitor downloads). Only actually fetched once LocalSetupBackground
+// below is first rendered, same timing this already had when the two setup screens each did this
+// import themselves.
+const StartScreenBackground = lazy(() => import('./scene/StartScreenBackground').then((m) => ({ default: m.StartScreenBackground })))
 
 type Screen = 'start' | 'selectCount' | 'selectColor' | 'game'
+
+// Root-caused during a Milestone-1 stability audit ("SIN TABLERO" reports, live-reproduced via
+// Playwright as a genuine "THREE.WebGLRenderer: Context Lost." during ordinary landing ->
+// local-mode -> player-count -> color-select -> board navigation, no stress involved): this
+// screen and 'selectColor' each used to mount their own fully independent
+// <StartScreenBackground/> (PlayerCountSelector.tsx/ColorSelector.tsx, before this fix) - exactly
+// the same per-phase-canvas pattern already identified and fixed in OnlineLobbyScreen.tsx (see its
+// own "keep one persistent background canvas across the online lobby flow" commit) for its own
+// menu/connecting/lobby phases, just never carried over to this analogous local-setup flow.
+//
+// Concretely, not just stylistically, wrong: @react-three/fiber's own Canvas unmount
+// (node_modules/@react-three/fiber's unmountComponentAtNode) defers the actual GPU-context
+// release - gl.forceContextLoss() plus disposing the renderer/scene - inside a bare
+// `setTimeout(..., 500)`, not synchronously on unmount. Two real screen transitions happen back to
+// back in this local flow (count -> color, then color -> game), each one replacing one <Canvas>
+// with another in the same React commit (onConfirm's setScreen fires immediately) - well under
+// that 500ms window on any ordinary navigation, let alone a fast automated one. Every such
+// transition therefore had a real WebGL context sitting alive-but-undisposed while a brand new one
+// was already being requested from the browser/GPU driver on top of it, exactly the kind of
+// context-count pressure that produces a genuine 'webglcontextlost' event with no stress involved.
+//
+// One shared mount now (this wrapper), rendered across both 'selectCount' and 'selectColor' so the
+// same <Canvas>/WebGLRenderer survives that entire transition - unmounted only once 'game' is
+// reached (BoardScene owns its own separate canvas by then) or back to 'start' (StartScreen is a
+// plain CSS photo, no canvas at all). Mirrors OnlineLobbyScreen's own shared-wrapper shape exactly:
+// PlayerCountSelector/ColorSelector now render only their own foreground content, no background of
+// their own.
+function LocalSetupBackground({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ height: '100%', position: 'relative' }}>
+      {/* backgroundColor here matches StartScreenBackground's own internal fog color exactly - see
+          that component's own doc comment for why: a canvas that's slow to initialize (or fails
+          outright) used to leave nothing behind it at all, reading as a plain black screen with no
+          board. Matching the fog tone means a slow-but-successful load is seamless, and a failed
+          one still shows an intentional dark background instead of true emptiness. */}
+      <div style={{ position: 'absolute', inset: 0, backgroundColor: '#05070c' }}>
+        <Suspense fallback={null}>
+          <StartScreenBackground />
+        </Suspense>
+      </div>
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'radial-gradient(ellipse at center, rgba(10,8,4,0.15) 0%, rgba(6,8,14,0.7) 100%)',
+        }}
+      />
+      {children}
+    </div>
+  )
+}
 
 // Matches the PWA manifest's own background_color - a plain dark fill reads as "still loading",
 // not a jarring flash-of-white, for whatever brief moment (if any - GameBoardScreen's own chunk is
@@ -208,22 +266,26 @@ export default function App() {
   return (
     <div style={{ height: '100vh' }}>
       {screen === 'start' && <StartScreen onPlayLocal={() => setScreen('selectCount')} />}
-      {screen === 'selectCount' && (
-        <PlayerCountSelector
-          onConfirm={(count) => {
-            setPlayerCount(count)
-            setScreen('selectColor')
-          }}
-        />
-      )}
-      {screen === 'selectColor' && (
-        <ColorSelector
-          colors={TURN_ORDER_BY_COUNT[playerCount]}
-          onConfirm={(color) => {
-            setHumanColor(color)
-            setScreen('game')
-          }}
-        />
+      {(screen === 'selectCount' || screen === 'selectColor') && (
+        <LocalSetupBackground>
+          {screen === 'selectCount' && (
+            <PlayerCountSelector
+              onConfirm={(count) => {
+                setPlayerCount(count)
+                setScreen('selectColor')
+              }}
+            />
+          )}
+          {screen === 'selectColor' && (
+            <ColorSelector
+              colors={TURN_ORDER_BY_COUNT[playerCount]}
+              onConfirm={(color) => {
+                setHumanColor(color)
+                setScreen('game')
+              }}
+            />
+          )}
+        </LocalSetupBackground>
       )}
       {screen === 'game' && (
         <Suspense fallback={<LazyScreenFallback />}>

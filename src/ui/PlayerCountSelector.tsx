@@ -1,20 +1,11 @@
-import { lazy, Suspense } from 'react'
-
 // Reported directly ("이오락의 로딩속도가 매우느리다" - this game's loading speed is very slow):
 // StartScreen.tsx's own background is a plain CSS photo now (see that file's own doc comment) and
 // GameBoardScreen/OnlineLobbyScreen are already lazy() in App.tsx - but this screen and
-// ColorSelector are NOT lazy, and both statically imported StartScreenBackground, which pulls in
-// the full Three.js/@react-three/fiber runtime at module scope. Since App.tsx imports this file
-// eagerly (`screen === 'selectCount'` is a plain conditional render, not a lazy route), that
-// static import chain dragged all of three.js into the SAME main chunk StartScreen itself ships
-// in - confirmed directly in the built bundle (WebGLRenderer/TextureLoader present in
-// dist/assets/index-*.js) - even though the very first screen a player sees never touches it.
-// lazy() here moves StartScreenBackground (and three.js) into its own chunk instead, shared with
-// GameBoardScreen's own chunk - App.tsx's mount effect already starts fetching that same GameBoard
-// chunk as soon as StartScreen appears, well before a player could realistically reach this
-// screen, so in practice the Suspense fallback below is never actually visible.
-const StartScreenBackground = lazy(() => import('../scene/StartScreenBackground').then((m) => ({ default: m.StartScreenBackground })))
-
+// ColorSelector are NOT lazy, and both used to statically import StartScreenBackground directly,
+// which pulls in the full Three.js/@react-three/fiber runtime at module scope. That import (and
+// the single lazy()-loaded <StartScreenBackground/> mount itself) now lives in App.tsx instead -
+// see LocalSetupBackground's own doc comment there for why (one shared canvas across this screen
+// and ColorSelector, instead of each mounting/unmounting its own).
 function lighten(hex: string, amount: number): string {
   const n = parseInt(hex.slice(1), 16)
   const clamp = (c: number) => Math.max(0, Math.min(255, c))
@@ -60,70 +51,49 @@ function countButtonStyle(colorHex: string): React.CSSProperties {
   }
 }
 
+// Content only - no wrapper, no background canvas. See App.tsx's own LocalSetupBackground for the
+// shared <StartScreenBackground/> this renders on top of (this screen and ColorSelector used to
+// each mount their own independent copy; see that component's own doc comment for why that was a
+// real WebGL-context-churn bug, not just a stylistic redundancy).
 export function PlayerCountSelector({ onConfirm }: { onConfirm: (count: number) => void }) {
   return (
-    <div style={{ height: '100%', position: 'relative' }}>
-      {/* backgroundColor here matches StartScreenBackground's own internal fog color exactly - see
-          that component's own doc comment for why: this screen renders a real WebGL <Canvas>, and
-          a canvas that's slow to initialize (or fails outright - a stale/lost context after
-          repeated screen navigation, in particular) used to leave nothing behind it at all, reading
-          as a plain black screen with no board. Matching the fog tone means a slow-but-successful
-          load is seamless (no color flash once the canvas does paint), and a failed one still shows
-          an intentional dark background instead of true emptiness. */}
-      <div style={{ position: 'absolute', inset: 0, backgroundColor: '#05070c' }}>
-        {/* fallback null: the wrapper div's own #05070c already matches StartScreenBackground's
-            internal fog color exactly (see the comment just below), so there's nothing visibly
-            missing while its chunk is still in flight - same reasoning that comment already
-            documents for a slow/failed canvas, just via Suspense instead. */}
-        <Suspense fallback={null}>
-          <StartScreenBackground />
-        </Suspense>
-      </div>
-      <div
+    <div
+      style={{
+        position: 'relative',
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 28,
+        color: '#f2ede0',
+      }}
+    >
+      <h2
         style={{
-          position: 'absolute',
-          inset: 0,
-          background: 'radial-gradient(ellipse at center, rgba(10,8,4,0.15) 0%, rgba(6,8,14,0.7) 100%)',
-        }}
-      />
-      <div
-        style={{
-          position: 'relative',
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 28,
-          color: '#f2ede0',
+          fontSize: 'clamp(22px, 6vw, 30px)',
+          fontWeight: 800,
+          margin: 0,
+          letterSpacing: 1,
+          color: '#e8cf8a',
+          textShadow: '0 2px 0 #7a5f26, 0 5px 12px rgba(0,0,0,0.55)',
+          textAlign: 'center',
+          padding: '0 12px',
         }}
       >
-        <h2
-          style={{
-            fontSize: 'clamp(22px, 6vw, 30px)',
-            fontWeight: 800,
-            margin: 0,
-            letterSpacing: 1,
-            color: '#e8cf8a',
-            textShadow: '0 2px 0 #7a5f26, 0 5px 12px rgba(0,0,0,0.55)',
-            textAlign: 'center',
-            padding: '0 12px',
-          }}
-        >
-          ¿Cuántos jugadores?
-        </h2>
-        <div style={{ display: 'flex', gap: 'clamp(8px, 3vw, 18px)', padding: '0 12px' }}>
-          {[2, 3, 4, 5, 6].map((count, i) => (
-            <button
-              key={count}
-              className="chunky-btn candy-btn"
-              onClick={() => onConfirm(count)}
-              style={{ ...countButtonStyle(CANDY_COLORS[i]), ['--wobble-delay' as string]: `${i * 0.15}s` }}
-            >
-              {count}
-            </button>
-          ))}
-        </div>
+        ¿Cuántos jugadores?
+      </h2>
+      <div style={{ display: 'flex', gap: 'clamp(8px, 3vw, 18px)', padding: '0 12px' }}>
+        {[2, 3, 4, 5, 6].map((count, i) => (
+          <button
+            key={count}
+            className="chunky-btn candy-btn"
+            onClick={() => onConfirm(count)}
+            style={{ ...countButtonStyle(CANDY_COLORS[i]), ['--wobble-delay' as string]: `${i * 0.15}s` }}
+          >
+            {count}
+          </button>
+        ))}
       </div>
     </div>
   )

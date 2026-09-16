@@ -1,14 +1,5 @@
-import { lazy, Suspense } from 'react'
 import { getColor } from '../core/colorPalette'
 import type { PieceColor } from '../core/pieceColor'
-
-// Reported directly ("이오락의 로딩속도가 매우느리다" - this game's loading speed is very slow): same
-// fix, same reasoning, as PlayerCountSelector's own matching comment - this screen is also eagerly
-// imported by App.tsx (not a lazy route) and also statically imported StartScreenBackground,
-// dragging three.js into the main chunk. lazy() here shares the same chunk PlayerCountSelector's
-// own StartScreenBackground import now resolves to (Rollup dedupes identical dynamic import()
-// targets), not a second copy.
-const StartScreenBackground = lazy(() => import('../scene/StartScreenBackground').then((m) => ({ default: m.StartScreenBackground })))
 
 // Reported directly ("EL JUGADOR AL INICIO DEBE PODER ELEGIR EL COLOR Y JUGAR CONTRA LOS OTROS
 // OPONENTE PILOTADOS POR EL BOT. AHORA EL JUGADOR JUEGA CON TODOS LOS COLORES, PERO HAY QUE PODER
@@ -73,6 +64,10 @@ const hotseatButtonStyle: React.CSSProperties = {
   cursor: 'pointer',
 }
 
+// Content only - no wrapper, no background canvas. See App.tsx's own LocalSetupBackground for the
+// shared <StartScreenBackground/> this renders on top of, and PlayerCountSelector's own matching
+// comment for why (each screen used to mount its own independent copy - a real WebGL-context-churn
+// bug during ordinary navigation, not just stylistic redundancy).
 export function ColorSelector({
   colors,
   onConfirm,
@@ -81,63 +76,46 @@ export function ColorSelector({
   onConfirm: (humanColor: PieceColor | null) => void
 }) {
   return (
-    <div style={{ height: '100%', position: 'relative' }}>
-      {/* backgroundColor here matches StartScreenBackground's own internal fog color - see
-          PlayerCountSelector's own matching comment (same fix, reported on this exact screen -
-          screenshot showed no board at all, just this vignette over solid black) for why. */}
-      <div style={{ position: 'absolute', inset: 0, backgroundColor: '#05070c' }}>
-        <Suspense fallback={null}>
-          <StartScreenBackground />
-        </Suspense>
-      </div>
-      <div
+    <div
+      style={{
+        position: 'relative',
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 28,
+        color: '#f2ede0',
+      }}
+    >
+      <h2
         style={{
-          position: 'absolute',
-          inset: 0,
-          background: 'radial-gradient(ellipse at center, rgba(10,8,4,0.15) 0%, rgba(6,8,14,0.7) 100%)',
-        }}
-      />
-      <div
-        style={{
-          position: 'relative',
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 28,
-          color: '#f2ede0',
+          fontSize: 'clamp(22px, 6vw, 30px)',
+          fontWeight: 800,
+          margin: 0,
+          letterSpacing: 1,
+          color: '#e8cf8a',
+          textShadow: '0 2px 0 #7a5f26, 0 5px 12px rgba(0,0,0,0.55)',
+          textAlign: 'center',
+          padding: '0 12px',
         }}
       >
-        <h2
-          style={{
-            fontSize: 'clamp(22px, 6vw, 30px)',
-            fontWeight: 800,
-            margin: 0,
-            letterSpacing: 1,
-            color: '#e8cf8a',
-            textShadow: '0 2px 0 #7a5f26, 0 5px 12px rgba(0,0,0,0.55)',
-            textAlign: 'center',
-            padding: '0 12px',
-          }}
-        >
-          ¿Con qué color juega?
-        </h2>
-        <div style={{ display: 'flex', gap: 'clamp(8px, 3vw, 18px)', padding: '0 12px', flexWrap: 'wrap', justifyContent: 'center' }}>
-          {colors.map((color) => (
-            <button
-              key={color}
-              className="chunky-btn"
-              aria-label={color}
-              onClick={() => onConfirm(color)}
-              style={colorButtonStyle(getColor(color))}
-            />
-          ))}
-        </div>
-        <button className="chunky-btn" onClick={() => onConfirm(null)} style={hotseatButtonStyle}>
-          Jugar todos los colores (sin bots)
-        </button>
+        ¿Con qué color juega?
+      </h2>
+      <div style={{ display: 'flex', gap: 'clamp(8px, 3vw, 18px)', padding: '0 12px', flexWrap: 'wrap', justifyContent: 'center' }}>
+        {colors.map((color) => (
+          <button
+            key={color}
+            className="chunky-btn"
+            aria-label={color}
+            onClick={() => onConfirm(color)}
+            style={colorButtonStyle(getColor(color))}
+          />
+        ))}
       </div>
+      <button className="chunky-btn" onClick={() => onConfirm(null)} style={hotseatButtonStyle}>
+        Jugar todos los colores (sin bots)
+      </button>
     </div>
   )
 }

@@ -18,13 +18,37 @@ import type { WebGLRenderer } from 'three'
 // scene graph objects were never touched by a context loss, only their GPU-side resources - so
 // nothing further is needed here beyond allowing that restoration to happen at all and giving the
 // player some visible sign of what happened while it does.
-export function watchForContextLoss(gl: WebGLRenderer, onLost?: () => void, onRestored?: () => void): () => void {
+// Milestone-1 stability audit ("SIN TABLERO" reports, live-reproduced via Playwright as a genuine
+// "THREE.WebGLRenderer: Context Lost." during ordinary landing -> local-mode -> player-count ->
+// color-select -> board navigation, no stress involved): the two console lines this module already
+// logged (below, in useCanvasRemountOnStuckContext) only ever carried `label`, a *type* of canvas
+// ("BoardScene" or "StartScreenBackground"), not which specific mount of it - every StartScreenBackground
+// instance across a whole session (PlayerCountSelector's own, ColorSelector's own, each screen
+// transition's replacement of the last) logged under the exact same unlabeled text, so a report
+// could never say which navigation step actually lost its context, only that "some
+// StartScreenBackground, at some point" did. instanceCounter/instanceId tag each hook instance
+// (each real <Canvas> mount) with its own ordinal, and every log line now also carries a
+// wall-clock timestamp and the lost/restored canvas's own pixel size - together enough to
+// correlate a future report against exactly which screen transition, and how far into the
+// session, produced it.
+let instanceCounter = 0
+
+export function watchForContextLoss(
+  gl: WebGLRenderer,
+  diagnosticLabel: string,
+  onLost?: () => void,
+  onRestored?: () => void,
+): () => void {
   const canvas = gl.domElement
   const handleLost = (event: Event) => {
     event.preventDefault()
+    console.warn(
+      `[${new Date().toISOString()}] ${diagnosticLabel}: webglcontextlost fired directly on the <canvas> element (${canvas.width}x${canvas.height}px)`,
+    )
     onLost?.()
   }
   const handleRestored = () => {
+    console.info(`[${new Date().toISOString()}] ${diagnosticLabel}: webglcontextrestored fired directly on the <canvas> element`)
     onRestored?.()
   }
   canvas.addEventListener('webglcontextlost', handleLost, false)
@@ -69,21 +93,30 @@ const STUCK_CONTEXT_REMOUNT_MS = 4000
 export function useCanvasRemountOnStuckContext(label: string): { canvasKey: number; onCreated: (state: { gl: WebGLRenderer }) => void } {
   const [canvasKey, setCanvasKey] = useState(0)
   const remountTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // See instanceCounter's own doc comment above - assigned once per hook instance (i.e. once per
+  // real mount of whichever <Canvas> this is wired to), not per render, so every log line below
+  // can say e.g. "StartScreenBackground#4" instead of every mount of the same component logging
+  // under identical, indistinguishable text.
+  const instanceIdRef = useRef<number | null>(null)
+  if (instanceIdRef.current === null) instanceIdRef.current = ++instanceCounter
+  const diagnosticLabel = `${label}#${instanceIdRef.current}`
 
   const onCreated = useCallback(
     ({ gl }: { gl: WebGLRenderer }) => {
+      console.info(`[${new Date().toISOString()}] ${diagnosticLabel}: Canvas created (new WebGLRenderer/context)`)
       watchForContextLoss(
         gl,
+        diagnosticLabel,
         () => {
-          console.warn(`${label}: WebGL context lost - waiting for the browser to restore it`)
+          console.warn(`[${new Date().toISOString()}] ${diagnosticLabel}: WebGL context lost - waiting for the browser to restore it`)
           remountTimeoutRef.current = setTimeout(() => {
             remountTimeoutRef.current = null
-            console.warn(`${label}: context still lost after ${STUCK_CONTEXT_REMOUNT_MS}ms - forcing a fresh canvas`)
+            console.warn(`[${new Date().toISOString()}] ${diagnosticLabel}: context still lost after ${STUCK_CONTEXT_REMOUNT_MS}ms - forcing a fresh canvas`)
             setCanvasKey((key) => key + 1)
           }, STUCK_CONTEXT_REMOUNT_MS)
         },
         () => {
-          console.info(`${label}: WebGL context restored`)
+          console.info(`[${new Date().toISOString()}] ${diagnosticLabel}: WebGL context restored`)
           if (remountTimeoutRef.current) {
             clearTimeout(remountTimeoutRef.current)
             remountTimeoutRef.current = null
@@ -91,7 +124,7 @@ export function useCanvasRemountOnStuckContext(label: string): { canvasKey: numb
         },
       )
     },
-    [label],
+    [diagnosticLabel],
   )
 
   return { canvasKey, onCreated }
