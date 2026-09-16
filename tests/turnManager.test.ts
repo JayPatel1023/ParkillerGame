@@ -564,6 +564,41 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     expect(red.pieces[0].trackPosition).toBe(28)
   })
 
+  it('offers only the usable half of a reward when the full amount has nowhere legal to land', () => {
+    // Both Red pieces end up close enough to home that a full 20-square move overshoots the finish
+    // for each of them individually (pieces[0] lands on 8 after the capture, 17 steps left to finish;
+    // pieces[1] sits at 7, 18 steps left - both under 20), while a 10-square move still fits for
+    // either. The reward must not be forfeited just because its 20-in-one-move shape is unusable -
+    // only the still-viable 10-square split is ever offered.
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 7
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 8
+
+    const dice = new ScriptedDice([3, 1, 1])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    const grants: RewardGrant[] = []
+    manager.rewardOffered.on((g) => grants.push(g))
+    const forfeited: RewardGrant[] = []
+    manager.rewardForfeited.on((g) => forfeited.push(g))
+    let latestMoves: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((m) => (latestMoves = m))
+
+    manager.requestRoll()
+    manager.submitMove(red.pieces[0]) // 5 -> 8, captures blue.pieces[0], grants 20
+
+    expect(grants).toEqual([{ amount: 20, reason: 'capture' }])
+    expect(forfeited).toHaveLength(0)
+    expect(latestMoves.length).toBeGreaterThan(0)
+    expect(latestMoves.every((m) => m.amount === 10)).toBe(true)
+  })
+
   it('capturing an opponent and taking the full 20 on one pawn resolves the whole grant in one move, no remainder', () => {
     const board = buildBigTestBoard()
     const red = createPlayerState('Red', board)
