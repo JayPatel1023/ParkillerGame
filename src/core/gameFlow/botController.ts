@@ -106,15 +106,13 @@ const CAPTURE_RETURN_HOPS = 3
 // reveals in general).
 const CELEBRATION_HOLD_MS = 2000
 
-// Matches useTurnManager.ts's own constant of the same name - corrected directly ("이영상에서와같이
-// ... 주사위가 돌아가는시간을 길게 해달라는의미는전혀없다 ... 빨간팀이 움직인다음 파란팀이되였다고
-// 하자 이때 간격차이, 이간격차를 10초로 달라는것이다" - never meant to lengthen the dice-spin time
-// itself, only the gap when a *different* player's turn actually starts) after an earlier attempt
-// conflated the two by bumping DICE_SPIN_MS instead. Applied here so this class's own scheduling of
-// the next bot's roll never gets ahead of useTurnManager.ts's own reveal for that same handoff (see
-// its own matching comment for why the two have to move together) - a bot rolling before that
-// hook's own hold clears would desync the dice/board from what the screen still shows.
-const TURN_CHANGE_HOLD_MS = 10000
+// Matches useTurnManager.ts's own constant of the same name - see its own doc comment for why this
+// is 3000, not the 10000 first tried here (10 seconds was never something Carlos actually asked
+// for - his own consistently repeated number is 2-3 seconds). Applied here so this class's own
+// scheduling of the next bot's roll never gets ahead of useTurnManager.ts's own reveal for that
+// same handoff - a bot rolling before that hook's own hold clears would desync the dice/board from
+// what the screen still shows.
+const TURN_CHANGE_HOLD_MS = 3000
 
 // Same minimal pub-sub as turnManager.ts's own EventEmitter (not exported from there, so
 // duplicated here rather than reaching into a peer module for an implementation detail - see this

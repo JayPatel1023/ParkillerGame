@@ -56,11 +56,18 @@ const DICE_SPIN_MS = 2000
 // within the same call to requestRoll(), batched into one React commit) - that was always a
 // *subset* of "handing off to a different player," just with a shorter, separately-tuned hold;
 // unified under this one constant since every genuine handoff now gets held the same way
-// regardless of whether a no-move message needs to stay readable through it too. Kept in sync with
+// regardless of whether a no-move message needs to stay readable through it too.
+//
+// Set to 3000, not the 10000 first tried here - correcting again, directly ("이것이 너무길다
+// 클라이언트가 말한대로 해야한다" - this is too long, it has to match what the client actually
+// said): 10 seconds was this session's own guess, never something Carlos asked for. His own
+// consistently repeated number, across three separate reports, is 2-3 seconds ("Tienes que dejar
+// una latencia de dos segundos entre movimientos", "una latencia de 2-3 segundos bastaría", "al bot
+// dejale 2 o 3 segundos nada mas") - matching the upper end of that same range. Kept in sync with
 // botController.ts's own TURN_CHANGE_HOLD_MS, which must change together with this one (see its
 // own matching comment) - otherwise a bot could roll for its own turn before this hook's own hold
 // here finishes revealing it, desyncing the dice/board from what the screen still shows.
-const TURN_CHANGE_HOLD_MS = 10000
+const TURN_CHANGE_HOLD_MS = 3000
 
 export interface MoveLogEntry {
   id: number
