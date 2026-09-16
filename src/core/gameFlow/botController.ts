@@ -58,11 +58,11 @@ const BOT_THINK_DELAY_MS = 2400
 // the next one - this class has no direct access to the scene layer's own timing constants
 // (gameFlow/ and scene/ are peers in this project's own layering, neither depending on the
 // other), so the values below are duplicated from there and must be kept in sync: DICE_SPIN_MS
-// matches useTurnManager.ts's own constant of
-// the same name (bumped to 2000ms there directly in response to "the screen hasn't settled and
-// the pawns are already jumping" - see that file's own matching comment), HOP_DURATION_MS matches
-// PieceMesh.tsx's HOP_DURATION (in seconds, *1000 here).
-const DICE_SPIN_MS = 2000
+// matches useTurnManager.ts's own constant of the same name (bumped to 20000ms there directly in
+// response to "keep a 20-second gap between each piece's move when moving in sequence" - see that
+// file's own matching comment), HOP_DURATION_MS matches PieceMesh.tsx's HOP_DURATION (in seconds,
+// *1000 here).
+const DICE_SPIN_MS = 20000
 // Kept in sync with PieceMesh.tsx's own HOP_DURATION (0.48s, *1000 here) - reported directly
 // ("말속도가 너무빠르므로 느리게 해달라" - the piece speed is too fast, slow it down): a slower hop
 // there with this constant left stale would under-count real animation time, reopening the exact

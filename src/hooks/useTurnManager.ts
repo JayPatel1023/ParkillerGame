@@ -35,8 +35,13 @@ export type MoveAnimationRequest = MoveAnimationInfo
 // be enough to see and think): 450ms was only ever tuned as a dice-spin *reveal* duration, not as
 // real viewing time - and it's the one gate every hop everywhere waits on (see diceSettledAt's own
 // doc comment below), including the Parkiller's fully automatic move, which needs no player click
-// at all and so had nothing else slowing it down. Bumped to the client's own stated minimum.
-const DICE_SPIN_MS = 2000
+// at all and so had nothing else slowing it down. Bumped to the client's own stated minimum, then
+// bumped again directly ("순서대로 움직일때 한말씩 시간차이를 20초를 유지하게해달라 현재는
+// 너무빨리 이어지는것으로하여 정확히 알수가없다" - keep a 20-second gap between each piece's move
+// when moving in sequence, it's currently too fast to follow precisely) - kept in sync with
+// botController.ts's own DICE_SPIN_MS and RemoteTurnManager.ts's REMOTE_MOVE_PACING_MS, which must
+// change together (see each of their own matching comments).
+const DICE_SPIN_MS = 20000
 
 // Reported directly (Carlos: "Cuando hay una barrera no se quieren mover ninguno de los dos
 // peones... no ha manera" - when there's a barrier neither pawn wants to move, no way out): a
