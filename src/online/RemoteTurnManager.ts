@@ -21,7 +21,21 @@ import type { RoomTransport } from './roomTransport'
 // legitimately submit two moves a fraction of a second apart, and this client would otherwise
 // replay both almost simultaneously with nothing but each hop's own short animation time between
 // them.
+//
+// This is a *floor*, not the whole story - reported again, separately, with video: a pawn that
+// had just moved visibly reverted to its starting square for a couple of seconds while the next
+// roll was already in progress, then caught up. Root cause: this constant alone paced every
+// moveChosen broadcast, regardless of how far that move actually walked - a move of 5+ squares
+// takes amount*HOP_DURATION_MS (below) to animate, which already exceeds this flat 2000ms, so the
+// *next* queued broadcast (another move, or the next roll) got applied to this.inner - and
+// re-armed the board's shared diceSettledAt gate (see botController.ts's own matching comment on
+// the same gate, on the bot-pacing side of this exact bug) - while the previous move's own hop was
+// still genuinely playing on screen. HOP_DURATION_MS/CAPTURE_RETURN_HOPS below are duplicated from
+// PieceMesh.tsx/piecePosition.ts (same reasoning as botController.ts's own matching constants -
+// this file can't import the scene layer) and must be kept in sync with them.
 const REMOTE_MOVE_PACING_MS = 2000
+const HOP_DURATION_MS = 480
+const CAPTURE_RETURN_HOPS = 3
 
 /**
  * Runs on every non-master client. Owns its own real, unmodified TurnManager (constructed with a
@@ -123,8 +137,10 @@ export class RemoteTurnManager implements TurnManagerLike {
   }
 
   // `waitMs` is 0 for the very first message of a fresh drain (nothing to pace against yet -
-  // there's no previous action in this run for a delay to be "between") and
-  // REMOTE_MOVE_PACING_MS for every one after it.
+  // there's no previous action in this run for a delay to be "between") and whatever
+  // applyMessage's own return value says for every one after it - REMOTE_MOVE_PACING_MS's own
+  // floor for a plain roll, or the real hop time (plus any self-elimination bounce) for a move
+  // that needed longer than that floor to actually finish playing.
   private drainQueue(waitMs: number): void {
     this.draining = true
     this.drainTimeout = setTimeout(() => {
@@ -134,18 +150,32 @@ export class RemoteTurnManager implements TurnManagerLike {
         this.draining = false
         return
       }
-      this.applyMessage(msg)
-      this.drainQueue(REMOTE_MOVE_PACING_MS)
+      const nextWaitMs = this.applyMessage(msg)
+      this.drainQueue(nextWaitMs)
     }, waitMs)
   }
 
-  private applyMessage(msg: GameMessage): void {
+  // Returns how long to wait before the *next* queued message may be applied - see
+  // REMOTE_MOVE_PACING_MS's own doc comment for why a flat constant alone isn't enough for a
+  // moveChosen broadcast.
+  private applyMessage(msg: GameMessage): number {
     if (msg.type === 'diceRolled') {
       this.diceQueue.push(msg.dieA, msg.dieB, msg.blackDie)
       this.inner.requestRoll()
-    } else if (msg.type === 'moveChosen') {
-      const piece = findPiece(this.players, msg.color, msg.pieceIndex)
-      if (piece) this.inner.submitMove(piece, msg.amount)
+      return REMOTE_MOVE_PACING_MS
     }
+    if (msg.type === 'moveChosen') {
+      const piece = findPiece(this.players, msg.color, msg.pieceIndex)
+      if (!piece) return REMOTE_MOVE_PACING_MS
+      const result = this.inner.submitMove(piece, msg.amount)
+      if (!result) return REMOTE_MOVE_PACING_MS
+      // Scoped to self-elimination only, same as botController.ts's own extraBounceMs - an
+      // ordinary captured pawn's own bounce-home is a separate piece's own animation, not this
+      // move's own hop, so it doesn't extend how long *this* move needs before the next broadcast
+      // is safe to apply.
+      const extraBounceMs = result.eliminatedByParkiller ? CAPTURE_RETURN_HOPS * HOP_DURATION_MS : 0
+      return Math.max(REMOTE_MOVE_PACING_MS, result.amount * HOP_DURATION_MS + extraBounceMs)
+    }
+    return REMOTE_MOVE_PACING_MS
   }
 }

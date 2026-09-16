@@ -208,6 +208,65 @@ describe('HostTurnManagerBridge + RemoteTurnManager convergence', () => {
     expect(snapshot(remote.players)).toEqual(snapshot(host.players))
   })
 
+  // Reported directly, with video: a pawn that had just moved visibly reverted to its starting
+  // square for a couple of seconds while the next roll was already in progress, then caught up.
+  // Root cause: RemoteTurnManager used to pace every replayed broadcast by a flat
+  // REMOTE_MOVE_PACING_MS (2000ms), regardless of how far the move it just replayed actually
+  // walked - a move of 5+ squares takes longer than that to animate (amount*480ms), so the next
+  // broadcast (here, the next player's own roll) got replayed before the previous move's hop had
+  // actually finished playing. This drives a real 10-square move through the sync layer and checks
+  // that the *following* roll is held back for the move's own real duration, not just the flat
+  // floor.
+  it("paces a long move's replay by its own real hop duration, not just the flat floor, before the next roll replays", () => {
+    const board = buildTestBoard()
+    const network = new FakeRoomNetwork(MASTER_ACTOR)
+    const actorColors = new Map<number, PieceColor>([
+      [MASTER_ACTOR, 'Red'],
+      [REMOTE_ACTOR, 'Blue'],
+    ])
+    // dieA=6/dieB=4: no double (no bonus turn to complicate the sequence), neither value is the
+    // default exitRoll (5), so no yard-exit obligation interferes - the sum (10) is a completely
+    // free, single-piece choice that consumes both dice and ends Red's turn in one move.
+    const host = buildHost(board, network, actorColors, [6, 4, 1, 2, 2, 1])
+    const remote = buildRemote(board, network)
+    host.players[0].pieces[0].state = 'OnTrack'
+    host.players[0].pieces[0].trackPosition = 0
+    remote.players[0].pieces[0].state = 'OnTrack'
+    remote.players[0].pieces[0].trackPosition = 0
+    host.bridge.start()
+    remote.bridge.start()
+
+    let rollCount = 0
+    remote.bridge.diceRolled.on(() => rollCount++)
+
+    let moves: import('../../src/core/rules/moveOption').MoveOption[] = []
+    host.bridge.moveChoicesReady.on((m) => (moves = m))
+    host.bridge.requestRoll() // broadcasts diceRolled for Red
+    const sumMove = moves.find((m) => m.amount === 10)
+    expect(sumMove).toBeTruthy()
+    host.bridge.submitMove(sumMove!.piece, 10) // broadcasts moveChosen amount=10 - ends Red's turn
+
+    expect(host.bridge.currentPlayer.color).toBe('Blue')
+    // Blue's own roll has to come from the Remote side (sendToMaster -> validated -> broadcast) -
+    // host.bridge only ever acts as the Master's own seat (Red), so a direct host.bridge.requestRoll()
+    // here would silently be rejected as the wrong actor for the current turn.
+    remote.bridge.requestRoll()
+
+    vi.advanceTimersByTime(50) // drains the queue's first message (wait=0): Red's own diceRolled replays
+    expect(rollCount).toBe(1)
+
+    // Just short of the move's own correctly-budgeted window (REMOTE_MOVE_PACING_MS=2000 to start
+    // replaying the move, then max(2000, 10*480=4800)=4800 more before the next message may
+    // replay - 6800ms total). Before the fix, a flat 2000ms would have let Blue's own roll replay
+    // by t=4000ms, well before this checkpoint.
+    vi.advanceTimersByTime(6800 - 50 - 50)
+    expect(rollCount).toBe(1)
+    expect(remote.players[0].pieces[0].trackPosition).toBe(10) // the long move itself did replay by now
+
+    vi.advanceTimersByTime(100)
+    expect(rollCount).toBe(2) // Blue's roll only replays once the move's own real duration has passed
+  })
+
   it("the Master rejects a roll intent from an actor whose seat isn't the current turn", () => {
     const board = buildTestBoard()
     const network = new FakeRoomNetwork(MASTER_ACTOR)
