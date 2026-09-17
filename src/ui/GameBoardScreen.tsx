@@ -139,13 +139,15 @@ export interface GameSession {
    * startGame()/startAsRemote()) - shown once via StartingPlayerModal on mount, after colorDraw's
    * own modal (if present) is dismissed. */
   startingPlayerResult?: StartingPlayerResult
-  /** True for local play only (beginLocalGame's own doc comment) - turnManager.start() (the call
-   * that actually activates the game: emits turnStarted, which in vs-bots mode is what schedules a
-   * bot's own first roll) is deliberately *not* already called by the time this session exists, so
-   * StartingPlayerModal's own onDone handler below has to call it once the roll-off's reveal
-   * finishes, not before. Online play leaves this unset - its own bridge.start() already runs on
-   * its own timing (OnlineLobbyScreen.tsx), and calling start() again here would double-fire
-   * turnStarted for it. */
+  /** turnManager.start() (the call that actually activates the game: emits turnStarted, which in
+   * vs-bots mode is what schedules a bot's own first roll) is deliberately *not* already called by
+   * the time this session exists, for local play (beginLocalGame's own doc comment) and online
+   * play alike (OnlineLobbyScreen's own startGame()/startAsRemote()) - StartingPlayerModal's own
+   * onDone handler below calls it once the roll-off's reveal actually finishes, not before.
+   * Reported directly, for online specifically: dice were already rolling and a piece already
+   * moving by the time the local screen even showed who started - bridge.start()/remote.start()
+   * used to run immediately in OnlineLobbyScreen.tsx, well before this same reveal. Every session
+   * sets this now; nothing currently constructs one without it. */
   deferredStart?: true
   /** Only set for online games (OnlineLobbyScreen's own shuffleColorsByActorNr) - local play never
    * randomizes color, see ColorSelector's own "the player must be able to choose" requirement.
@@ -641,9 +643,9 @@ export function GameBoardScreen({
         <StartingPlayerModal
           result={session.startingPlayerResult}
           onDone={() => {
-            // See GameSession's own deferredStart doc comment - local play's game only actually
-            // activates now, once the roll-off's own reveal has genuinely finished and the player
-            // has dismissed it, not before.
+            // See GameSession's own deferredStart doc comment - the game only actually activates
+            // now, once the roll-off's own reveal has genuinely finished and the player has
+            // dismissed it, not before.
             if (session.deferredStart) session.turnManager.start()
             setShowingStartingPlayer(false)
           }}

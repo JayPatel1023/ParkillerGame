@@ -505,13 +505,14 @@ export default function OnlineLobbyScreen() {
     // read from it directly instead, same as every other piece of Master-decided state here.
     const myColor = seats[connection.localActorNr] ?? null
     const bridge = new RemoteTurnManager(inner, diceQueue, players, connection, myColor ?? null)
-    bridge.start()
+    // deferredStart: true (not bridge.start() here) - see GameBoardScreen.tsx's own matching
+    // doc comment for why online now defers exactly like local play does.
     realSeatsRef.current = seats ?? {}
     // See ColorDrawModal's own doc comment - a color with no entry in `seats` (the Master's own
     // decided actorNr->color mapping) went to a bot.
     const claimedColors = new Set(Object.values(seats ?? {}))
     const colorDraw: ColorDrawEntry[] = colors.map((color) => ({ color, isBot: !claimedColors.has(color) }))
-    setSession({ turnManager: bridge, players, startingPlayerResult, colorDraw })
+    setSession({ turnManager: bridge, players, startingPlayerResult, colorDraw, deferredStart: true })
     setPhase('game')
   }
 
@@ -596,7 +597,15 @@ export default function OnlineLobbyScreen() {
     if (botColors.size > 0) botControllerRef.current = new BotController(bridge, botColors)
     const colorDraw: ColorDrawEntry[] = colors.map((color) => ({ color, isBot: botColors.has(color) }))
 
-    bridge.start()
+    // deferredStart: true (not bridge.start() here) - see GameBoardScreen.tsx's own matching
+    // doc comment. Reported directly: dice were already rolling and a piece already moving by
+    // the time this client's own screen even showed who started - bridge.start() (which fires
+    // turnStarted, the event a bot's own first roll is scheduled from) used to run immediately
+    // here, well before this client's own StartingPlayerModal had revealed anything. Ordering
+    // relative to the broadcast below doesn't matter either way - start() only ever emits a
+    // purely local event, nothing network-facing - so moving it out to the modal's own onDone
+    // handler (GameBoardScreen.tsx) costs nothing here and makes online behave exactly like
+    // local play already does.
     // Reported directly: a friend who joined the room code after this point still connected
     // successfully and ended up a non-functional phantom "player" instead of a clear error - see
     // closeRoom()'s own comment for the full mechanism. Nothing past this point should be reachable
@@ -612,7 +621,14 @@ export default function OnlineLobbyScreen() {
     // ever driven by the Master (see this file's own doc comment on that), so a non-Master client
     // has no local BotController and its board simply never shows this specific extra cue, same as
     // every other host-only aspect of driving the bots themselves.
-    setSession({ turnManager: bridge, players, botPieceHighlighted: botControllerRef.current?.pieceHighlighted, startingPlayerResult, colorDraw })
+    setSession({
+      turnManager: bridge,
+      players,
+      botPieceHighlighted: botControllerRef.current?.pieceHighlighted,
+      startingPlayerResult,
+      colorDraw,
+      deferredStart: true,
+    })
     setPhase('game')
   }
 
