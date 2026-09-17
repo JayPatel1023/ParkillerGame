@@ -898,9 +898,13 @@ export default function OnlineLobbyScreen() {
       {showDefaultCard && (
       <div style={cardStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 8 }}>
+          {/* .webp, not .png - see StartScreen.tsx's own matching doc comment (295KB -> 42KB,
+              same file, same fix, reported once and applied everywhere it's used). */}
           <img
-            src="/logo-badge.png"
+            src="/logo-badge.webp"
             alt="Parkiller"
+            width={400}
+            height={400}
             style={{ width: 'clamp(42px, 12vw, 56px)', height: 'clamp(42px, 12vw, 56px)', filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.5))', flexShrink: 0 }}
           />
           <h1 style={{ margin: 0, fontSize: 'clamp(21px, 6vw, 28px)', fontWeight: 800, color: '#e8cf8a', textShadow: '0 2px 0 #7a5f26, 0 4px 10px rgba(0,0,0,0.5)' }}>

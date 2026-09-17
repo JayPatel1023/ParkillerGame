@@ -82,9 +82,23 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
             PARKILLER
           </div>
           <GoldDivider accent />
+          {/* Reported directly, with a screenshot: the card's own CSS shell (title, divider,
+              border) paints instantly, but this badge and the two button images below it are each
+              hundreds of KB of un-optimized PNG - on a throttled connection there's a real,
+              multi-second window where the card sits mostly empty, then a bare colored sliver
+              where JUGAR LOCAL belongs (that image's own <img>, with no reserved height, collapses
+              to almost nothing until its bytes actually arrive). Re-encoded to WebP (same fix
+              already applied to firstbag.jpg/GameBoardScreen's own background - see their own
+              comments): 295KB -> 42KB here, ~86% smaller, visually unchanged at every size this
+              renders at. width/height attributes (real pixel dimensions, not the rendered CSS
+              size) added below so the browser reserves this badge's own footprint from the very
+              first paint - it already had one, this is just making it explicit for the browser's
+              own loading heuristics too. */}
           <img
-            src="/logo-badge.png"
+            src="/logo-badge.webp"
             alt="Parkiller"
+            width={400}
+            height={400}
             style={{ width: 'clamp(58px, 16vw, 180px)', height: 'clamp(58px, 16vw, 180px)', filter: 'drop-shadow(0 6px 14px rgba(0,0,0,0.5))', marginTop: 4 }}
           />
           {/* Reported directly, with reference screenshots of both buttons: use these exact
@@ -94,10 +108,23 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
               other supplied art (looks transparent, isn't - alpha channel present but uniformly
               255) - cut out with a precise rounded-rect mask (measured directly off each button's
               own pixel edges) rather than a flood-fill, since a clean rectangle has no irregular-
-              silhouette leak risk the way a character illustration would. */}
+              silhouette leak risk the way a character illustration would.
+              Re-encoded to WebP - see the badge's own doc comment just above for why and the same
+              reasoning here: jugar-local-btn 322KB -> 38KB, jugar-online-btn 112KB -> 12KB. Each
+              <img> below now also sets width/height to its own real pixel size (890x219 / 466x110 -
+              genuinely different ratios, not interchangeable) plus a matching aspectRatio, so
+              imageButtonImgStyle's own width:100%/height:auto reserves the correct proportional
+              space immediately instead of collapsing to a bare sliver while the file is still
+              loading - this is the exact "yellow bar" artifact that was reported. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(7px, 1.8vh, 18px)', width: 'min(360px, 72vw)', marginTop: 'clamp(2px, 0.8vh, 10px)' }}>
             <button className="chunky-btn" onClick={onPlayLocal} style={imageButtonStyle(true)}>
-              <img src="/jugar-local-btn.png" alt="Jugar local - En el mismo dispositivo" style={imageButtonImgStyle} />
+              <img
+                src="/jugar-local-btn.webp"
+                alt="Jugar local - En el mismo dispositivo"
+                width={890}
+                height={219}
+                style={{ ...imageButtonImgStyle, aspectRatio: '890 / 219' }}
+              />
             </button>
             <button
               className="chunky-btn"
@@ -106,7 +133,13 @@ export function StartScreen({ onPlayLocal }: { onPlayLocal: () => void }) {
               onClick={() => (window.location.hash = '#online')}
               style={imageButtonStyle(canPlayOnline)}
             >
-              <img src="/jugar-online-btn.png" alt="Jugar online - Conecta con tus amigos" style={imageButtonImgStyle} />
+              <img
+                src="/jugar-online-btn.webp"
+                alt="Jugar online - Conecta con tus amigos"
+                width={466}
+                height={110}
+                style={{ ...imageButtonImgStyle, aspectRatio: '466 / 110' }}
+              />
             </button>
           </div>
         </GoldPanel>

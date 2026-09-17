@@ -51,6 +51,21 @@
     <link rel="preload" href="/boards/board_4p.webp" as="image" crossorigin="anonymous" />
     <link rel="preload" href="/tiles/tile-fill.png" as="image" crossorigin="anonymous" />
     <link rel="preload" href="/tiles/tile-border.png" as="image" crossorigin="anonymous" />
+    <!-- StartScreen's own badge/button art - reported directly, with a screenshot on a throttled
+         connection: the card's own CSS shell paints instantly, but these three images (295KB+
+         322KB+112KB as the original PNGs, still real weight even now they're WebP - see
+         StartScreen.tsx's own matching comment for the full before/after) only start fetching once
+         React has mounted and rendered the <img> tags themselves - same "fetch can't start until
+         the whole JS bundle has downloaded, parsed, and mounted React" gap the board preload above
+         already exists to close, just for the very first screen instead of the game board. No
+         crossorigin attribute here, deliberately unlike the board preload above - these load as
+         plain DOM <img> elements (StartScreen.tsx/OnlineLobbyScreen.tsx), never through
+         THREE.Loader, and neither of those <img> tags sets crossOrigin either - adding one here
+         without a matching one there would recreate the exact "credentials mode doesn't match, so
+         it fetches twice" bug the board preload's own comment already documents. -->
+    <link rel="preload" href="/logo-badge.webp" as="image" />
+    <link rel="preload" href="/jugar-local-btn.webp" as="image" />
+    <link rel="preload" href="/jugar-online-btn.webp" as="image" />
     <!-- Requested directly, for the "Jugar online" redesign (a reference mockup: a bold rounded
          display face for "Jugar online" itself/section headings, plus a casual handwritten face
          for the small doodle annotations scattered around it, e.g. "Let's Play!") - the app had no
