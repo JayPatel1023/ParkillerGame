@@ -35,11 +35,17 @@ declare global {
 // spot. The bottom-right corner has the most consistent clearance from any real track square across
 // all five boards, but the exact corner also has the board art's own "Parkiller" logo badge sitting
 // there (reported directly: the dice were drawn right on top of it) - nudged in from the corner to
-// the gap between that badge and the fleur-de-lis ornament above it instead, checked clear of both
-// the real track (nearest point 0.091 normalized units away on the tightest board, 4p) and the
-// artwork.
+// the gap between that badge and the fleur-de-lis ornament above it instead.
+//
+// CORNER_Z bumped again (1.55 -> 1.75), reported directly with a screenshot ("주사위가 자리길을
+// 침범하고있다 로고가있는 아래쪽으로 약간 내려오게해달라" - the dice are encroaching on the track,
+// move them down slightly toward the logo) - the board's own BOARD_SIZE grew since the "0.091
+// normalized units" clearance this constant was originally tuned against, closing that gap on the
+// tightest boards (confirmed directly, in-browser, on 2p/4p/6p: the white dice's own near corner
+// was overlapping the last blue/red track square before this). Moved further toward the Parkiller
+// badge, away from the fleur-de-lis, re-verified clear of the track on all three checked boards.
 const CORNER_X = 2.1 * DICE_SCALE
-const CORNER_Z = 1.55 * DICE_SCALE
+const CORNER_Z = 1.75 * DICE_SCALE
 const DIE_SPACING = 0.55 * DICE_SCALE
 // The black die sits on its own row behind the two white ones (see `row` below) - a taller row
 // gap than the plain column spacing, since the black die is now physically bigger and would
