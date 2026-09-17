@@ -210,6 +210,7 @@ export function GameBoardScreen({
     moveAnimation,
     parkillerAnimation,
     diceSettledAt,
+    captureFlightPending,
     eliminatedByDoubles: rawEliminatedByDoubles,
     pendingReward,
     forfeitedReward,
@@ -274,7 +275,15 @@ export function GameBoardScreen({
   // above), so this hook's raw pendingMoves/pendingReward/forfeitedReward already reflect the next
   // real choice well before the board has caught up - gating what's actually shown/interactive on
   // both animations having cleared keeps everything landing in the order it visually happened.
-  const animationsSettled = !moveAnimation && !parkillerAnimation
+  //
+  // !captureFlightPending: moveAnimation/parkillerAnimation themselves only ever cover the
+  // CAPTURING piece's own hop - a capture also sends the CAPTURED piece on its own separate "flung
+  // home" bounce (BoardScene.tsx's own captureFlights), which only starts once the capturing hop
+  // above has already cleared and which nothing else here previously waited on at all - see
+  // captureFlightPending's own doc comment (useTurnManager.ts) for the exact reported bug (a
+  // same-player bonus roll re-arming the board's shared dice-settle gate mid-bounce) this was
+  // missing for, entirely locally, with no bot or network involved.
+  const animationsSettled = !moveAnimation && !parkillerAnimation && !captureFlightPending
   // !turnEndingSoon: while a barrier-locked (or otherwise move-not-possible) roll's own
   // "explanation, then advance" hold is playing out (see useTurnManager's own TURN_CHANGE_HOLD_MS),
   // currentPlayer/pendingMoves haven't visibly changed yet, so canRoll's other conditions alone

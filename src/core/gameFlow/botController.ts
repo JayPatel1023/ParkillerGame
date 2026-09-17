@@ -71,20 +71,25 @@ const HOP_DURATION_MS = 480
 // Kept in sync with piecePosition.ts's own CAPTURE_RETURN_HOPS (3) - a captured pawn (PC3/PC4,
 // BoardScene.tsx's own captureFlights) or a self-eliminated mover (PK5, BoardScene.tsx's own
 // animatingHopData eliminatedByParkillerAt branch) plays a few extra "flung home" bounce hops
-// beyond the plain amount-hop walk this class otherwise budgets for below - only the *mover's own*
-// self-elimination case actually needs the extra accounting this constant drives (see
+// beyond the plain amount-hop walk this class otherwise budgets for below. For a *bot's own* move,
+// only the self-elimination case actually needs this constant's own explicit accounting (see
 // extraBounceMs' own doc comment for why an ordinary captured pawn's bounce is already covered
-// elsewhere, via CELEBRATION_HOLD_MS). Missing this exact accounting for self-elimination is the
-// root cause of a real reported bug, found by tracing this class's own busyUntilMs math against
-// the scene layer's actual playback time: whenever this bounce was still genuinely playing but
-// busyUntilMs had already elapsed (having never budgeted for it), the *next* turn's roll fired
-// mid-bounce - and BoardScene/PieceMesh's shared diceSettledAt gate (see useTurnManager.ts's own
-// doc comment, re-armed by that new roll) snapped the still-animating piece straight back to its
-// own hop's starting square until the new roll's reveal passed, then resumed exactly where it left
-// off. That reads as "the pawn that just moved reverts to its original position for a few seconds
-// while the next player's dice are rolling, then catches up" - reported directly, separately from
-// (and after) this file's own capture/celebration timing already covered most of this class's
-// other timing gaps.
+// elsewhere there, via CELEBRATION_HOLD_MS) - missing it for self-elimination was the root cause of
+// a real reported bug, found by tracing this class's own busyUntilMs math against the scene layer's
+// actual playback time: whenever this bounce was still genuinely playing but busyUntilMs had
+// already elapsed (having never budgeted for it), the *next* turn's roll fired mid-bounce - and
+// BoardScene/PieceMesh's shared diceSettledAt gate (see useTurnManager.ts's own doc comment,
+// re-armed by that new roll) snapped the still-animating piece straight back to its own hop's
+// starting square until the new roll's reveal passed, then resumed exactly where it left off. That
+// reads as "the pawn that just moved reverts to its original position for a few seconds while the
+// next player's dice are rolling, then catches up".
+//
+// Reported again, directly, after that fix (and RemoteTurnManager.ts's matching online one)
+// shipped: the *human*-move call site below (session.moveApplied.on) never had any equivalent
+// margin at all for an ordinary capture - unlike every bot call site, it adds no CELEBRATION_HOLD_MS
+// (that's a bot-pacing-only allowance), so a human capturing with a small amount left the very next
+// bot free to roll while the captured pawn's own bounce was still playing. That listener now also
+// checks result.capturedPiece, not just result.eliminatedByParkiller - see its own doc comment.
 const CAPTURE_RETURN_HOPS = 3
 
 // Requested directly ("EL BOT TIENE QUE HACER ETAPAS EN SUS MOVIMIENTOS PARA QUE QUEDEN BIEN
@@ -255,12 +260,27 @@ export class BotController {
       // comment on why it has to run *before* submitMoveForBot, not after).
       session.moveApplied.on((result) => {
         if (this.botColors.has(result.movedPiece.color)) return
-        // See extraBounceMs' own doc comment (why only self-elimination, not an ordinary capture,
-        // needs extra accounting here) - a human move that self-eliminates (PK5) plays the same
-        // extra bounce-home hops a bot's own move does, and this is the only call site for a
-        // *human's* move (a bot's own is covered where it's chosen, above/below), read directly off
-        // the already-resolved MoveResult instead of predicted from a MoveOption.
-        const extraBounceMs = result.eliminatedByParkiller ? CAPTURE_RETURN_HOPS * this.hopDurationMs : 0
+        // A human move that self-eliminates (PK5) plays the same extra bounce-home hops a bot's
+        // own move does - read directly off the already-resolved MoveResult instead of predicted
+        // from a MoveOption, since this is the only call site for a *human's* move (a bot's own is
+        // covered where it's chosen, above/below, via extraBounceMs(move)).
+        //
+        // Also now covers an ORDINARY capture (result.capturedPiece set, no self-elimination) -
+        // found by tracing a real reported repeat of this exact symptom after the self-elimination
+        // fix above had already shipped ("Sigue volviendo atrás antes de que lance el jugador
+        // siguiente" - it keeps going back before the next player rolls). extraBounceMs(move) (this
+        // file's own helper, below) deliberately leaves ordinary captures uncovered because every
+        // *bot* call site that can trigger one also separately adds CELEBRATION_HOLD_MS (2000ms),
+        // comfortably exceeding this exact bounce's real 3*hopDurationMs (~1440ms) - see that
+        // helper's own doc comment. But THIS listener is for a *human's* move, and never added
+        // CELEBRATION_HOLD_MS (or anything else) for an ordinary capture at all - a human capturing
+        // with a small amount (1-3 squares, i.e. under ~1440ms of its own hop) left the very next
+        // bot free to roll while the captured pawn's own separate "flung home" bounce
+        // (BoardScene.tsx's own captureFlights, spawned only once this move's own hop animation
+        // clears - it doesn't gate or delay anything else about turn flow on its own) was still
+        // genuinely playing, re-arming the shared diceSettledAt gate mid-bounce exactly like the
+        // self-elimination case above.
+        const extraBounceMs = result.eliminatedByParkiller || result.capturedPiece ? CAPTURE_RETURN_HOPS * this.hopDurationMs : 0
         this.markBusy(result.amount * this.hopDurationMs + extraBounceMs)
       }),
       session.moveChoicesReady.on((moves) => this.onMoveChoicesReady(moves)),

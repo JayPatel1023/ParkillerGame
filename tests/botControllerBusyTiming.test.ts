@@ -197,3 +197,71 @@ describe('BotController busy-window timing around a PK5 self-elimination', () =>
     bots.dispose()
   })
 })
+
+describe('BotController busy-window timing around a HUMAN move that ordinarily captures (no self-elimination)', () => {
+  // Reproduces the *other* half of the same reported symptom, found after the PK5 self-elimination
+  // fix above (and RemoteTurnManager.ts's own matching online-replay fix) had already shipped and
+  // the client reported it again anyway ("Sigue volviendo atrás antes de que lance el jugador
+  // siguiente" - it keeps going back before the next player rolls). session.moveApplied.on's own
+  // busy-window accounting - the *only* call site covering a non-bot mover's move at all - used to
+  // add CAPTURE_RETURN_HOPS' own extra bounce time solely for result.eliminatedByParkiller, leaving
+  // an ORDINARY capture (result.capturedPiece set) with zero extra margin: a human capturing with a
+  // small amount left the very next bot (Blue here) free to roll while the captured pawn's own
+  // separate "flung home" bounce-home animation (BoardScene.tsx's own captureFlights, which only
+  // starts once this move's own hop has already cleared) was still genuinely playing.
+  it("does not roll for the next bot until a human's ordinary capturing move's full walk-then-bounce would have finished playing", () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 6
+
+    const session = new FakeSession([red, blue], board)
+    const thinkDelayMs = 10
+    const hopDurationMs = 100
+    const diceSpinMs = 10
+    // Only Blue is bot-controlled - Red is the human mover this test is about; turnChangeHoldMs=0
+    // isolates the capture-bounce timing (CAPTURE_RETURN_HOPS) from the separate, much larger,
+    // fixed turn-handoff hold (TURN_CHANGE_HOLD_MS), same reasoning as the test above.
+    const bots = new BotController(session, new Set<PieceColor>(['Blue']), thinkDelayMs, hopDurationMs, diceSpinMs, 0)
+
+    let blueRolled = false
+    const originalRollForBot = session.rollForBot.bind(session)
+    session.rollForBot = () => {
+      blueRolled = true
+      originalRollForBot()
+    }
+
+    // amount=1 - deliberately small: amount*hopDurationMs (100ms) alone is far short of the
+    // captured pawn's own real bounce-home time (3*hopDurationMs=300ms), the exact gap a small
+    // ordinary capture used to leave completely unbudgeted for a human mover.
+    const amount = 1
+    const result: MoveResult = {
+      movedPiece: { ...red.pieces[0], trackPosition: 6 },
+      amount,
+      capturedPiece: blue.pieces[0],
+      capturedParkillerColor: null,
+      pieceFinished: false,
+    }
+
+    session.turnStarted.emit(red) // establishes Red as the last-known turn color, not a bot - no-op scheduling
+    session.moveApplied.emit(result) // Red's own (human) move applies - this is the listener under test
+    session.currentPlayer = blue // mirrors a real TurnManager already having moved on by the time...
+    session.turnStarted.emit(blue) // ...this fires - a genuine handoff, Blue is a bot and schedules its own roll
+
+    // Real total animation time for this move: amount(1)*hopDurationMs(100) = 100ms for the walk,
+    // plus CAPTURE_RETURN_HOPS(3)*hopDurationMs(100) = 300ms for the captured pawn's own bounce
+    // home = 400ms. Advancing to just short of it must NOT yet have rolled for Blue.
+    const captureAnimationMs = amount * hopDurationMs + 3 * hopDurationMs
+    vi.advanceTimersByTime(captureAnimationMs - 1)
+    expect(blueRolled).toBe(false)
+
+    // Advancing past the full, correctly-budgeted window does roll for Blue.
+    vi.advanceTimersByTime(2)
+    expect(blueRolled).toBe(true)
+
+    bots.dispose()
+  })
+})

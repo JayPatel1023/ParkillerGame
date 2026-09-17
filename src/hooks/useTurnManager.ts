@@ -6,6 +6,7 @@ import type { PieceColor } from '../core/pieceColor'
 import type { Piece } from '../core/pieces/piece'
 import type { MoveOption, MoveResult } from '../core/rules/moveOption'
 import { playDiceRollSound } from '../ui/diceSound'
+import { CaptureFlightHoldTracker } from './captureFlightHold'
 
 /**
  * The opponent piece a move captured, if any. Rules apply a capture the instant the move is
@@ -68,6 +69,15 @@ const DICE_SPIN_MS = 2000
 // own matching comment) - otherwise a bot could roll for its own turn before this hook's own hold
 // here finishes revealing it, desyncing the dice/board from what the screen still shows.
 const TURN_CHANGE_HOLD_MS = 3000
+
+// Kept in sync with piecePosition.ts's own CAPTURE_RETURN_HOPS (3) and PieceMesh.tsx's own
+// HOP_DURATION (0.48s, *1000 here) - same "duplicated across layers" reasoning as
+// botController.ts's/RemoteTurnManager.ts's own matching constants (this hook can't import the
+// scene layer either). Drives captureFlightPending below - see its own doc comment for the bug
+// this covers, found (and fixed) after both of those files' own busy/pacing fixes had already
+// shipped and the exact same reported symptom kept recurring anyway.
+const HOP_DURATION_MS = 480
+const CAPTURE_RETURN_HOPS = 3
 
 export interface MoveLogEntry {
   id: number
@@ -153,6 +163,50 @@ export function useTurnManager(turnManager: TurnManagerLike) {
   // would always see its very first value, never an updated one) - see that handler's own comment
   // on why it needs to know the *previous* current player, not just the incoming one.
   const currentPlayerColorRef = useRef(turnManager.currentPlayer.color)
+  // Captured pawn (PC3/PC4) or Parki-eliminated pawn (PK5, via moveAnimation.capturedPiece) and a
+  // pawn a Parkiller itself sends home (parkillerAnimation.capturedPawn) both spawn their own
+  // separate "flung home" bounce-home animation once the CAPTURING piece's own hop finishes
+  // (BoardScene.tsx's own captureFlights/spawnCaptureEffects - see that file's own doc comment:
+  // "it doesn't gate or delay anything else about turn flow" on its own). Reported directly, again,
+  // after both botController.ts's own busy-time fix (bot pacing) and RemoteTurnManager.ts's own
+  // pacing fix (online replay) had already shipped for this exact symptom ("Sigue volviendo atrás
+  // antes de que lance el jugador siguiente" - it keeps going back before the next player rolls):
+  // neither of those touches this - canRoll (GameBoardScreen.tsx) only ever waited on
+  // moveAnimation/parkillerAnimation themselves, which already clear the instant the CAPTURING
+  // piece's own hop finishes, well before the CAPTURED piece's own bounce-home has even started.
+  // A same-player bonus roll (a double) has NO turn-handoff hold at all (see TURN_CHANGE_HOLD_MS's
+  // own comment - never applied for the same player continuing), so a human could click "roll"
+  // again immediately, re-arming the shared diceSettledAt gate (see its own doc comment above)
+  // while the just-captured pawn's own flight was still genuinely playing - entirely local,
+  // no bot, no network, reproducing the identical "reverts, then catches up" symptom. This state
+  // - and captureFlightHoldRef below, which drives it - fixes that: true for exactly
+  // CAPTURE_RETURN_HOPS*HOP_DURATION_MS after either animation's own trailing edge (see the two
+  // effects below), consumed by GameBoardScreen's own animationsSettled alongside
+  // moveAnimation/parkillerAnimation.
+  const [captureFlightPending, setCaptureFlightPending] = useState(false)
+  // Lazy-initialized once per hook instance (not per render) - see CaptureFlightHoldTracker's own
+  // doc comment for why this plain timer class lives outside React state/effects entirely.
+  const captureFlightHoldRef = useRef<CaptureFlightHoldTracker | null>(null)
+  if (!captureFlightHoldRef.current) {
+    captureFlightHoldRef.current = new CaptureFlightHoldTracker(setCaptureFlightPending, CAPTURE_RETURN_HOPS * HOP_DURATION_MS)
+  }
+  // Trailing-edge detection, same pattern as BoardScene.tsx's own captureFlights-spawning effects
+  // (moveAnimation/parkillerAnimation going from "had a capture" to null, in that exact tick) - see
+  // captureFlightPending's own doc comment just above for why this needs its own tracking here too,
+  // not just in the scene layer.
+  const prevMoveAnimationForCaptureRef = useRef<MoveAnimationRequest | null>(null)
+  useEffect(() => {
+    const prevMove = prevMoveAnimationForCaptureRef.current
+    if (!moveAnimation && prevMove?.capturedPiece) captureFlightHoldRef.current?.trigger()
+    prevMoveAnimationForCaptureRef.current = moveAnimation
+  }, [moveAnimation])
+  const prevParkillerAnimationForCaptureRef = useRef<ParkillerMoveResult | null>(null)
+  useEffect(() => {
+    const prevParkiller = prevParkillerAnimationForCaptureRef.current
+    if (!parkillerAnimation && prevParkiller?.capturedPawn) captureFlightHoldRef.current?.trigger()
+    prevParkillerAnimationForCaptureRef.current = parkillerAnimation
+  }, [parkillerAnimation])
+  useEffect(() => () => captureFlightHoldRef.current?.dispose(), [])
   const [moveLog, setMoveLog] = useState<MoveLogEntry[]>([])
   const moveLogIdRef = useRef(0)
   useEffect(() => {
@@ -314,6 +368,7 @@ export function useTurnManager(turnManager: TurnManagerLike) {
     moveAnimation,
     parkillerAnimation,
     diceSettledAt,
+    captureFlightPending,
     eliminatedByDoubles,
     pendingReward,
     forfeitedReward,
