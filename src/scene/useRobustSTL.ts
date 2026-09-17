@@ -7,8 +7,18 @@ import { STLLoader } from 'three-stdlib'
 // piece on a flaky fetch with no retry and no visible fallback, the exact failure mode that hook
 // was built to avoid for board textures. Reused as-is for the Parkiller's own STL scan rather than
 // re-deriving a second ad hoc loading strategy.
-const MAX_ATTEMPTS = 5
+//
+// Reported directly, with a screenshot: pieces and dice rendering fine, the board and the
+// Parkiller both missing from the same scene. The board recovered on its own moments later
+// (useRobustTexture.ts's own indefinite retry, working as designed); the Parkiller never did -
+// this file was never updated when that sibling hook's own MAX_ATTEMPTS (a hard cap that gives up
+// permanently, exactly the bug useRobustTexture.ts was built to fix) was replaced with an
+// indefinite retry capped only by delay, not attempt count. A Parkiller scan is exactly as
+// essential, always-valid, permanently-hosted content as a board texture - there's no more a real
+// 404 here than there - so the same fix applies for the same reason: MAX_RETRY_DELAY_MS caps how
+// *slow* retrying gets on a genuinely dead connection, not how many times it's allowed to try.
 const RETRY_BASE_DELAY_MS = 800
+const MAX_RETRY_DELAY_MS = 15_000
 
 const geometryCache = new Map<string, BufferGeometry>()
 const loader = new STLLoader()
@@ -42,11 +52,11 @@ function loadWithRetry(url: string, attempt: number) {
     },
     undefined,
     () => {
-      if (attempt >= MAX_ATTEMPTS) {
-        inFlight.delete(url)
-        return
-      }
-      setTimeout(() => loadWithRetry(url, attempt + 1), RETRY_BASE_DELAY_MS * attempt)
+      // See MAX_RETRY_DELAY_MS's own doc comment above - never actually gives up; the fallback
+      // (no Parkiller mesh rendered at all - see ParkillerMesh's own null-geometry handling) stays
+      // showing only until whichever attempt finally lands.
+      const delay = Math.min(RETRY_BASE_DELAY_MS * attempt, MAX_RETRY_DELAY_MS)
+      setTimeout(() => loadWithRetry(url, attempt + 1), delay)
     },
   )
 }
