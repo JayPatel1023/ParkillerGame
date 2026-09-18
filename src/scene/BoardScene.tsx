@@ -318,9 +318,18 @@ const INTRO_STAGGER = 0.09 // seconds between each piece's drop-in entrance, for
 // `tileSize` computed once per board) instead of an absolute world-unit guess, so the same
 // relative spacing holds on every board - each board's own stacked pieces stay within roughly
 // the same proportion of their own tile, not a constant that only happened to fit one of them.
+// Reported directly, a fourth time, with an annotated screenshot: two barrier pawns still reading
+// as spread too far apart, past the tile's own drawn border, on a curved square specifically -
+// "칸대기의 중심에 두개를 배치해달라" (place the two at the tile's own center). The local-frame/
+// per-axis clamping above already keeps this construction-correct against true geometric overlap,
+// but the *base* fractions below (what that clamp bounds, not always what it actively kicks in
+// against) were still generous enough to read as crossing the line once the pieces' own rendered
+// art (shadow/highlight bleed beyond the exact geometric radius) is accounted for. Trimmed the
+// primary 2-occupant pair (by far the most common case - a barrier or a pawn+Parkiller pairing)
+// from ±0.2 to ±0.13 per axis - see STACK_CLEARANCE_FACTOR's own matching trim just below.
 const STACK_OFFSETS: [number, number][] = [
-  [-0.2, -0.2],
-  [0.2, 0.2],
+  [-0.13, -0.13],
+  [0.13, 0.13],
   [0.2, -0.2],
   [-0.2, 0.2],
   [0, 0.36],
@@ -376,7 +385,11 @@ function localTangentNormal(waypoints: [number, number][], index: number): { tan
 // Leaves a visible gap from the tile's own drawn border, not just enough to avoid true geometric
 // overlap - reported directly, with a screenshot, as still "밟고있다" (stepping on the line) at an
 // offset that technically stayed inside the tile's raw half-width.
-const STACK_CLEARANCE_FACTOR = 0.85
+//
+// Trimmed again (0.85 -> 0.7), alongside STACK_OFFSETS' own matching trim just above - see that
+// constant's own doc comment for the report this responds to (still reading as crossing the
+// border on a curved square specifically, even within the old clamp).
+const STACK_CLEARANCE_FACTOR = 0.7
 
 // A stack group's own occupant ids are prefixed 'pawn-'/'parkiller-' (see pawnOccupantId/
 // parkillerOccupantId) - cheaper and more direct than re-deriving piece types from state.
