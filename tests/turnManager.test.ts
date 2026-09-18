@@ -1523,6 +1523,35 @@ describe('TurnManager - landing on an unprotected opposing Parkiller (PK5)', () 
     expect(offered.some((m) => m.piece === red.pieces[0] && m.amount === 4)).toBe(true)
     expect(offered.some((m) => m.piece === red.pieces[0] && m.amount === 8)).toBe(true)
   })
+
+  // Reported directly ("Doble 6 del Parki: no lo eliminó" - double 6, it didn't eliminate the
+  // Parki): the window used to close after this roll's very first move, whether or not that move
+  // was the one landing on the Parki - so spending one half of the double on an unrelated piece
+  // first silently cost the *other* half its own real, independent chance at the Parki, even
+  // though the rulebook's own "rolling the exact double... moves the pawn that value" names no
+  // such restriction.
+  it('the second half of a double still eliminates the Parki after the first half moved a different piece (PK6/PK8)', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 0 // first half of the double - moves to 6, unrelated to the Parki
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 6 // second half - moves to 12, landing exactly on the Parki
+    blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+    blue.parkiller.trackPosition = 12
+
+    const dice = new ScriptedDice([6, 6, 1])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+    manager.requestRoll()
+
+    manager.submitMove(red.pieces[0], 6)
+    expect(blue.parkiller.state).toBe('InPlay') // untouched by the first, unrelated move
+
+    const result = manager.submitMove(red.pieces[1], 6)
+    expect(result?.capturedParkillerColor).toBe('Blue')
+    expect(blue.parkiller.state).toBe('Eliminated')
+  })
 })
 
 // Requested directly ("para empezar la partida cada jugador y los bots lanzan los dados blancos

@@ -892,9 +892,18 @@ export class TurnManager {
         resultingCorridorPosition: move.resultingCorridorPosition,
       }
     }
-    // PK6/PK8: the window to kill the Parkiller with a common piece closes after this roll's first
-    // move, whether or not it was actually used for that.
-    this.parkillerCapturableThisRoll = false
+    // PK6/PK8: reported directly ("Doble 6 del Parki: no lo eliminó" - double 6, it didn't
+    // eliminate the Parki), reproduced precisely: a double gives two separate single-die
+    // opportunities to eliminate the Parki (the rulebook's own "rolling the exact double... moves
+    // the pawn [that value] spaces" names no restriction to whichever one is submitted first).
+    // This used to unconditionally clear the window after ANY move this roll - the very first
+    // move, even an unrelated one, or even a reward move chained off a capture - closing it before
+    // the double's OTHER die ever got a chance to land on the Parki. usesSingleDie (below, at the
+    // actual capture check) already keeps a reward move from ever counting on its own; nothing else
+    // needs to force this window shut mid-roll - the next roll's own resolveParkillerMove already
+    // resets it fresh (dieA === dieB, or false for a non-double) before offerMoves() ever runs
+    // again, so simply not clearing it here lets both of this roll's own dice keep their real
+    // chance at it.
     this.lastMovedPiece = chosenPiece
     this.pendingMoves = null
 
