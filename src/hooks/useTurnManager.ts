@@ -318,17 +318,18 @@ export function useTurnManager(turnManager: TurnManagerLike) {
         setPendingReward(grant)
         setForfeitedReward(null)
       }),
-      // No matching moveApplied ever follows a forfeit (nothing moved - the reward was simply
-      // lost), unlike a *taken* reward, which already gets its own entry via moveApplied/
-      // describeMove above - this is the one reward outcome that would otherwise be invisible to
-      // the log entirely. RewardGrant itself carries no color (see its own doc comment - it's
-      // always implicitly the roller's), so this reads it straight off TurnManager's own live
-      // currentPlayer, correct here since a forfeit is resolved mid-turn, well before any turn
-      // transition could move it on to someone else.
+      // setForfeitedReward still drives its own transient RewardToast (auto-hides on its own,
+      // ALERT_HOLD_MS in GameBoardScreen.tsx) - reported directly, with a screenshot: a *permanent*
+      // MoveLog entry for every single forfeit piled up into a wall of repeated "X's bonus reward
+      // went unused" pills, crowding out every other, more useful entry once a game reached its
+      // endgame (most pieces already Finished, so a fresh capture's own reward has nowhere left to
+      // go and gets forfeited on nearly every roll from then on - a real, correctly-computed
+      // outcome each time, just not one worth a permanent line in the history once it starts
+      // recurring this often). No log entry pushed here anymore; the toast alone still tells the
+      // player it happened, in the moment, without piling up.
       turnManager.rewardForfeited.on((grant) => {
         setPendingReward(null)
         setForfeitedReward(grant)
-        pushLogEntry(turnManager.currentPlayer.color, `${turnManager.currentPlayer.color}'s bonus reward went unused`)
       }),
       turnManager.gameWon.on((player) => {
         setWinner(player)
