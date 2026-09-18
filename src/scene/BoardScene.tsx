@@ -327,9 +327,20 @@ const INTRO_STAGGER = 0.09 // seconds between each piece's drop-in entrance, for
 // art (shadow/highlight bleed beyond the exact geometric radius) is accounted for. Trimmed the
 // primary 2-occupant pair (by far the most common case - a barrier or a pawn+Parkiller pairing)
 // from ±0.2 to ±0.13 per axis - see STACK_CLEARANCE_FACTOR's own matching trim just below.
+//
+// Reported again, a fifth time, with two more screenshots (a pawn+Parkiller pair specifically,
+// one of a color's own safe entry squares): still visibly outside the square's own drawn safe-zone
+// marker - "안쪽에 들어가지못하고 밖으로 삐여져나온다" (not going inward, sticking out). Checked the
+// actual numbers this time (real tileSize/radii from generated-boards.json, not a guess): on a
+// *safe* square specifically, the across-axis clamp (SAFE_TILE_WIDTH_MULTIPLIER below) was wide
+// enough that this ±0.13 base fraction never even reached it - the clamp wasn't the binding
+// constraint there, the raw base offset was, scaled up by that same widened tile. See
+// SAFE_TILE_WIDTH_MULTIPLIER's own matching trim just below - trimmed again here too (±0.13 ->
+// ±0.10) so the *plain*, non-safe case also comes down a further, real amount rather than relying
+// on the widened-tile trim alone.
 const STACK_OFFSETS: [number, number][] = [
-  [-0.13, -0.13],
-  [0.13, 0.13],
+  [-0.1, -0.1],
+  [0.1, 0.1],
   [0.2, -0.2],
   [-0.2, 0.2],
   [0, 0.36],
@@ -502,6 +513,21 @@ function parkillerOccupantId(color: PieceColor): string {
 // that most needs the room. Widened here rather than uniformly across every tile, since a global
 // widen would be a much bigger, riskier change than this specific report called for.
 const SAFE_TILE_WIDTH_MULTIPLIER = 1.8
+
+// Reported directly, with an annotated screenshot of a pawn+Parkiller pair specifically at a
+// color's own safe entry square: still visibly outside the square's own drawn safe-zone marker -
+// "안쪽에 들어가지못하고 밖으로 삐여져나온다" (not going inward, sticking out). Checked the actual
+// numbers (real tileSize/radii, not a guess - see STACK_OFFSETS' own matching comment): on a safe
+// square, the stacking offset scales with SAFE_TILE_WIDTH_MULTIPLIER's own full 1.8x - well past
+// where the clamp above ever kicks in, so occupants spread out proportionally to how wide the *tile
+// mesh itself* was deliberately widened (to fit two full-size pieces at all, per that constant's
+// own earlier report). But the tile's own drawn safe-zone artwork (the round marker the client's
+// screenshot shows) doesn't visually grow along with that mesh widening - it's decorative art, not
+// geometry - so occupants that legitimately still sit inside the widened *mesh* can still read as
+// outside the *marker*. A separate, smaller multiplier for stacking specifically (not the mesh's
+// own rendered width, which stays at SAFE_TILE_WIDTH_MULTIPLIER so two full-size pieces still fit
+// without overlapping) keeps occupants closer to that marker's own visual center.
+const STACK_SAFE_WIDTH_MULTIPLIER = 1.3
 
 // Boosts saturation and darkens lightness on top of the tile's own sampled board-art color, so a
 // protected square reads as visually distinct at a glance instead of relying on the underlying art
@@ -943,7 +969,10 @@ export function BoardScene({
           // "safe square" semantics (stackWp.waypoints === definition.trackWaypoints singles out
           // OnTrack over InHomeCorridor, which stackWaypointsFor's own doc comment covers).
           const onSafeTrackSquare = stackWp?.waypoints === definition.trackWaypoints && safeTrackIndexSet.has(stackWp.index)
-          const effectiveTileSize = onSafeTrackSquare ? tileSize * SAFE_TILE_WIDTH_MULTIPLIER : tileSize
+          // STACK_SAFE_WIDTH_MULTIPLIER, not SAFE_TILE_WIDTH_MULTIPLIER - see that constant's own
+          // doc comment for why the stacking offset uses a smaller widening than the tile mesh
+          // itself.
+          const effectiveTileSize = onSafeTrackSquare ? tileSize * STACK_SAFE_WIDTH_MULTIPLIER : tileSize
           const [ox, oz] = localStackOffset(
             stackWp?.waypoints ?? null,
             stackWp?.index ?? -1,
@@ -1031,8 +1060,10 @@ export function BoardScene({
           const [along, across] = STACK_OFFSETS[parkillerGroup.indexOf(parkillerOccupantId(player.color)) % STACK_OFFSETS.length]
           // parkillerStackKey (above) only ever returns non-null once the Parkiller has genuinely
           // crossed onto the shared track, so trackPosition here is always a real track index.
+          // STACK_SAFE_WIDTH_MULTIPLIER, not SAFE_TILE_WIDTH_MULTIPLIER - see that constant's own
+          // doc comment (same reasoning as the pawn's own matching call site above).
           const parkillerEffectiveTileSize = safeTrackIndexSet.has(player.parkiller.trackPosition)
-            ? tileSize * SAFE_TILE_WIDTH_MULTIPLIER
+            ? tileSize * STACK_SAFE_WIDTH_MULTIPLIER
             : tileSize
           const [ox, oz] = localStackOffset(
             definition.trackWaypoints,
