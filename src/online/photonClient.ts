@@ -116,10 +116,19 @@ export class PhotonConnection implements RoomTransport {
   // firing far too eagerly. A real grace period (see the SDK source: a disconnect within playerTTL
   // fires onActorSuspend instead of onActorLeave, and this app has no onActorSuspend handler at all,
   // so nothing happens - the game just keeps going) absorbs exactly this kind of brief, self-healing
-  // network blip. 60s chosen as generous enough for a real mobile handoff/wifi drop, short enough
-  // that a genuinely departed player doesn't leave the other one waiting too long before the
-  // already-working onActorLeft path correctly ends the game.
-  private static readonly PLAYER_TTL_MS = 60_000
+  // network blip.
+  //
+  // Requested directly by the client ("El tiempo de inacción para que te eche de la plataforma debe
+  // de ser de 30 segundos" - the inactivity time before it kicks you off the platform should be 30
+  // seconds): was 60s (chosen generously for a real mobile handoff/wifi drop before this request).
+  // Also shortens reconnectAndRejoin()'s own retry budget by the same amount (that method's own doc
+  // comment already ties it to this constant deliberately, so a client's own reconnect attempt never
+  // outlasts the window the *other* players' clients are themselves bot-covering it for - see
+  // OnlineLobbyScreen.tsx's onActorLeft handler for what happens once this elapses: the departed
+  // seat's color goes to BotController instead of ending the game, unless the departed actor was the
+  // room's own Master (still ends the game today - not yet resolved with the client which behavior
+  // they want there).
+  private static readonly PLAYER_TTL_MS = 30_000
 
   createRoom(code: string, maxPlayers: number): Promise<void> {
     return this.joinOrCreate(code, { createIfNotExists: true }, { maxPlayers, playerTTL: PhotonConnection.PLAYER_TTL_MS })
@@ -296,6 +305,14 @@ export class PhotonConnection implements RoomTransport {
       this.lastKnownMasterActorNr = current
       for (const listener of this.masterChangeListeners) listener()
     }
+  }
+
+  /** Used by OnlineLobbyScreen's own onActorLeft handler to tell a departed Master apart from a
+   * departed ordinary seat - only the latter can be handed to BotController (see that handler's own
+   * doc comment). Always current: the SDK's own myRoomMasterActorNr() is a live read, not a cached
+   * value that could go stale between onMasterClientChanged firings. */
+  getMasterActorNr(): number {
+    return this.client.myRoomMasterActorNr()
   }
 
   // --- Room/actor custom properties - seat assignment for OnlineLobbyScreen, not used by the

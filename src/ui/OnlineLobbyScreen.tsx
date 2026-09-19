@@ -254,15 +254,21 @@ export default function OnlineLobbyScreen() {
   // for genuine solo-vs-bots play without touching the gate itself.
   const [confirmingSoloStart, setConfirmingSoloStart] = useState(false)
   const connectionRef = useRef<PhotonConnection | null>(null)
-  // Stored so the cleanup below can dispose it - startGame() constructs this imperatively (only
-  // when bot seats exist), not from its own effect, so nothing else was holding a reference to
-  // stop its turnStarted/moveChoicesReady subscriptions and pending setTimeouts on unmount.
+  // Stored so the cleanup below can dispose it - startGame() constructs this imperatively (always,
+  // as of the idle/disconnect bot-takeover fix - see that effect's own doc comment for why an
+  // otherwise all-human game still needs one ready), not from its own effect, so nothing else was
+  // holding a reference to stop its turnStarted/moveChoicesReady subscriptions and pending
+  // setTimeouts on unmount.
   const botControllerRef = useRef<BotController | null>(null)
   // Which actorNr controls which color, frozen at the moment the game actually started - the same
   // mapping every client independently freezes (see startGame()/startAsRemote() below), used only
   // to tell a real departing player's seat apart from a bot's the instant they leave (see the
   // actor-left effect below). A bot has no connected actor at all, so it can never appear here.
   const realSeatsRef = useRef<Record<number, PieceColor>>({})
+  // Which actorNr is the room's Master, kept fresh from the same onMasterClientChanged subscription
+  // below - used only by the onActorLeft handler further down, to tell a departed Master apart from
+  // a departed ordinary seat (see that handler's own doc comment for why that distinction matters).
+  const masterActorNrRef = useRef<number | null>(null)
 
   // Reported directly, with a screenshot: hitting a connection error left the player stuck on a
   // dead-end screen with no way back - phase 'error' rendered the message and nothing else, and
@@ -367,19 +373,38 @@ export default function OnlineLobbyScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
 
-  // Reported directly: if a real player left an in-progress game, everyone else just kept playing
+  // Originally: if a real player left an in-progress game, everyone else just kept playing
   // shorthanded instead of stopping - wanted to know who left and have the game end there for
-  // everyone still connected. Photon's own actor-leave event already reaches every client in the
-  // room independently (not just the Master), so each client detects this and stops itself locally
-  // - no extra broadcast needed. realSeatsRef (frozen the instant the game actually started, by
-  // both startGame() and startAsRemote() below) is what tells a real player's seat apart from a
-  // bot's - a bot was never a connected actor, so it can never fire this at all.
+  // everyone still connected. realSeatsRef (frozen the instant the game actually started, by both
+  // startGame() and startAsRemote() below) is what tells a real player's seat apart from a bot's - a
+  // bot was never a connected actor, so it can never fire this at all.
+  //
+  // Requested directly by the client, now that PLAYER_TTL_MS (photonClient.ts) is down to 30s: "en
+  // vez de echarte deberías ser reemplazado por un bot hasta tomar de nuevo el control, de lo
+  // contrario los otros jugadores se aburrirían y se irían del juego" (instead of kicking you out,
+  // you should be replaced by a bot until you take control again - otherwise the other players get
+  // bored and leave). A departed *ordinary* seat's color now goes to BotController.takeOverColor()
+  // instead of ending the game - only meaningful on whichever client is actually Master (bots, and
+  // now this, are only ever driven from there; see HostTurnManagerBridge's own doc comment), so
+  // every other surviving client does nothing here and just keeps replaying that color's bot-driven
+  // moves as ordinary broadcasts, same as any other bot seat.
+  //
+  // A departed *Master* is NOT covered by this yet - deliberately left stopping the game exactly as
+  // before (masterActorNrRef, kept fresh by the onMasterClientChanged effect below, is what tells
+  // the two cases apart). Not yet resolved with the client which behavior they actually want there:
+  // this app has no way for a surviving client to become newly authoritative today (see
+  // onMasterClientChanged's own doc comment below), so silently pretending a bot can cover for a
+  // departed Master would be a bigger, still-undesigned change.
   useEffect(() => {
     const connection = connectionRef.current
     if (!connection || phase !== 'game') return
     return connection.onActorLeft((actorNr) => {
       const color = realSeatsRef.current[actorNr]
       if (!color) return
+      if (actorNr !== masterActorNrRef.current) {
+        if (connection.isMasterClient()) botControllerRef.current?.takeOverColor(color)
+        return
+      }
       botControllerRef.current?.dispose()
       botControllerRef.current = null
       session?.turnManager.dispose?.()
@@ -413,6 +438,9 @@ export default function OnlineLobbyScreen() {
     if (!connection || phase !== 'game') return
     wasMasterRef.current = connection.isMasterClient()
     return connection.onMasterClientChanged(() => {
+      // Kept fresh regardless of whether *this* client was promoted - the onActorLeft effect above
+      // reads this on every client to tell a departed Master apart from a departed ordinary seat.
+      masterActorNrRef.current = connection.getMasterActorNr()
       if (wasMasterRef.current || !connection.isMasterClient()) return
       wasMasterRef.current = true
       botControllerRef.current?.dispose()
@@ -505,6 +533,7 @@ export default function OnlineLobbyScreen() {
     // read from it directly instead, same as every other piece of Master-decided state here.
     const myColor = seats[connection.localActorNr] ?? null
     const bridge = new RemoteTurnManager(inner, diceQueue, players, connection, myColor ?? null)
+    masterActorNrRef.current = connection.getMasterActorNr()
     // deferredStart: true (not bridge.start() here) - see GameBoardScreen.tsx's own matching
     // doc comment for why online now defers exactly like local play does.
     realSeatsRef.current = seats ?? {}
@@ -589,12 +618,21 @@ export default function OnlineLobbyScreen() {
     // right up until this point, matching "you don't know your color until the draw happens").
     const actorColors = shuffleColorsByActorNr(connection.getActors().map((a) => a.actorNr), colors)
     const myColor = actorColors.get(connection.localActorNr) ?? null
-    const bridge = new HostTurnManagerBridge(inner, dice, players, connection, actorColors, myColor)
+    // The callback closes over botControllerRef rather than reading it eagerly - it's only ever
+    // invoked later, from a network message, well after botControllerRef.current is actually set
+    // below (BotController itself needs `bridge` to already exist, so it can't be constructed first).
+    const bridge = new HostTurnManagerBridge(inner, dice, players, connection, actorColors, myColor, (color) =>
+      botControllerRef.current?.releaseColor(color),
+    )
+    masterActorNrRef.current = connection.getMasterActorNr()
 
     // Any color nobody claimed a seat for becomes a bot - this is what "bots fill empty seats" means.
     const claimedColors = new Set(actorColors.values())
     const botColors = new Set(colors.filter((c) => !claimedColors.has(c)))
-    if (botColors.size > 0) botControllerRef.current = new BotController(bridge, botColors)
+    // Always constructed now, even with zero bot seats - takeOverColor() (the onActorLeft handler
+    // above) needs somewhere to hand an idle/disconnected real player's color mid-game, which can't
+    // be predicted at start time the way empty-seat bots can.
+    botControllerRef.current = new BotController(bridge, botColors)
     const colorDraw: ColorDrawEntry[] = colors.map((color) => ({ color, isBot: botColors.has(color) }))
 
     // deferredStart: true (not bridge.start() here) - see GameBoardScreen.tsx's own matching

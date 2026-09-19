@@ -61,6 +61,16 @@ export class HostTurnManagerBridge implements TurnManagerLike {
    * controls, so its own UI can gate the roll button/piece selection the same way a remote
    * client's has to, instead of only the network-intent validation below catching it. */
   readonly localPlayerColor: PieceColor | null
+  // Fired whenever a genuine, validated roll/move intent arrives from a real connected actor - the
+  // "they're back" signal OnlineLobbyScreen.tsx wires to BotController.releaseColor() so a color
+  // that idle/disconnect handling (that screen's own onActorLeft handler) had handed to the bot goes
+  // back to its real player the moment they actually act again, not merely once they reconnect (a
+  // reconnected-but-not-yet-acted client could otherwise race the bot's own already-scheduled next
+  // action for the same decision - see BotController's own matching !botColors.has(color) re-checks
+  // for the other half of that fix). Fired unconditionally, not just for a color that was actually
+  // taken over - releaseColor() is a harmless no-op for one that wasn't, and this class has no
+  // visibility into BotController's own state to check first.
+  private readonly onActorAction: (color: PieceColor) => void
 
   constructor(
     inner: TurnManager,
@@ -69,6 +79,7 @@ export class HostTurnManagerBridge implements TurnManagerLike {
     transport: RoomTransport,
     actorColors: Map<number, PieceColor>,
     localPlayerColor: PieceColor | null = null,
+    onActorAction: (color: PieceColor) => void = () => {},
   ) {
     this.inner = inner
     this.dice = dice
@@ -77,6 +88,7 @@ export class HostTurnManagerBridge implements TurnManagerLike {
     this.transport = transport
     this.actorColors = actorColors
     this.localPlayerColor = localPlayerColor
+    this.onActorAction = onActorAction
 
     this.turnStarted = inner.turnStarted
     this.diceRolled = inner.diceRolled
@@ -144,6 +156,7 @@ export class HostTurnManagerBridge implements TurnManagerLike {
   private handleRollIntent(actorNr: number): void {
     const seatColor = this.actorColors.get(actorNr)
     if (!seatColor || seatColor !== this.inner.currentPlayer.color) return
+    this.onActorAction(seatColor)
     this.performRoll()
   }
 
@@ -151,6 +164,7 @@ export class HostTurnManagerBridge implements TurnManagerLike {
     if (!this.isValidActor(actorNr, color)) return null
     const piece = findPiece(this.players, color, pieceIndex)
     if (!piece) return null
+    this.onActorAction(color)
     return this.performMove(piece, amount)
   }
 

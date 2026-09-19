@@ -176,7 +176,19 @@ export interface BotDrivableSession {
  */
 export class BotController {
   private readonly session: BotDrivableSession
+  // Not reassigned (stays `readonly` as a binding), but its *contents* are - see takeOverColor/
+  // releaseColor below. Requested directly by the client: a real player who goes idle or disconnects
+  // online should be temporarily covered by a bot "hasta tomar de nuevo el control" (until they take
+  // control again), rather than ending the game for everyone - see OnlineLobbyScreen.tsx's own
+  // onActorLeft handler for what actually triggers this at runtime (a genuine Photon actor-leave, not
+  // a raw "N seconds since their last click" timer - see that handler's own doc comment for why).
   private readonly botColors: Set<PieceColor>
+  // Set on every moveChoicesReady this class ever sees (bot-owned color or not - a color could be
+  // handed over via takeOverColor() *while* its own piece-choice decision is already pending, and by
+  // then the original event that would have started this class' own scheduling has already come and
+  // gone). Cleared once that same color's pending choice actually resolves (moveApplied). Only ever
+  // read by takeOverColor() itself.
+  private lastMoveChoices: { color: PieceColor; moves: MoveOption[] } | null = null
   private readonly thinkDelayMs: number
   private readonly hopDurationMs: number
   private readonly diceSpinMs: number
@@ -259,6 +271,9 @@ export class BotController {
       // double-counting against the pre-emptive call already covering it (see that call's own
       // comment on why it has to run *before* submitMoveForBot, not after).
       session.moveApplied.on((result) => {
+        // See lastMoveChoices' own doc comment above - cleared regardless of bot ownership, before
+        // the bot-owned early-return just below (which must not skip this).
+        if (this.lastMoveChoices?.color === result.movedPiece.color) this.lastMoveChoices = null
         if (this.botColors.has(result.movedPiece.color)) return
         // A human move that self-eliminates (PK5) plays the same extra bounce-home hops a bot's
         // own move does - read directly off the already-resolved MoveResult instead of predicted
@@ -283,7 +298,10 @@ export class BotController {
         const extraBounceMs = result.eliminatedByParkiller || result.capturedPiece ? CAPTURE_RETURN_HOPS * this.hopDurationMs : 0
         this.markBusy(result.amount * this.hopDurationMs + extraBounceMs)
       }),
-      session.moveChoicesReady.on((moves) => this.onMoveChoicesReady(moves)),
+      session.moveChoicesReady.on((moves) => {
+        this.lastMoveChoices = { color: this.session.currentPlayer.color, moves }
+        this.onMoveChoicesReady(moves)
+      }),
     ]
   }
 
@@ -297,7 +315,11 @@ export class BotController {
     if (!this.botColors.has(color)) return
     const extraHoldMs = isHandoffToNewPlayer ? this.turnChangeHoldMs : 0
     this.scheduleRespectingBusy(this.thinkDelayMs + extraHoldMs, () => {
-      if (this.session.currentPlayer.color !== color) return // stale - state moved on before this fired
+      // !botColors.has(color): releaseColor() can run *after* this was scheduled but *before* it
+      // fires - a real player reconnecting and rolling for themselves in that window already
+      // resolved this exact decision (see releaseColor's own doc comment); re-checking here, not
+      // just at schedule time, stops this from rolling a second time on top of their own roll.
+      if (this.session.currentPlayer.color !== color || !this.botColors.has(color)) return // stale
       this.session.rollForBot()
     })
   }
@@ -324,7 +346,8 @@ export class BotController {
       const chosen = exitMoves[0]
       this.pieceHighlighted.emit(chosen.piece)
       this.scheduleRespectingBusy(this.thinkDelayMs, () => {
-        if (this.session.currentPlayer.color !== color) {
+        // See onTurnStarted's own matching !botColors.has(color) comment - same race, same fix.
+        if (this.session.currentPlayer.color !== color || !this.botColors.has(color)) {
           this.pieceHighlighted.emit(null)
           return
         }
@@ -497,7 +520,8 @@ export class BotController {
     // the move actually submits.
     this.pieceHighlighted.emit(chosen.piece)
     this.scheduleRespectingBusy(this.thinkDelayMs, () => {
-      if (this.session.currentPlayer.color !== color) {
+      // See onTurnStarted's own matching !botColors.has(color) comment - same race, same fix.
+      if (this.session.currentPlayer.color !== color || !this.botColors.has(color)) {
         this.pieceHighlighted.emit(null) // stale - nothing will submit, so nothing should stay lit
         return
       }
@@ -642,6 +666,33 @@ export class BotController {
       action()
     }, delayMs)
     this.pendingTimeouts.set(handle, action)
+  }
+
+  // Hands a currently actor-owned color over to this class's own decision-making - called from
+  // OnlineLobbyScreen.tsx's own onActorLeft handler once a real player's connection has genuinely
+  // dropped (see this class's own botColors doc comment for why that's the trigger, not a raw idle
+  // timer). A no-op if this color is already bot-owned (a genuine bot seat from the lobby, or an
+  // earlier takeover that never got released). If this color's own decision is already pending right
+  // now - it's already this color's turn, waiting on a roll or a piece choice - onTurnStarted/
+  // onMoveChoicesReady won't fire again on their own; the event they'd normally react to already
+  // happened, back before this color was added to botColors. Re-invoking whichever of the two
+  // actually applies replays that same decision now instead of leaving it stalled until some *other*
+  // event happens to fire again.
+  takeOverColor(color: PieceColor): void {
+    if (this.botColors.has(color)) return
+    this.botColors.add(color)
+    if (this.session.currentPlayer.color !== color) return
+    if (this.lastMoveChoices?.color === color) this.onMoveChoicesReady(this.lastMoveChoices.moves)
+    else this.onTurnStarted(color)
+  }
+
+  // Hands a color back to its real player - called from HostTurnManagerBridge's own onActorAction
+  // callback the instant a genuine, validated roll/move intent arrives from that color's actor (see
+  // that callback's own doc comment). Safe to call for a color that was never taken over at all
+  // (Set.delete on an absent value is a harmless no-op) - HostTurnManagerBridge fires this
+  // unconditionally on every validated actor action, not just ones that followed a takeover.
+  releaseColor(color: PieceColor): void {
+    this.botColors.delete(color)
   }
 
   // See this class's own `paused` doc comment above - every currently-armed timeout is cancelled
