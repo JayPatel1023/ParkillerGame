@@ -1552,6 +1552,42 @@ describe('TurnManager - landing on an unprotected opposing Parkiller (PK5)', () 
     expect(result?.capturedParkillerColor).toBe('Blue')
     expect(blue.parkiller.state).toBe('Eliminated')
   })
+
+  // Reported directly ("SALIO UN DOBLE 2 Y EL PARKI ESTABA A 4. MOVIO DOS, AL MOVER LOS OTROS DOS
+  // DEBIA MORIR POR EL PARKI...NO OCURRIO ESTO SINO QUE ELIMINO AL PARKI...AL PARKI SE LE ELIMINA SI
+  // SALE EL DOBLE DE LA DISTANCIA HACIA EL. NO LA SUMA" - a double 2 came up, the Parki was 4 away;
+  // moving the first 2 (an ordinary, non-capturing move for this piece) then the second 2 (the
+  // double's other identical die, still on the *same* piece) landed exactly on the Parki - but
+  // unlike the test just above (a different, fresh piece using its own single die), this piece's own
+  // *cumulative* distance this roll (2+2=4) is what actually matches, not either individual die's own
+  // face value from where it truly stood at the roll's start - exactly the "sum, just split into two
+  // hops" case the rulebook's own "no la suma" excludes. Must fall through to PK5 (the pawn itself
+  // dies) instead of PK6/PK8 (the Parki dies).
+  it('does not let a double eliminate the Parki via the same piece\'s own accumulated distance across both halves (PK6/PK8 vs PK5)', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 0
+    blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+    blue.parkiller.trackPosition = 4 // 4 away from red.pieces[0] - not reachable by either single "2"
+
+    const dice = new ScriptedDice([2, 2, 1])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+    manager.requestRoll()
+
+    const first = manager.submitMove(red.pieces[0], 2)
+    expect(first?.capturedParkillerColor).toBeNull()
+    expect(blue.parkiller.state).toBe('InPlay')
+    expect(red.pieces[0].trackPosition).toBe(2)
+
+    const second = manager.submitMove(red.pieces[0], 2)
+    // The Parki survives; the pawn that walked into it is the one sent home instead (PK5).
+    expect(second?.capturedParkillerColor).toBeNull()
+    expect(blue.parkiller.state).toBe('InPlay')
+    expect(second?.eliminatedByParkiller).toBe(true)
+    expect(red.pieces[0].state).toBe('InYard')
+  })
 })
 
 // Requested directly ("para empezar la partida cada jugador y los bots lanzan los dados blancos

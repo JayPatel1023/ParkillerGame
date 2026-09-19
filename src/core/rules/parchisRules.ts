@@ -283,6 +283,10 @@ export function getValidMoves(
   return moves
 }
 
+// Shared "nothing has moved yet" default for wouldCapture/applyMove's own alreadyMovedThisRoll
+// param below - a single frozen empty Set, not a fresh one per call, since it's never written to.
+const NO_PIECES_MOVED_THIS_ROLL: ReadonlySet<Piece> = new Set()
+
 // PC3/PK8: capturing is mandatory whenever available, not just one option among others - a player
 // can't dodge an available capture by choosing to move a different piece instead. TurnManager uses
 // this to filter its offered moves down to only the capturing ones whenever any exist. Pure/
@@ -292,6 +296,21 @@ export function wouldCapture(
   move: MoveOption,
   allPlayers: readonly PlayerState[],
   allowParkillerCapture: boolean,
+  // Reported directly ("SALIO UN DOBLE 2 Y EL PARKI ESTABA A 4. MOVIO DOS, AL MOVER LOS OTROS DOS
+  // DEBIA MORIR POR EL PARKI...NO OCURRIO ESTO SINO QUE ELIMINO AL PARKI...AL PARKI SE LE ELIMINA
+  // SI SALE EL DOBLE DE LA DISTANCIA HACIA EL. NO LA SUMA" - a double 2 came up, the Parki was 4
+  // away; moved two, then moving the other two should have killed the PAWN via the Parki instead -
+  // that didn't happen, it eliminated the Parki instead; the Parki only dies if the double itself
+  // is the distance to it, not the sum): usesSingleDie below already excludes a single MoveOption
+  // built from dieA+dieB combined into one hop (diceSource 'sum') - but a double's two identical
+  // dice spent as two *separate* moves on the *same* piece (first the piece's own dieA, then that
+  // same piece's own dieB) is functionally the same "sum" outcome Carlos/Robert's own rule already
+  // excludes, just reached via two submitMove calls instead of one MoveOption. Distance only ever
+  // matches a single die's face value when measured from wherever the piece truly stood at this
+  // roll's own start - once it's already moved once this roll (present in this set), any further
+  // move's own resultingTrackPosition landing on the Parki reflects that accumulated distance, not
+  // a single die's own value, and must fall through to PK5 (the pawn dies) instead.
+  alreadyMovedThisRoll: ReadonlySet<Piece> = NO_PIECES_MOVED_THIS_ROLL,
 ): boolean {
   if (move.kind !== 'ExitYard' && move.kind !== 'TrackMove') return false
   const pos = move.resultingTrackPosition
@@ -299,7 +318,7 @@ export function wouldCapture(
   // PK6: "Se mueve con la cifra de un dado el peón que elimina al Parkiller" - the capturing move
   // must spend a single die's own face value, not the sum of both. A double's sum landing on the
   // Parkiller's square doesn't count, even though the same double's individual die value might.
-  const usesSingleDie = move.diceSource === 'dieA' || move.diceSource === 'dieB'
+  const usesSingleDie = (move.diceSource === 'dieA' || move.diceSource === 'dieB') && !alreadyMovedThisRoll.has(move.piece)
   for (const opponent of allPlayers) {
     if (opponent.color === move.piece.color) continue
     if (allowParkillerCapture && usesSingleDie && isParkillerOnTrack(opponent.parkiller) && opponent.parkiller.trackPosition === pos)
@@ -362,10 +381,11 @@ export function applyMove(
   // Client's own "Special Situations" guide: a double opens a same-color opposing pawn+Parkiller
   // pairing on the entry square for this exit (see getValidMoves' own
   // pawnPlusOwnParkillerBarrierOpenedByDouble, which already gates *whether* this move exists at
-  // all on the same flag) - kept separate from
-  // allowParkillerCapture (PK6/PK8's own single-move-per-roll window, already closed by the time a
-  // double's *second* exit could reach this same square) since this one needs to stay true for the
-  // whole roll, not just its first move.
+  // all on the same flag) - kept separate from allowParkillerCapture (PK6/PK8's own capture window,
+  // open for both of a double's dice per-piece - see alreadyMovedThisRoll below for the current
+  // narrowing on that, not a "closes after the first move of the roll" one like an earlier version
+  // of this comment used to claim) since this one needs to stay true for the whole roll, not just
+  // one move.
   isDoubleRoll = false,
   // Client's own guide again: the entry square this same roll's own *first* exit already resolved
   // a mixed pawn+Parkiller pair on (eliminating the pawn, leaving the Parkiller) - a further own
@@ -373,6 +393,10 @@ export function applyMove(
   // home the way it normally would (the sibling, already-correct "3-stack" test's own pre-existing-
   // pairing scenario). Null whenever no such square is being tracked this roll.
   openedEntryPairTrackPosition: number | null = null,
+  // See wouldCapture's own matching parameter for the exact report and reasoning - passed straight
+  // through to it below (PK6/PK8's own usesSingleDie check) so the move that's actually *applied*
+  // agrees with whatever wouldCapture already predicted for the same move.
+  alreadyMovedThisRoll: ReadonlySet<Piece> = NO_PIECES_MOVED_THIS_ROLL,
 ): MoveResult {
   const piece = move.piece
   const result: MoveResult = { movedPiece: piece, amount: move.amount, capturedPiece: null, capturedParkillerColor: null, pieceFinished: false }
@@ -522,8 +546,10 @@ export function applyMove(
       // PK6/PK8: a common piece only eliminates the Parkiller during the roll that just produced
       // doubles (the reference implementation's own doblete_mata_parkiller flag) - landing on it
       // any other time does nothing at all, verified directly against that source. And even on a
-      // double, only a single die's own value counts, not their sum (see wouldCapture).
-      const usesSingleDie = move.diceSource === 'dieA' || move.diceSource === 'dieB'
+      // double, only a single die's own value counts, not their sum - see wouldCapture's own
+      // alreadyMovedThisRoll param for why this also excludes this same piece's *own* second move
+      // of the roll, not just a single MoveOption already built from dieA+dieB combined.
+      const usesSingleDie = (move.diceSource === 'dieA' || move.diceSource === 'dieB') && !alreadyMovedThisRoll.has(piece)
       result.capturedParkillerColor =
         capturedOpposingParkillerColor ??
         (!protectParkillerFromPK6ThisMove && allowParkillerCapture && usesSingleDie

@@ -210,8 +210,20 @@ export class TurnManager {
   private nextRollIsBonusTurn = false
   // PK6/PK8: a common piece can only eliminate the Parkiller during the roll that just produced
   // doubles - verified directly against the reference's doblete_mata_parkiller flag, which opens on
-  // any double and closes again after the very first subsequent piece move (capture or not).
+  // any double. Stays open for the *whole* roll now (see 807a8da's own commit message for why an
+  // earlier version of this comment's "closes after the very first move" was itself wrong) - both
+  // of the double's own dice get a real, independent shot at it; see piecesMovedThisRoll just below
+  // for the actual, current narrowing on that.
   private parkillerCapturableThisRoll = false
+  // Reported directly ("SALIO UN DOBLE 2 Y EL PARKI ESTABA A 4. MOVIO DOS, AL MOVER LOS OTROS DOS
+  // DEBIA MORIR POR EL PARKI...NO OCURRIO ESTO SINO QUE ELIMINO AL PARKI...AL PARKI SE LE ELIMINA SI
+  // SALE EL DOBLE DE LA DISTANCIA HACIA EL. NO LA SUMA" - see wouldCapture's own matching parameter
+  // (parchisRules.ts) for the full reasoning. Every piece this roll's own moves have already been
+  // applied to, tracked here (not just whichever one is "current") because a double's two identical
+  // dice could move two entirely different pieces, and only THIS SAME piece moving twice is the
+  // "really just the sum, split into two hops" case that must NOT still count as a single-die
+  // distance match. Cleared at the start of every requestRoll(), same as preRollBarrierCaptured.
+  private piecesMovedThisRoll = new Set<Piece>()
   // The barrier position offerMoves() most recently computed (PK9.1's own obligation) - kept as a
   // field, not a local, so submitMove() can tell whether the move it's about to apply is the one
   // breaking that barrier. Null whenever no barrier obligation was active on the last offerMoves()
@@ -323,6 +335,9 @@ export class TurnManager {
     // PK6/PK8: every double re-opens the window for a common piece to eliminate the Parkiller on
     // its very next move, regardless of whether the black die itself moved this roll.
     this.parkillerCapturableThisRoll = dieA === dieB
+    // See this field's own doc comment above - a fresh roll (including a bonus turn's own new roll
+    // after an earlier double) starts with nothing yet moved, same scope as parkillerCapturableThisRoll.
+    this.piecesMovedThisRoll = new Set()
 
     if (dieA === dieB) {
       this.consecutiveDoubles++
@@ -706,7 +721,7 @@ export class TurnManager {
         ? piece.state === 'OnTrack' && piece.trackPosition === barrierLocation.position
         : piece.state === 'InHomeCorridor' && piece.corridorPosition === barrierLocation.position)
     const restrictToBarrierBreakOrCapture = (moves: MoveOption[]) =>
-      moves.filter((m) => pieceIsAtBarrier(m.piece) || wouldCapture(this.board, m, this.players, this.parkillerCapturableThisRoll))
+      moves.filter((m) => pieceIsAtBarrier(m.piece) || wouldCapture(this.board, m, this.players, this.parkillerCapturableThisRoll, this.piecesMovedThisRoll))
     const applyObligations = (moves: MoveOption[], dieHasExit: boolean): MoveOption[] => {
       if (barrierLocation !== null) {
         const barrierMoves = restrictToBarrierBreakOrCapture(moves)
@@ -858,7 +873,13 @@ export class TurnManager {
       this.nextArrivalSequence++,
       isDoubleRoll,
       this.openedEntryPairThisRoll,
+      this.piecesMovedThisRoll,
     )
+    // See piecesMovedThisRoll's own doc comment - recorded *after* applyMove above (which needed to
+    // see this piece's own prior-moves-this-roll status as it stood *before* this move, not
+    // including this one), so a further move on this same piece later in the same roll (the
+    // double's other identical die) correctly sees it as already-moved.
+    this.piecesMovedThisRoll.add(chosenPiece)
     // Client's own "Special Situations" guide: this exit just resolved a mixed pawn+Parkiller pair
     // on the entry square by eliminating the pawn (case C/B in applyMove's own comments), or one of
     // two foreign Parkis paired there (case E) - if a Parkiller is still standing there either way,
