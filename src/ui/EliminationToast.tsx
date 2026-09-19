@@ -37,7 +37,17 @@ function useSparks(seed: number): Spark[] {
   )
 }
 
-export function EliminationToast({ eliminatedPiece }: { eliminatedPiece: Piece | null }) {
+// Requested directly ("cuando se elimina a un peón... debe haber una celebración con sonido e
+// imagen" - when a pawn is eliminated there should be a celebration with sound and image): the
+// doubles-penalty case (PC2.3) already had this card; a Parki eliminating a pawn directly (PK5) had
+// none at all - only a sound (GameBoardScreen.tsx's own parkillerVictim effect). Same card/burst
+// either way, just the icon/title/label text that actually names what happened.
+const REASON_TEXT: Record<'doubles' | 'parkiller', { icon: string; title: string; prefix: string; suffix: string }> = {
+  doubles: { icon: '🏠', title: '¡A casa!', prefix: 'Tercer dobles seguido: la ficha de ', suffix: ' vuelve al refugio' },
+  parkiller: { icon: '💀', title: '¡Comido!', prefix: 'El Parki se ha comido la ficha de ', suffix: '' },
+}
+
+export function EliminationToast({ eliminatedPiece, reason = 'doubles' }: { eliminatedPiece: Piece | null; reason?: 'doubles' | 'parkiller' }) {
   // Same remount-per-event pattern as RewardToast/RewardBurst's own key refs - a fresh key per new
   // elimination restarts the pop-in/burst animations even if the same color loses a piece twice in
   // a row.
@@ -77,10 +87,12 @@ export function EliminationToast({ eliminatedPiece }: { eliminatedPiece: Piece |
         ))}
       </div>
       <div style={cardStyle} className="elimination-toast-pop">
-        <div style={{ ...iconStyle, borderColor: color }}>🏠</div>
-        <div style={titleStyle}>¡A casa!</div>
+        <div style={{ ...iconStyle, borderColor: color }}>{REASON_TEXT[reason].icon}</div>
+        <div style={titleStyle}>{REASON_TEXT[reason].title}</div>
         <div style={labelStyle}>
-          Tercer dobles seguido: la ficha de <span style={{ color, fontWeight: 700 }}>{eliminatedPiece.color}</span> vuelve al refugio
+          {REASON_TEXT[reason].prefix}
+          <span style={{ color, fontWeight: 700 }}>{eliminatedPiece.color}</span>
+          {REASON_TEXT[reason].suffix}
         </div>
       </div>
       <style>{`

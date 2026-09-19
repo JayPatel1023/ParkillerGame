@@ -252,11 +252,29 @@ export function GameBoardScreen({
     return isBotTurn ? defaultMs : HUMAN_REVEAL_HOLD_MS
   }
 
+  // Moved up from further below (animationsSettled's own declaration used to come after this
+  // point) - eliminatedByDoubles' own animation-gating fix, right below, needs it here; every other
+  // consumer already just reads it as a plain derived value with no ordering dependency of its own.
+  //
+  // Reported directly ("no ha manera de hacer coincidir... el sonido de comer va por delante de la
+  // imagen" - the eating sound goes ahead of the image): moveAnimation/parkillerAnimation/
+  // captureFlightPending - see this const's own reasoning just below.
+  const animationsSettled = !moveAnimation && !parkillerAnimation && !captureFlightPending
+
   // See ALERT_HOLD_MS's own doc comment above - held so a fast-following move can't clear this
-  // again before there's been real time to read it. Not animation-gated the way the reward toasts
-  // are (this one never was, even before this fix), so no equivalent "stale value resurfacing"
-  // risk here - it only ever changes when useTurnManager's own raw value actually does.
-  const eliminatedByDoubles = useHeldAlert(rawEliminatedByDoubles, holdMsFor(ALERT_HOLD_MS, rawEliminatedByDoubles?.color ?? currentPlayer.color))
+  // again before there's been real time to read it.
+  //
+  // Reported again, directly, still going out of sync ("el sonido de comer... va por delante de la
+  // imagen y debe de ir después" - the eating sound goes ahead of the image, and should go after
+  // it): this used to feed straight off rawEliminatedByDoubles with no animation gate at all (unlike
+  // the reward-based captures/finishes just below, which already wait on animationsSettled) - the
+  // penalty (and playCaptureSound, further below, which depends on this same held value) could fire
+  // while the move that triggered the third double was still visibly mid-hop. Gated the same way
+  // visiblePendingReward/visibleForfeitedReward already are.
+  const eliminatedByDoubles = useHeldAlert(
+    animationsSettled ? rawEliminatedByDoubles : null,
+    holdMsFor(ALERT_HOLD_MS, rawEliminatedByDoubles?.color ?? currentPlayer.color),
+  )
 
   // See GameSession's own botPieceHighlighted doc comment - undefined for hotseat play and for any
   // session with no bot seats at all, in which case this just stays null forever, same as if no
@@ -274,16 +292,8 @@ export function GameBoardScreen({
   // move is submitted - only the visual playback takes time, same as the capture-visual gating
   // above), so this hook's raw pendingMoves/pendingReward/forfeitedReward already reflect the next
   // real choice well before the board has caught up - gating what's actually shown/interactive on
-  // both animations having cleared keeps everything landing in the order it visually happened.
-  //
-  // !captureFlightPending: moveAnimation/parkillerAnimation themselves only ever cover the
-  // CAPTURING piece's own hop - a capture also sends the CAPTURED piece on its own separate "flung
-  // home" bounce (BoardScene.tsx's own captureFlights), which only starts once the capturing hop
-  // above has already cleared and which nothing else here previously waited on at all - see
-  // captureFlightPending's own doc comment (useTurnManager.ts) for the exact reported bug (a
-  // same-player bonus roll re-arming the board's shared dice-settle gate mid-bounce) this was
-  // missing for, entirely locally, with no bot or network involved.
-  const animationsSettled = !moveAnimation && !parkillerAnimation && !captureFlightPending
+  // both animations having cleared (animationsSettled, moved up above) keeps everything landing in
+  // the order it visually happened.
   // !turnEndingSoon: while a barrier-locked (or otherwise move-not-possible) roll's own
   // "explanation, then advance" hold is playing out (see useTurnManager's own TURN_CHANGE_HOLD_MS),
   // currentPlayer/pendingMoves haven't visibly changed yet, so canRoll's other conditions alone
@@ -431,13 +441,36 @@ export function GameBoardScreen({
 
   // PK5: a Parki landing on an opposing *pawn* (not another Parki) sends it home with no reward at
   // all (turnManager.ts's own resolveParkillerCollisions) - the one capture shape the reward-based
-  // effect above can never see, since nothing gets queued for it. parkillerAnimation is set the
-  // instant the black die resolves (useTurnManager.ts), synced with the Parki's own hop, so this
-  // still lands at essentially the same "just happened" moment the reward-based captures do.
+  // effect above can never see, since nothing gets queued for it, and (until this fix) the only one
+  // with no toast of its own either - EliminationToast only ever covered the doubles-penalty case
+  // below.
+  //
+  // Reported directly ("el sonido de comer... va por delante de la imagen y debe de ir después" -
+  // the eating sound goes ahead of the image, it should go after; earlier, separately: "DEBE HABER
+  // ALGO ESPECIAL CUANDO...EL PARKI ELIMINA A UN PEON" - there should be something special when the
+  // Parki eliminates a pawn): parkillerAnimation.capturedPawn is only ever set for the duration of
+  // the Parki's *own* hop - it clears the instant that hop lands, well before the captured pawn's
+  // own separate "flung home" bounce (captureFlightPending, useTurnManager.ts) has even started, let
+  // alone finished. Playing the sound straight off it fired while the Parki was still visibly
+  // mid-hop, sound well ahead of the pawn's own trip home. Remembers the captured piece the instant
+  // it's seen, then waits for animationsSettled - which already accounts for that same bounce, same
+  // as the reward-based capture effect above - before actually surfacing either the sound or the
+  // toast (parkillerVictim, rendered further below alongside EliminationToast's other instance).
+  const pendingParkillerVictimRef = useRef<Piece | null>(null)
   useEffect(() => {
-    if (parkillerAnimation?.capturedPawn) playCaptureSound()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (parkillerAnimation?.capturedPawn) pendingParkillerVictimRef.current = parkillerAnimation.capturedPawn
   }, [parkillerAnimation])
+  const [parkillerVictim, setParkillerVictim] = useState<Piece | null>(null)
+  useEffect(() => {
+    if (!animationsSettled || !pendingParkillerVictimRef.current) return
+    const victim = pendingParkillerVictimRef.current
+    pendingParkillerVictimRef.current = null
+    playCaptureSound()
+    setParkillerVictim(victim)
+    const timer = setTimeout(() => setParkillerVictim(null), holdMsFor(ALERT_HOLD_MS, currentPlayer.color))
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [animationsSettled])
 
   // Reported directly, again ("ELIMINA SIN QUE HAYA SIGNO NI CELEBRACION NI SONIDO ESPECIAL...
   // DEBE HABER ALGO ESPECIAL CUANDO UN PEON O EL PARKI ELIMINA A UN PEON" - it eliminates with no
@@ -564,7 +597,8 @@ export function GameBoardScreen({
 
       <RewardBurst pendingReward={visiblePendingReward} />
       <RewardToast pendingReward={visiblePendingReward} forfeitedReward={visibleForfeitedReward} />
-      <EliminationToast eliminatedPiece={eliminatedByDoubles} />
+      <EliminationToast eliminatedPiece={eliminatedByDoubles} reason="doubles" />
+      <EliminationToast eliminatedPiece={parkillerVictim} reason="parkiller" />
       <MoveLog entries={moveLog} />
 
       <div style={turnCardStyle}>
