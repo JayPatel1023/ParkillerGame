@@ -338,7 +338,7 @@ const INTRO_STAGGER = 0.09 // seconds between each piece's drop-in entrance, for
 // SAFE_TILE_WIDTH_MULTIPLIER's own matching trim just below - trimmed again here too (±0.13 ->
 // ±0.10) so the *plain*, non-safe case also comes down a further, real amount rather than relying
 // on the widened-tile trim alone.
-const STACK_OFFSETS: [number, number][] = [
+export const STACK_OFFSETS: [number, number][] = [
   [-0.1, -0.1],
   [0.1, 0.1],
   [0.2, -0.2],
@@ -400,15 +400,15 @@ function localTangentNormal(waypoints: [number, number][], index: number): { tan
 // Trimmed again (0.85 -> 0.7), alongside STACK_OFFSETS' own matching trim just above - see that
 // constant's own doc comment for the report this responds to (still reading as crossing the
 // border on a curved square specifically, even within the old clamp).
-const STACK_CLEARANCE_FACTOR = 0.7
+export const STACK_CLEARANCE_FACTOR = 0.7
 
 // A stack group's own occupant ids are prefixed 'pawn-'/'parkiller-' (see pawnOccupantId/
 // parkillerOccupantId) - cheaper and more direct than re-deriving piece types from state.
-function maxRadiusForGroup(group: string[]): number {
+export function maxRadiusForGroup(group: string[]): number {
   return group.some((id) => id.startsWith('parkiller-')) ? PARKILLER_FOOTPRINT_RADIUS : PIECE_BASE_RADIUS
 }
 
-function localStackOffset(
+export function localStackOffset(
   waypoints: [number, number][] | null,
   index: number,
   along: number,
@@ -512,7 +512,7 @@ function parkillerOccupantId(color: PieceColor): string {
 // sharing a square with the Parkiller (PK4/PK5's own safe-square exception), so it's the square
 // that most needs the room. Widened here rather than uniformly across every tile, since a global
 // widen would be a much bigger, riskier change than this specific report called for.
-const SAFE_TILE_WIDTH_MULTIPLIER = 1.8
+export const SAFE_TILE_WIDTH_MULTIPLIER = 1.8
 
 // Reported directly, with an annotated screenshot of a pawn+Parkiller pair specifically at a
 // color's own safe entry square: still visibly outside the square's own drawn safe-zone marker -
@@ -527,7 +527,7 @@ const SAFE_TILE_WIDTH_MULTIPLIER = 1.8
 // outside the *marker*. A separate, smaller multiplier for stacking specifically (not the mesh's
 // own rendered width, which stays at SAFE_TILE_WIDTH_MULTIPLIER so two full-size pieces still fit
 // without overlapping) keeps occupants closer to that marker's own visual center.
-const STACK_SAFE_WIDTH_MULTIPLIER = 1.3
+export const STACK_SAFE_WIDTH_MULTIPLIER = 1.3
 
 // Reported directly, with two screenshots: 3 pawns visibly piled together on one square, no
 // separation from each other or from the Parkiller sharing it - "NO PUEDE HABER 3 FICHAS EN UNA
@@ -547,7 +547,7 @@ const STACK_SAFE_WIDTH_MULTIPLIER = 1.3
 // too little room for full separation, short of growing tiles further - risking the tile's own
 // drawn border again - or shrinking pieces, already explicitly rejected by the client before), but
 // meaningfully closes the gap from "almost fully overlapping" to "mostly distinct."
-const PARKILLER_SHARED_SQUARE_WIDTH_MULTIPLIER = SAFE_TILE_WIDTH_MULTIPLIER
+export const PARKILLER_SHARED_SQUARE_WIDTH_MULTIPLIER = SAFE_TILE_WIDTH_MULTIPLIER
 
 // Boosts saturation and darkens lightness on top of the tile's own sampled board-art color, so a
 // protected square reads as visually distinct at a glance instead of relying on the underlying art
