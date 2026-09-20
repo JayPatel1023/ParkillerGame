@@ -277,6 +277,24 @@ export class TurnManager {
     this.dice = dice
   }
 
+  // Requested directly ("Debe poder ser reemplazado por el bot hasta que tome el control en la
+  // siguiente tirada" - it should be replaceable by a bot until they take control again on the
+  // next roll): when the room's own Master disconnects, another client is promoted to take over
+  // authority instead of just ending the game (OnlineLobbyScreen.tsx's own onMasterClientChanged
+  // handler) - that promoted client already has this *exact* TurnManager instance, kept correctly
+  // in sync the whole game by replaying every broadcast against it (RemoteTurnManager's own doc
+  // comment), with every bit of internal state (currentPlayerIndex, consecutiveDoubles,
+  // parkillerCapturableThisRoll, piecesMovedThisRoll, ...) already exactly right - reusing it
+  // outright, rather than constructing a fresh TurnManager and trying to reconstruct all of that
+  // by hand, is what makes this promotion safe. The one thing that has to change is this instance's
+  // own dice source: it was built with a QueueDice (fed only by replaying the old Master's own
+  // broadcast values, never rolling anything itself) - the newly-promoted client needs a real
+  // RecordingDice instead, the same kind HostTurnManagerBridge already wraps every dieA/dieB/
+  // blackDie call in for a fresh game's own Master.
+  replaceDice(dice: DiceLike): void {
+    this.dice = dice
+  }
+
   get currentPlayer(): PlayerState {
     return this.players[this.currentPlayerIndex]
   }

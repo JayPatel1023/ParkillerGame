@@ -269,6 +269,16 @@ export default function OnlineLobbyScreen() {
   // below - used only by the onActorLeft handler further down, to tell a departed Master apart from
   // a departed ordinary seat (see that handler's own doc comment for why that distinction matters).
   const masterActorNrRef = useRef<number | null>(null)
+  // Requested directly ("Debe poder ser reemplazado por el bot hasta que tome el control en la
+  // siguiente tirada" - a departed Master should also be replaceable by a bot, not end the game):
+  // startAsRemote() below stashes its own real TurnManager instance here (session.players holds the
+  // same players array it was built with, but the TurnManager itself isn't part of RemoteTurnManager's
+  // own public TurnManagerLike surface) - see the onMasterClientChanged effect's own promotion
+  // branch, which needs this exact instance (not a freshly-constructed one) to keep every bit of its
+  // already-correct internal state (whose turn it is, consecutiveDoubles, ...) intact across the
+  // handoff. Never set at all on a client that started the game as Master - it's already running
+  // its own HostTurnManagerBridge and has nothing to promote.
+  const innerTurnManagerRef = useRef<TurnManager | null>(null)
 
   // Reported directly, with a screenshot: hitting a connection error left the player stuck on a
   // dead-end screen with no way back - phase 'error' rendered the message and nothing else, and
@@ -389,28 +399,20 @@ export default function OnlineLobbyScreen() {
   // every other surviving client does nothing here and just keeps replaying that color's bot-driven
   // moves as ordinary broadcasts, same as any other bot seat.
   //
-  // A departed *Master* is NOT covered by this yet - deliberately left stopping the game exactly as
-  // before (masterActorNrRef, kept fresh by the onMasterClientChanged effect below, is what tells
-  // the two cases apart). Not yet resolved with the client which behavior they actually want there:
-  // this app has no way for a surviving client to become newly authoritative today (see
-  // onMasterClientChanged's own doc comment below), so silently pretending a bot can cover for a
-  // departed Master would be a bigger, still-undesigned change.
+  // A departed *Master* is handled entirely by the onMasterClientChanged effect below now
+  // (confirmed directly by the client: "Debe poder ser reemplazado por el bot hasta que tome el
+  // control en la siguiente tirada" - should also be replaceable by a bot until they take control
+  // again) - nothing to do here for that case. Photon promotes exactly one remaining client to
+  // Master; that one client's own onMasterClientChanged is what builds a fresh, authoritative
+  // session and hands the departed Master's own color to BotController, not this handler (which
+  // fires identically on *every* surviving client, not just the one being promoted).
   useEffect(() => {
     const connection = connectionRef.current
     if (!connection || phase !== 'game') return
     return connection.onActorLeft((actorNr) => {
       const color = realSeatsRef.current[actorNr]
-      if (!color) return
-      if (actorNr !== masterActorNrRef.current) {
-        if (connection.isMasterClient()) botControllerRef.current?.takeOverColor(color)
-        return
-      }
-      botControllerRef.current?.dispose()
-      botControllerRef.current = null
-      session?.turnManager.dispose?.()
-      setSession(null)
-      setStopReason(`${color} salió de la sala - la partida se detuvo.`)
-      setPhase('stopped')
+      if (!color || actorNr === masterActorNrRef.current) return
+      if (connection.isMasterClient()) botControllerRef.current?.takeOverColor(color)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
@@ -419,15 +421,14 @@ export default function OnlineLobbyScreen() {
   // client left staring at "esperando el turno de X" forever): isMasterClient()/
   // onMasterClientChanged (roomTransport.ts's own doc comment: "can change mid-game if the previous
   // Master Client disconnects") were only ever consulted during the lobby phase before this - once
-  // the game actually started, nothing here reacted to Photon promoting a new Master at all. A
-  // client that started the game as a plain remote (RemoteTurnManager - only ever sends intents to
-  // whoever is Master and replays *their* broadcasts) has no way to carry on once it becomes that
-  // Master itself; its own session was never built to be authoritative. onActorLeft just above
-  // already stops the game the instant any actor leaves, which should already cover the common
-  // case - this is a second, independent safety net specifically for master promotion, in case that
-  // event doesn't land the same way (e.g. a dropped connection Photon only detects via its own
-  // timeout, not a clean leave). wasMasterRef captures this client's own master status once, right
-  // when the game starts - a client that started the game *as* Master (already running
+  // the game actually started, nothing here reacted to Photon promoting a new Master at all.
+  //
+  // Confirmed directly by the client, answering a direct question about exactly this case: "Debe
+  // poder ser reemplazado por el bot hasta que tome el control en la siguiente tirada" (should also
+  // be replaceable by a bot until they take control again). promoteToMaster() (above) does the
+  // actual work; this effect is only responsible for calling it exactly once, only on the one
+  // client Photon actually promotes. wasMasterRef captures this client's own master status once,
+  // right when the game starts - a client that started the game *as* Master (already running
   // HostTurnManagerBridge) has nothing to do here even if this fires again later.
   const wasMasterRef = useRef(false)
   // Guards the onConnectionLost effect below against overlapping reconnectAndRejoin() attempts -
@@ -438,17 +439,15 @@ export default function OnlineLobbyScreen() {
     if (!connection || phase !== 'game') return
     wasMasterRef.current = connection.isMasterClient()
     return connection.onMasterClientChanged(() => {
+      // Captured before being overwritten just below - promoteToMaster needs to know *who* just
+      // left, to hand their own color to BotController right away (see its own doc comment).
+      const previousMasterActorNr = masterActorNrRef.current
       // Kept fresh regardless of whether *this* client was promoted - the onActorLeft effect above
       // reads this on every client to tell a departed Master apart from a departed ordinary seat.
       masterActorNrRef.current = connection.getMasterActorNr()
       if (wasMasterRef.current || !connection.isMasterClient()) return
       wasMasterRef.current = true
-      botControllerRef.current?.dispose()
-      botControllerRef.current = null
-      session?.turnManager.dispose?.()
-      setSession(null)
-      setStopReason('El anfitrión se desconectó - la partida se detuvo.')
-      setPhase('stopped')
+      promoteToMaster(connection, previousMasterActorNr)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase])
@@ -534,6 +533,7 @@ export default function OnlineLobbyScreen() {
     const myColor = seats[connection.localActorNr] ?? null
     const bridge = new RemoteTurnManager(inner, diceQueue, players, connection, myColor ?? null)
     masterActorNrRef.current = connection.getMasterActorNr()
+    innerTurnManagerRef.current = inner
     // deferredStart: true (not bridge.start() here) - see GameBoardScreen.tsx's own matching
     // doc comment for why online now defers exactly like local play does.
     realSeatsRef.current = seats ?? {}
@@ -543,6 +543,52 @@ export default function OnlineLobbyScreen() {
     const colorDraw: ColorDrawEntry[] = colors.map((color) => ({ color, isBot: !claimedColors.has(color) }))
     setSession({ turnManager: bridge, players, startingPlayerResult, colorDraw, deferredStart: true })
     setPhase('game')
+  }
+
+  // Requested directly by the client, confirming a direct question: "Debe poder ser reemplazado
+  // por el bot hasta que tome el control en la siguiente tirada" (should also be replaceable by a
+  // bot until they take control again on the next roll) - a departed Master used to just end the
+  // game for everyone (this function replaces that). Called only from the onMasterClientChanged
+  // effect below, only on the one client Photon actually promotes to Master, and only once
+  // (wasMasterRef's own guard there) - every other surviving client does nothing at all here, same
+  // as it already does nothing for an ordinary departed seat (see the onActorLeft effect's own
+  // takeOverColor call, which only ever fires on whichever client is Master).
+  //
+  // Reuses innerTurnManagerRef.current - the *exact* TurnManager instance this client's own
+  // RemoteTurnManager has been replaying every broadcast against all game - rather than
+  // constructing a fresh one, so whose turn it is, consecutiveDoubles, parkillerCapturableThisRoll,
+  // and everything else already tracked stays exactly right across the handoff (see
+  // TurnManager.replaceDice's own doc comment for why only the dice source itself needs to change).
+  function promoteToMaster(connection: PhotonConnection, previousMasterActorNr: number | null) {
+    const inner = innerTurnManagerRef.current
+    if (!inner || !session) {
+      // Defensive fallback only - a client ever running as a plain remote always has both of these
+      // (see innerTurnManagerRef's own doc comment) - falling back to the original "stop the game"
+      // behavior beats leaving every client silently stuck if this ever somehow isn't true.
+      botControllerRef.current?.dispose()
+      botControllerRef.current = null
+      session?.turnManager.dispose?.()
+      setSession(null)
+      setStopReason('El anfitrión se desconectó - la partida se detuvo.')
+      setPhase('stopped')
+      return
+    }
+    const newDice = new RecordingDice()
+    inner.replaceDice(newDice)
+    const actorColors = new Map<number, PieceColor>(Object.entries(realSeatsRef.current).map(([actorNr, color]) => [Number(actorNr), color]))
+    const myColor = realSeatsRef.current[connection.localActorNr] ?? null
+    const bridge = new HostTurnManagerBridge(inner, newDice, session.players, connection, actorColors, myColor, (color) =>
+      botControllerRef.current?.releaseColor(color),
+    )
+    const claimedColors = new Set(actorColors.values())
+    const botColors = new Set(session.players.map((p) => p.color).filter((c) => !claimedColors.has(c)))
+    botControllerRef.current = new BotController(bridge, botColors)
+    // The departed Master's own color needs covering too, right away - they're gone the same as any
+    // other disconnected seat (the onActorLeft effect's own takeOverColor call handles that ordinary
+    // case, but only once a Master already exists to run it - this client only just became that).
+    const departedColor = previousMasterActorNr !== null ? realSeatsRef.current[previousMasterActorNr] : undefined
+    if (departedColor) botControllerRef.current.takeOverColor(departedColor)
+    setSession((prev) => (prev ? { ...prev, turnManager: bridge, botPieceHighlighted: botControllerRef.current?.pieceHighlighted } : prev))
   }
 
   function createRoom() {
