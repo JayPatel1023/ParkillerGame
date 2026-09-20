@@ -529,6 +529,26 @@ const SAFE_TILE_WIDTH_MULTIPLIER = 1.8
 // without overlapping) keeps occupants closer to that marker's own visual center.
 const STACK_SAFE_WIDTH_MULTIPLIER = 1.3
 
+// Reported directly, with two screenshots: 3 pawns visibly piled together on one square, no
+// separation from each other or from the Parkiller sharing it - "NO PUEDE HABER 3 FICHAS EN UNA
+// CASILLA" (there can't be 3 pieces on one square). Checked directly against real per-board numbers
+// (tests/debug_3way_stack.test.ts, a throwaway script, not committed): the state itself is correct
+// - this is PK4's own legal 2-pawn-barrier-plus-opposing-Parkiller coexistence on a safe square, not
+// an actual rules violation - but the *rendering* wasn't separating the Parkiller from the pawns
+// nearly enough to read as three distinct pieces. Root cause: the Parkiller's own stacking offset
+// (below) reused STACK_SAFE_WIDTH_MULTIPLIER, the *pawns*' own smaller multiplier (tuned for two
+// pawns alone, which barely need separating from each other) - the Parkiller, far bigger
+// (PARKILLER_FOOTPRINT_RADIUS ~0.70 vs a pawn's 0.4), needs real room a pawn pairing never did.
+// Only the Parkiller's own offset uses this wider one now (same width the tile *mesh* itself is
+// already drawn at, so it still can't spill past the tile's own visible border) - the pawns' own
+// offset is untouched, still STACK_SAFE_WIDTH_MULTIPLIER, since a plain 2-pawn barrier's own
+// spacing was already tuned and confirmed separately. Doesn't fully eliminate overlap on the
+// tightest boards even at this width (checked directly - real piece/tile proportions there leave
+// too little room for full separation, short of growing tiles further - risking the tile's own
+// drawn border again - or shrinking pieces, already explicitly rejected by the client before), but
+// meaningfully closes the gap from "almost fully overlapping" to "mostly distinct."
+const PARKILLER_SHARED_SQUARE_WIDTH_MULTIPLIER = SAFE_TILE_WIDTH_MULTIPLIER
+
 // Boosts saturation and darkens lightness on top of the tile's own sampled board-art color, so a
 // protected square reads as visually distinct at a glance instead of relying on the underlying art
 // alone (confirmed directly: several of this game's real safe squares - the ones beyond each
@@ -1060,10 +1080,12 @@ export function BoardScene({
           const [along, across] = STACK_OFFSETS[parkillerGroup.indexOf(parkillerOccupantId(player.color)) % STACK_OFFSETS.length]
           // parkillerStackKey (above) only ever returns non-null once the Parkiller has genuinely
           // crossed onto the shared track, so trackPosition here is always a real track index.
-          // STACK_SAFE_WIDTH_MULTIPLIER, not SAFE_TILE_WIDTH_MULTIPLIER - see that constant's own
-          // doc comment (same reasoning as the pawn's own matching call site above).
+          // PARKILLER_SHARED_SQUARE_WIDTH_MULTIPLIER (not the pawns' own smaller
+          // STACK_SAFE_WIDTH_MULTIPLIER) - see that constant's own doc comment for why the
+          // Parkiller specifically needs the tile mesh's full real width to separate from whatever
+          // pawn(s) it's sharing this square with.
           const parkillerEffectiveTileSize = safeTrackIndexSet.has(player.parkiller.trackPosition)
-            ? tileSize * STACK_SAFE_WIDTH_MULTIPLIER
+            ? tileSize * PARKILLER_SHARED_SQUARE_WIDTH_MULTIPLIER
             : tileSize
           const [ox, oz] = localStackOffset(
             definition.trackWaypoints,
