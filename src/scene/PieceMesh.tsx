@@ -319,27 +319,24 @@ interface PieceMeshProps {
 // "reads before the eye resolves the ring itself" trick BarrierIndicator's own fix used), and a
 // thin vertical light beam rising from the piece through the marker - a "spotlight on this exact
 // piece" language nothing else on this board uses, so it can't be mistaken for decoration.
-const GLOW_COLOR = '#fff6d8'
-const OUTLINE_COLOR = '#1a2a4a'
-const RING_PULSE_SPEED = 1.5
-const RING_BASE_OPACITY = 0.95
-const RING_PULSE_AMPLITUDE = 0.15
-const GLOW_BASE_OPACITY = 0.35
-const GLOW_PULSE_AMPLITUDE = 0.15
-const RING_SPIN_SPEED = 0.5 // radians/sec - slow, ambient; this sits for a while, not "act now"
-
-// Reported directly, twice now in opposite directions: first "make it flashier" (a dashed
-// counter-rotating ring, a radar-style expanding ping, and a spiral of sparkle motes rising past a
-// spinning gem marker - four independently-moving pieces at once), then directly reversed
-// ("현재 효과는 너무 번거롭다, 아이들의 동심에 맞게 만들어달라" - the current effect is too busy, make
-// it fit a child's sense of wonder) - the same "too many moving parts competing for attention"
-// verdict BarrierIndicator.tsx's own third rebuild already reached (see that file's own doc
-// comment). Same fix, same reasoning, applied here: one quiet glow, one single ring (no counter-
-// rotating second ring, no separate ping), and a small handful of gently twinkling five-pointed
-// stars hovering above the head - real star polygons (STAR_* below, same shape BarrierIndicator
-// already uses) rather than a spinning gem-and-halo mechanism, since actual stars read as
-// "something magical is happening" to a child far more directly than a scanning/radar visual
-// language ever could.
+// Reported directly, three times now: first "make it flashier" (a dashed counter-rotating ring, a
+// radar-style expanding ping, and a spiral of sparkle motes rising past a spinning gem marker -
+// four independently-moving pieces at once), then directly reversed ("현재 효과는 너무 번거롭다,
+// 아이들의 동심에 맞게 만들어달라" - the current effect is too busy, make it fit a child's sense of
+// wonder) - the same "too many moving parts competing for attention" verdict BarrierIndicator.tsx's
+// own third rebuild already reached (see that file's own doc comment). That rebuild kept one quiet
+// glow + one ring at the base plus a small handful of twinkling five-pointed stars above the head.
+// Reported directly again, with a zoomed screenshot ("밑의 둥근원 이효과는 없애달라 다른효과를
+// 넣어달라" - remove this round ring effect underneath, put a different effect in): the base
+// ring/outline/glow trio, being three overlapping semi-transparent discs sitting flush on the
+// board, read as a smeared multi-hued blob once blended against the board's own busy painted
+// colors underneath (a red track square, in the reported screenshot) rather than as a clean single
+// color - not a rainbow shader, just what stacked transparency does over varied board art. Dropped
+// the base ring assembly entirely rather than trying to tune it into behaving - nothing sitting
+// flush on the board can fully escape blending with whatever's under it. The piece's own body glow
+// (SELECTABLE_EMISSIVE, boosted the same round the piece stopped growing when selectable - see its
+// own doc comment) and the stars above the head, both already-established parts of this same cue,
+// carry the "you can act on this one" signal on their own now.
 const STAR_COUNT = 3
 // PAWN_TOTAL_HEIGHT (below, near the profile constants) * 1.3 - comfortably clears the head with
 // real margin, scaling correctly with piece size instead of a fixed guess.
@@ -367,12 +364,9 @@ const IDLE_EMISSIVE = 0.18
 
 // The moment a piece becomes selectable, it briefly flashes even brighter before settling to the
 // steady selectable glow above - a distinct, eye-catching "this just became movable" beat instead
-// of the same static look simply appearing. Used to also pop the piece's own size via easeOutBack
-// (FLASH_RING_SCALE_BOOST, removed - see SELECTABLE_EMISSIVE's own doc comment above) - the ring's
-// own flash-scale is untouched, only the piece body's is gone.
+// of the same static look simply appearing.
 const FLASH_DURATION = 0.35 // seconds
 const FLASH_EMISSIVE_BOOST = 0.6
-const FLASH_RING_SCALE_BOOST = 0.6
 
 // Renders as a small bouncing peg-pawn rather than a flat token: at board scale a flat disc barely
 // shows how far it travelled between rolls, but a shape that visibly arcs once per square makes
@@ -397,8 +391,6 @@ export function PieceMesh({
   const notifiedRef = useRef(true)
   const introRef = useRef({ done: false, elapsed: 0 })
   const indicatorGroupRef = useRef<Group>(null)
-  const ringRef = useRef<Mesh>(null)
-  const glowRef = useRef<Mesh>(null)
   const starRefs = useRef<(Mesh | null)[]>([])
   const indicatorElapsedRef = useRef(0)
   const bodyMaterialRef = useRef<THREE.MeshPhysicalMaterial>(null)
@@ -452,22 +444,6 @@ export function PieceMesh({
         indicatorElapsedRef.current += delta
         const t = indicatorElapsedRef.current
 
-        // Smoothed 0..1..0 rather than a raw sine, so the breathing lingers softly at each extreme
-        // instead of moving fastest exactly where it's most visible (a plain sine's own shape).
-        const raw = Math.sin(t * RING_PULSE_SPEED) * 0.5 + 0.5
-        const pulse = raw * raw * (3 - 2 * raw)
-        const ringScale = 1 + flashFade * FLASH_RING_SCALE_BOOST
-        if (ringRef.current) {
-          ringRef.current.rotation.z += delta * RING_SPIN_SPEED
-          ;(ringRef.current.material as THREE.MeshBasicMaterial).opacity = RING_BASE_OPACITY + pulse * RING_PULSE_AMPLITUDE
-          ringRef.current.scale.setScalar(ringScale)
-        }
-        if (glowRef.current) {
-          const glowMat = glowRef.current.material as THREE.MeshBasicMaterial
-          glowMat.opacity = GLOW_BASE_OPACITY + pulse * GLOW_PULSE_AMPLITUDE + flashFade * 0.3
-          const glowScale = 1 + flashFade * FLASH_RING_SCALE_BOOST
-          glowRef.current.scale.set(glowScale, glowScale, 1)
-        }
         // A small handful of stars drifting slowly around a shared center above the head, each
         // gently bobbing and twinkling on its own offset phase - calm and steady rather than
         // rushing/spiraling, "something magical is quietly here" instead of "something urgent is
@@ -668,29 +644,10 @@ export function PieceMesh({
         <meshPhysicalMaterial color="#ffffff" transparent opacity={0.18} roughness={0.15} metalness={0} />
       </mesh>
       {/* Movable cue: visible only on the piece(s) with an actual legal move this roll - not on
-          every piece belonging to the current player for the whole turn. Simplified to a single
-          quiet glow + ring plus a few gently twinkling stars above the head - see STAR_COUNT's own
-          doc comment for why (too many independently-moving parts read as busy, not magical). */}
+          every piece belonging to the current player for the whole turn. The piece's own body glow
+          (SELECTABLE_EMISSIVE above) plus these stars carry the whole cue - see this const's own
+          doc comment for why an earlier ground-level ring/glow disc was dropped. */}
       <group ref={indicatorGroupRef} visible={false}>
-        <group position={[0, 0.004, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          {/* Soft glow disc under everything else - reads at a glance from across the board, before
-              the eye even resolves the ring's own thin geometry (same trick BarrierIndicator uses). */}
-          <mesh ref={glowRef} position={[0, 0, -0.001]}>
-            <circleGeometry args={[PIECE_BASE_RADIUS * 2.6, 32]} />
-            <meshBasicMaterial color={GLOW_COLOR} transparent opacity={GLOW_BASE_OPACITY} depthWrite={false} />
-          </mesh>
-          {/* Dark outline ring behind the bright one, sized just outside it - gives the cue a hard
-              edge that reads against ANY background (light board art, another bright piece, the gold
-              yard-hole rings this used to disappear into) instead of only against a dark one. */}
-          <mesh>
-            <ringGeometry args={[PIECE_BASE_RADIUS * 1.5, PIECE_BASE_RADIUS * 2.28, 40]} />
-            <meshBasicMaterial color={OUTLINE_COLOR} transparent opacity={0.55} side={THREE.DoubleSide} depthWrite={false} />
-          </mesh>
-          <mesh ref={ringRef}>
-            <ringGeometry args={[PIECE_BASE_RADIUS * 1.55, PIECE_BASE_RADIUS * 1.8, 40]} />
-            <meshBasicMaterial color="#ffcc00" transparent opacity={RING_BASE_OPACITY} side={THREE.DoubleSide} depthWrite={false} />
-          </mesh>
-        </group>
         {/* A few real five-pointed stars drifting slowly above the head, each on its own twinkle
             phase - the "this is yours, act on it" cue, in a plainly magical/childlike language
             instead of the previous scanning-ring/radar-ping/spinning-gem mechanism. */}
