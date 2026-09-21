@@ -37,6 +37,52 @@ export const TRACK_COUNT = TRACKS.length
 
 let audio: HTMLAudioElement | null = null
 
+// Reported directly ("처음시작할때부터하여 오락할때도 항상같은노래가나온다 하지만 지금은 3개가 다섞여서
+// 나오는것같애" - normally the same song plays from the start all the way through gameplay, but now
+// it sounds like all 3 are mixed together): confirmed directly - this app has been reloaded/reopened
+// many times across a single long testing session, exactly the kind of use that leaves several tabs
+// of it open at once. The `audio` singleton above only dedupes playback *within* one tab - each tab
+// is its own independent JS realm with its own copy of this module, so several tabs each happily
+// loop their own selected track at once, audibly layering into "3 different songs" (this app's own
+// TRACK_COUNT) the instant more than one has autoplayed.
+//
+// A BroadcastChannel-based claim protocol fixes this without asking the player to manage tabs
+// themselves: whichever tab is actually in the foreground claims playback and broadcasts that claim;
+// every other tab hearing a claim that isn't its own immediately pauses its own audio. Re-claimed on
+// every focus/visibility change, so switching between tabs hands playback off automatically instead
+// of requiring a reload - the tab you're actually looking at is always the one making sound.
+const TAB_ID = Math.random().toString(36).slice(2)
+let claimChannel: BroadcastChannel | null = null
+
+function getClaimChannel(): BroadcastChannel | null {
+  // Not universally available (older Safari, some embedded webviews) - playback still works fine
+  // within a single tab without it, just without the cross-tab handoff.
+  if (typeof BroadcastChannel === 'undefined') return null
+  if (!claimChannel) {
+    claimChannel = new BroadcastChannel('parkiller-music-claim')
+    claimChannel.onmessage = (event: MessageEvent<{ tabId: string }>) => {
+      if (event.data?.tabId !== TAB_ID) audio?.pause()
+    }
+  }
+  return claimChannel
+}
+
+function claimPlayback(): void {
+  getClaimChannel()?.postMessage({ tabId: TAB_ID })
+}
+
+// Re-claims the moment this tab becomes the one the player is actually looking at - covers both
+// switching browser tabs (visibilitychange) and switching back from another app/window entirely
+// (focus, which visibilitychange alone doesn't always catch consistently across browsers).
+if (typeof window !== 'undefined') {
+  const reclaimIfVisible = () => {
+    if (document.visibilityState !== 'visible') return
+    playIntroMusic()
+  }
+  document.addEventListener('visibilitychange', reclaimIfVisible)
+  window.addEventListener('focus', reclaimIfVisible)
+}
+
 function clampTrackIndex(index: number): number {
   return ((index % TRACKS.length) + TRACKS.length) % TRACKS.length
 }
@@ -99,6 +145,11 @@ export function playIntroMusic(): void {
   if (isMusicMuted()) return
   getAudio()
     .play()
+    // Claimed only once play() genuinely resolves, not right after calling it - claiming
+    // unconditionally could silence every *other* tab's audio over a play() that itself then goes on
+    // to fail (blocked by the autoplay policy before this tab has ever had a user gesture), leaving
+    // nothing playing anywhere instead of just leaving the already-playing tab alone.
+    .then(() => claimPlayback())
     .catch(() => {}) // blocked by autoplay policy before the first user gesture - same defensive no-op hopSound.ts/celebrationSound.ts already use
 }
 
