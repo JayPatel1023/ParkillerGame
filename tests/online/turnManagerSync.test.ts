@@ -255,15 +255,19 @@ describe('HostTurnManagerBridge + RemoteTurnManager convergence', () => {
     vi.advanceTimersByTime(50) // drains the queue's first message (wait=0): Red's own diceRolled replays
     expect(rollCount).toBe(1)
 
-    // Just short of the move's own correctly-budgeted window (REMOTE_MOVE_PACING_MS=2000 to start
-    // replaying the move, then max(2000, 10*480=4800)=4800 more before the next message may
-    // replay - 6800ms total). Before the fix, a flat 2000ms would have let Blue's own roll replay
-    // by t=4000ms, well before this checkpoint.
-    vi.advanceTimersByTime(6800 - 50 - 50)
+    // Red's own diceRolled fired at (virtual) t=0 - the very first drain of a fresh queue always
+    // waits 0ms, regardless of how far the 50ms advance above actually moved the clock - and
+    // budgets REMOTE_MOVE_PACING_MS + PARKI_REVEAL_HOLD_MS + blackDie(1)*HOP_DURATION_MS =
+    // 2000+2000+480 = 4480ms before the next queued message (the move) may replay - due at
+    // t=0+4480=4480. That move then budgets max(REMOTE_MOVE_PACING_MS, 10*480=4800)=4800ms before
+    // the one after it (Blue's own roll) may replay - due at t=4480+4800=9280. Advancing to just
+    // short of that (t=9250) proves the move itself already replayed but Blue's roll correctly
+    // hasn't yet.
+    vi.advanceTimersByTime(9250 - 50)
     expect(rollCount).toBe(1)
     expect(remote.players[0].pieces[0].trackPosition).toBe(10) // the long move itself did replay by now
 
-    vi.advanceTimersByTime(100)
+    vi.advanceTimersByTime(100) // past t=9280
     expect(rollCount).toBe(2) // Blue's roll only replays once the move's own real duration has passed
   })
 

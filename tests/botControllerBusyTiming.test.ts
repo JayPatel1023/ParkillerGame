@@ -130,7 +130,7 @@ describe('BotController busy-window timing around a PK5 self-elimination', () =>
     // turnChangeHoldMs=0 - this test isolates the self-elimination bounce timing (CAPTURE_RETURN_HOPS)
     // from the separate turn-handoff hold (TURN_CHANGE_HOLD_MS), which would otherwise dwarf the
     // exact window this test means to check.
-    const bots = new BotController(session, new Set<PieceColor>(['Red', 'Blue']), thinkDelayMs, hopDurationMs, diceSpinMs, 0)
+    const bots = new BotController(session, new Set<PieceColor>(['Red', 'Blue']), thinkDelayMs, hopDurationMs, diceSpinMs, 0, 0)
 
     const amount = 2 // sum(1+1): 5 -> 7, landing exactly on an unprotected opposing Parkiller (PK5)
     const move: MoveOption = {
@@ -225,7 +225,7 @@ describe('BotController busy-window timing around a HUMAN move that ordinarily c
     // Only Blue is bot-controlled - Red is the human mover this test is about; turnChangeHoldMs=0
     // isolates the capture-bounce timing (CAPTURE_RETURN_HOPS) from the separate, much larger,
     // fixed turn-handoff hold (TURN_CHANGE_HOLD_MS), same reasoning as the test above.
-    const bots = new BotController(session, new Set<PieceColor>(['Blue']), thinkDelayMs, hopDurationMs, diceSpinMs, 0)
+    const bots = new BotController(session, new Set<PieceColor>(['Blue']), thinkDelayMs, hopDurationMs, diceSpinMs, 0, 0)
 
     let blueRolled = false
     const originalRollForBot = session.rollForBot.bind(session)

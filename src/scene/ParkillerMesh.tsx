@@ -21,6 +21,20 @@ import {
 } from './PieceMesh'
 import { useRobustSTL } from './useRobustSTL'
 
+// Reported directly ("주사위결과가 나와서... 그결과를볼 여유시간을 좀 2초정도좀 준다음 파키말이
+// 움직이게해야한다... 결과가 떨어지자마자 급하게 벌써움직이는 현상이잇다" - after the dice result
+// appears, there should be about 2 seconds to actually look at it before the Parki starts moving -
+// right now it starts moving hastily the instant the result drops): diceSettledAt (this file's own
+// matching prop doc comment) already holds the Parkiller still *during* the dice-spin animation,
+// but releases it the exact instant the spin ends and the real numbers become visible - with no
+// extra room to actually read them before the Parkiller starts hopping. The doc comment on that
+// same prop already flagged why this matters specifically for the Parkiller and not an ordinary
+// piece: its own move is always fully automatic (PK2/PK6a - never a human click), so it's the one
+// piece with no natural human reaction-time pause built in at all. Kept in sync with
+// botController.ts's/RemoteTurnManager.ts's own matching constants (same "gameFlow/ and scene/ are
+// peers" reasoning as every other duplicated timing constant in this file).
+const PARKI_REVEAL_HOLD_MS = 2000
+
 interface ParkillerMeshProps {
   color: PieceColor
   restPosition: [number, number, number]
@@ -497,10 +511,10 @@ export function ParkillerMesh({
       return
     }
 
-    // Holds at hopFrom - not yet consuming any hop-elapsed time - until diceSettledAt, so the
-    // actual walk starts in sync with the dice reveal instead of before it (see that prop's own
-    // doc comment for the two-sided bug this replaced).
-    if (Date.now() < diceSettledAt) {
+    // Holds at hopFrom - not yet consuming any hop-elapsed time - until diceSettledAt plus
+    // PARKI_REVEAL_HOLD_MS (that constant's own doc comment), so the actual walk starts a real
+    // couple of seconds *after* the dice reveal instead of the exact instant it finishes.
+    if (Date.now() < diceSettledAt + PARKI_REVEAL_HOLD_MS) {
       const waitYaw = yawTowards(hopFrom, hops[0])
       if (waitYaw !== null) mesh.rotation.y = waitYaw
       mesh.position.set(hopFrom[0], BASE_HEIGHT, hopFrom[2])

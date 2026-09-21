@@ -74,7 +74,7 @@ describe('BotController', () => {
     const host = new HostTurnManagerBridge(inner, dice, players, transport, new Map<number, PieceColor>())
     // turnChangeHoldMs=0 - this test checks autonomous play over many quick rounds, not the
     // separate turn-handoff hold (TURN_CHANGE_HOLD_MS), which would dwarf its own short time budget.
-    const bots = new BotController(host, new Set<PieceColor>(['Red', 'Blue']), 10, 2, 2, 0)
+    const bots = new BotController(host, new Set<PieceColor>(['Red', 'Blue']), 10, 2, 2, 0, 0)
 
     // Tracked via the moveApplied event, not a final-state snapshot: real gameplay can send an
     // exited piece straight back to the yard again (captured, or bounced by an opposing Parkiller -
@@ -154,7 +154,7 @@ describe('BotController', () => {
     const thinkDelayMs = 50
     const hopDurationMs = 100
     const diceSpinMs = 50
-    const bots = new BotController(host, new Set<PieceColor>(['Red']), thinkDelayMs, hopDurationMs, diceSpinMs)
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), thinkDelayMs, hopDurationMs, diceSpinMs, 0, 0)
 
     let redMoveCount = 0
     inner.moveApplied.on((result) => {
@@ -208,7 +208,7 @@ describe('BotController', () => {
     const thinkDelayMs = 50
     const hopDurationMs = 100
     const diceSpinMs = 50
-    const bots = new BotController(host, new Set<PieceColor>(['Red']), thinkDelayMs, hopDurationMs, diceSpinMs)
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), thinkDelayMs, hopDurationMs, diceSpinMs, 0, 0)
 
     const seen: (Piece | null)[] = []
     bots.pieceHighlighted.on((piece) => seen.push(piece))
@@ -259,7 +259,7 @@ describe('BotController', () => {
     const transport = network.createTransport(MASTER_ACTOR)
     const host = new HostTurnManagerBridge(inner, dice, [red, blue], transport, new Map<number, PieceColor>())
     const thinkDelayMs = 10
-    const bots = new BotController(host, new Set<PieceColor>(['Red']), thinkDelayMs, 2, 2)
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), thinkDelayMs, 2, 2, 0, 0)
 
     host.start()
     vi.advanceTimersByTime(thinkDelayMs) // the roll fires
@@ -323,7 +323,7 @@ describe('BotController', () => {
     const transport = network.createTransport(MASTER_ACTOR)
     const host = new HostTurnManagerBridge(inner, dice, [red, blue], transport, new Map<number, PieceColor>())
     const thinkDelayMs = 10
-    const bots = new BotController(host, new Set<PieceColor>(['Red']), thinkDelayMs, 2, 2)
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), thinkDelayMs, 2, 2, 0, 0)
 
     let forfeited: { amount: number; reason: string } | null = null
     inner.rewardForfeited.on((grant) => (forfeited = grant))
@@ -367,7 +367,7 @@ describe('BotController', () => {
     const network = new FakeRoomNetwork(MASTER_ACTOR)
     const transport = network.createTransport(MASTER_ACTOR)
     const host = new HostTurnManagerBridge(inner, dice, [red, blue], transport, new Map<number, PieceColor>())
-    const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2)
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2, 0, 0)
 
     host.start()
     vi.advanceTimersByTime(10) // the roll fires
@@ -408,7 +408,7 @@ describe('BotController', () => {
     const network = new FakeRoomNetwork(MASTER_ACTOR)
     const transport = network.createTransport(MASTER_ACTOR)
     const host = new HostTurnManagerBridge(inner, dice, [red, blue], transport, new Map<number, PieceColor>())
-    const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2)
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2, 0, 0)
 
     host.start()
     vi.advanceTimersByTime(10) // the roll fires
@@ -449,7 +449,7 @@ describe('BotController', () => {
     const network = new FakeRoomNetwork(MASTER_ACTOR)
     const transport = network.createTransport(MASTER_ACTOR)
     const host = new HostTurnManagerBridge(inner, dice, [red, blue], transport, new Map<number, PieceColor>())
-    const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2)
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2, 0, 0)
 
     host.start()
     vi.advanceTimersByTime(10) // the roll fires
@@ -489,7 +489,7 @@ describe('BotController', () => {
     const network = new FakeRoomNetwork(MASTER_ACTOR)
     const transport = network.createTransport(MASTER_ACTOR)
     const host = new HostTurnManagerBridge(inner, dice, [red, blue], transport, new Map<number, PieceColor>())
-    const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2)
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2, 0, 0)
 
     host.start()
     vi.advanceTimersByTime(10) // the roll fires
@@ -531,7 +531,7 @@ describe('BotController', () => {
     const thinkDelayMs = 50
     const hopDurationMs = 100
     const diceSpinMs = 50
-    const bots = new BotController(host, new Set<PieceColor>(['Red']), thinkDelayMs, hopDurationMs, diceSpinMs)
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), thinkDelayMs, hopDurationMs, diceSpinMs, 0, 0)
 
     host.start()
     vi.advanceTimersByTime(thinkDelayMs) // the roll fires
@@ -579,7 +579,7 @@ describe('BotController', () => {
     const network = new FakeRoomNetwork(MASTER_ACTOR)
     const transport = network.createTransport(MASTER_ACTOR)
     const host = new HostTurnManagerBridge(inner, dice, [red, blue], transport, new Map<number, PieceColor>())
-    const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2)
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2, 0, 0)
 
     host.start()
     vi.advanceTimersByTime(10) // the roll fires
@@ -617,7 +617,7 @@ describe('BotController', () => {
     const network = new FakeRoomNetwork(MASTER_ACTOR)
     const transport = network.createTransport(MASTER_ACTOR)
     const host = new HostTurnManagerBridge(inner, dice, [red, blue], transport, new Map<number, PieceColor>())
-    const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2)
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2, 0, 0)
 
     host.start()
     vi.advanceTimersByTime(10) // the roll fires
@@ -657,7 +657,7 @@ describe('BotController', () => {
     // turnChangeHoldMs=0 - this test isolates busyUntilMs's own hop-duration accounting for a
     // human's move from the separate turn-handoff hold (TURN_CHANGE_HOLD_MS), which would otherwise
     // dwarf the exact window this test means to check.
-    const bots = new BotController(host, new Set<PieceColor>(['Blue']), thinkDelayMs, hopDurationMs, 2, 0)
+    const bots = new BotController(host, new Set<PieceColor>(['Blue']), thinkDelayMs, hopDurationMs, 2, 0, 0)
 
     let rollCount = 0
     inner.diceRolled.on(() => rollCount++)
@@ -706,7 +706,7 @@ describe('BotController', () => {
     const thinkDelayMs = 10
     const hopDurationMs = 2
     const turnChangeHoldMs = 500
-    const bots = new BotController(host, new Set<PieceColor>(['Red', 'Blue']), thinkDelayMs, hopDurationMs, 2, turnChangeHoldMs)
+    const bots = new BotController(host, new Set<PieceColor>(['Red', 'Blue']), thinkDelayMs, hopDurationMs, 2, turnChangeHoldMs, 0)
 
     let rollCount = 0
     inner.diceRolled.on(() => rollCount++)
@@ -741,7 +741,7 @@ describe('BotController', () => {
     const transport = network.createTransport(MASTER_ACTOR)
     const host = new HostTurnManagerBridge(inner, dice, players, transport, new Map<number, PieceColor>())
     const thinkDelayMs = 50
-    const bots = new BotController(host, new Set<PieceColor>(['Red', 'Blue']), thinkDelayMs, 2, 2)
+    const bots = new BotController(host, new Set<PieceColor>(['Red', 'Blue']), thinkDelayMs, 2, 2, 0, 0)
 
     let rollCount = 0
     inner.diceRolled.on(() => rollCount++)
@@ -790,7 +790,7 @@ describe('BotController', () => {
     const network = new FakeRoomNetwork(MASTER_ACTOR)
     const transport = network.createTransport(MASTER_ACTOR)
     const host = new HostTurnManagerBridge(inner, dice, [red, blue], transport, new Map<number, PieceColor>())
-    const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2)
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2, 0, 0)
 
     host.start()
     vi.advanceTimersByTime(10) // the roll fires
@@ -823,7 +823,7 @@ describe('BotController', () => {
     const network = new FakeRoomNetwork(MASTER_ACTOR)
     const transport = network.createTransport(MASTER_ACTOR)
     const host = new HostTurnManagerBridge(inner, dice, [red, blue], transport, new Map<number, PieceColor>())
-    const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2)
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2, 0, 0)
 
     host.start()
     vi.advanceTimersByTime(10) // the roll fires
@@ -859,7 +859,7 @@ describe('BotController', () => {
     const network = new FakeRoomNetwork(MASTER_ACTOR)
     const transport = network.createTransport(MASTER_ACTOR)
     const host = new HostTurnManagerBridge(inner, dice, [red, blue], transport, new Map<number, PieceColor>())
-    const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2)
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2, 0, 0)
 
     host.start()
     vi.advanceTimersByTime(10) // the roll fires
@@ -906,7 +906,7 @@ describe('BotController', () => {
     const host = new HostTurnManagerBridge(inner, dice, [red, blue], transport, new Map<number, PieceColor>())
     const thinkDelayMs = 10
     const hopDurationMs = 2
-    const bots = new BotController(host, new Set<PieceColor>(['Red']), thinkDelayMs, hopDurationMs, 2)
+    const bots = new BotController(host, new Set<PieceColor>(['Red']), thinkDelayMs, hopDurationMs, 2, 0, 0)
 
     let moveCount = 0
     inner.moveApplied.on(() => moveCount++)

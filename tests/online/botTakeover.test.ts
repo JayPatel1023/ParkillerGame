@@ -65,7 +65,7 @@ describe('BotController takeOverColor/releaseColor (idle/disconnect bot takeover
     const actorColors = new Map<number, PieceColor>([[REMOTE_ACTOR, 'Red']])
     const host = new HostTurnManagerBridge(inner, dice, players, transport, actorColors)
     // Starts with an *empty* botColors - Red is not bot-owned yet.
-    const bots = new BotController(host, new Set<PieceColor>(), 10, 2, 2, 0)
+    const bots = new BotController(host, new Set<PieceColor>(), 10, 2, 2, 0, 0)
 
     host.start() // turnStarted(Red) - Red isn't bot-owned, so nothing gets scheduled from this alone
     vi.advanceTimersByTime(1000)
@@ -87,7 +87,7 @@ describe('BotController takeOverColor/releaseColor (idle/disconnect bot takeover
     const transport = network.createTransport(MASTER_ACTOR)
     const actorColors = new Map<number, PieceColor>([[REMOTE_ACTOR, 'Red']])
     const host = new HostTurnManagerBridge(inner, dice, players, transport, actorColors)
-    const bots = new BotController(host, new Set<PieceColor>(), 10, 2, 2, 0)
+    const bots = new BotController(host, new Set<PieceColor>(), 10, 2, 2, 0, 0)
 
     host.start()
     // Rolled directly (bypassing actor validation, same as a bot's own roll would) - simulates the
@@ -118,7 +118,7 @@ describe('BotController takeOverColor/releaseColor (idle/disconnect bot takeover
     // first (BotController needs it to already exist), so this closes over `bots` rather than
     // reading it eagerly - only ever actually invoked later, from a network message.
     const host = new HostTurnManagerBridge(inner, dice, players, transport, actorColors, null, (color) => bots.releaseColor(color))
-    bots = new BotController(host, new Set<PieceColor>(), 10, 2, 2, 0)
+    bots = new BotController(host, new Set<PieceColor>(), 10, 2, 2, 0, 0)
 
     const rolls: unknown[] = []
     host.diceRolled.on((roll) => rolls.push(roll))

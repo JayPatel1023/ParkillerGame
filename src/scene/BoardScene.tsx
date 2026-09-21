@@ -883,10 +883,24 @@ export function BoardScene({
   // a "barrier blocks other players" rule (PC2.4) - a private home-corridor square, even shared by
   // two of the same color's own pieces, blocks nobody else, so this deliberately only looks at
   // `track-` keys, not every crowded key in stackGroups.
+  //
+  // Reported directly ("주사위결과가나온다음 말들이 다 움직인다음에 장벽도 생기고 해야겟는데 움직이지도
+  //않고 한참 그자리로 가고잇는데 벌써 장벽이라는 표시가 현시된다" - the barrier should only appear
+  // once the pieces have actually finished moving, but it's already showing while the piece is
+  // still on its way there, hasn't arrived yet): stackGroups (just above) is built from each
+  // piece's own *current* trackPosition/corridorPosition - already updated to its post-move value
+  // the instant the move is submitted, well before its own hop has visually finished playing (game
+  // state always advances synchronously; only playback takes real time - same reasoning as every
+  // other animation-gated effect in this app). Suppresses only the *one* square a still-animating
+  // piece is actually headed for, not every barrier - an unrelated, already-settled barrier
+  // elsewhere on the board must stay visible the whole time, not flicker off every time any
+  // animation plays anywhere.
+  const animatingDestinationTrackIndex = moveAnimation?.after.trackPosition ?? parkillerAnimation?.after ?? null
   const barrierPositions: [number, number, number][] = []
   for (const [key, group] of stackGroups) {
     if (group.length < 2 || !key.startsWith('track-')) continue
     const trackIndex = Number(key.slice('track-'.length))
+    if (trackIndex === animatingDestinationTrackIndex) continue
     const waypoint = definition.trackWaypoints[trackIndex]
     // BASE_HEIGHT, not FLAT_SURFACE_HEIGHT - a track square sits on a raised TrackTile (see
     // restHeightFor's own OnTrack case), unlike the flat yard/corridor/finished-hub squares

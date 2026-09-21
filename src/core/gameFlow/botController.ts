@@ -61,6 +61,13 @@ const BOT_THINK_DELAY_MS = 2400
 // matches useTurnManager.ts's own constant of the same name, HOP_DURATION_MS matches
 // PieceMesh.tsx's HOP_DURATION (in seconds, *1000 here).
 const DICE_SPIN_MS = 2000
+// Kept in sync with ParkillerMesh.tsx's own PARKI_REVEAL_HOLD_MS (that constant's own doc
+// comment) - the Parkiller's own hop no longer starts the instant the dice reveal finishes, it now
+// waits this much longer first, so this class' own budget for "how long until the Parkiller's own
+// hop is done playing" needs the same extra room or the next scheduled action would fire while it's
+// still visibly holding still, reopening the exact "light speed"/cut-short-animation class of bug
+// this file's own busyUntilMs tracking exists to prevent.
+const PARKI_REVEAL_HOLD_MS = 2000
 // Kept in sync with PieceMesh.tsx's own HOP_DURATION (0.48s, *1000 here) - reported directly
 // ("말속도가 너무빠르므로 느리게 해달라" - the piece speed is too fast, slow it down): a slower hop
 // there with this constant left stale would under-count real animation time, reopening the exact
@@ -193,6 +200,7 @@ export class BotController {
   private readonly hopDurationMs: number
   private readonly diceSpinMs: number
   private readonly turnChangeHoldMs: number
+  private readonly parkiRevealHoldMs: number
   private readonly unsubscribers: Array<() => void>
   private readonly pendingTimeouts = new Map<ReturnType<typeof setTimeout>, () => void>()
   // Real time (Date.now()-based, so it advances correctly under vitest's fake timers too) before
@@ -233,6 +241,7 @@ export class BotController {
     hopDurationMs = HOP_DURATION_MS,
     diceSpinMs = DICE_SPIN_MS,
     turnChangeHoldMs = TURN_CHANGE_HOLD_MS,
+    parkiRevealHoldMs = PARKI_REVEAL_HOLD_MS,
   ) {
     this.session = session
     this.botColors = botColors
@@ -240,6 +249,7 @@ export class BotController {
     this.hopDurationMs = hopDurationMs
     this.turnChangeHoldMs = turnChangeHoldMs
     this.diceSpinMs = diceSpinMs
+    this.parkiRevealHoldMs = parkiRevealHoldMs
     this.unsubscribers = [
       session.turnStarted.on((player) => this.onTurnStarted(player.color)),
       // Reported directly ("parki말이 다움직인다음 일반 pawn이 움직이게 해달라" - let the Parkiller
@@ -259,7 +269,9 @@ export class BotController {
       // moveChoicesReady, every single roll - makes the ordering correct unconditionally, not just
       // by the current constants' own coincidence.
       session.diceRolled.on((roll) => {
-        this.markBusy(this.diceSpinMs + roll.blackDie * this.hopDurationMs)
+        // See PARKI_REVEAL_HOLD_MS's own doc comment - the Parkiller's own hop no longer starts the
+        // instant the dice reveal (diceSpinMs) finishes, it waits this much longer first now.
+        this.markBusy(this.diceSpinMs + this.parkiRevealHoldMs + roll.blackDie * this.hopDurationMs)
       }),
       // Reported directly ("El bot debe esperar a que terminen de moverse los peones antes de
       // lanzar los dados del siguiente jugador" - the bot must wait for the pawns to finish moving

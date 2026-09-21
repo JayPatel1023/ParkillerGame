@@ -43,6 +43,15 @@ import type { RoomTransport } from './roomTransport'
 // 해달라는의미는전혀없다" - never meant to lengthen the dice/move-reveal timing itself) back to its
 // original floor.
 const REMOTE_MOVE_PACING_MS = 2000
+// Kept in sync with ParkillerMesh.tsx's own PARKI_REVEAL_HOLD_MS (that constant's own doc
+// comment) - the Parkiller's own hop no longer starts the instant the dice reveal finishes, it now
+// waits this much longer first. Reported directly ("주사위결과가... 결과가 떨어지자마자 급하게
+// 벌써움직이는 현상이잇다" - it already starts moving hastily the instant the result drops): without
+// this, a diceRolled broadcast carrying a large black-die value could have its own Parkiller hop
+// still genuinely playing on this client's screen well after this file's own pacing considered it
+// safe to apply the *next* queued broadcast - the same "reverts, then catches up" symptom class
+// botController.ts's own matching busyUntilMs tracking exists to prevent, just on the replay side.
+const PARKI_REVEAL_HOLD_MS = 2000
 const HOP_DURATION_MS = 480
 const CAPTURE_RETURN_HOPS = 3
 
@@ -171,7 +180,10 @@ export class RemoteTurnManager implements TurnManagerLike {
     if (msg.type === 'diceRolled') {
       this.diceQueue.push(msg.dieA, msg.dieB, msg.blackDie)
       this.inner.requestRoll()
-      return REMOTE_MOVE_PACING_MS
+      // See PARKI_REVEAL_HOLD_MS's own doc comment - the Parkiller's own hop (when it has one this
+      // roll) doesn't start until diceSettledAt plus this hold, and then takes its own real hop time
+      // on top of that - matches botController.ts's own equivalent budget for the same roll.
+      return REMOTE_MOVE_PACING_MS + PARKI_REVEAL_HOLD_MS + msg.blackDie * HOP_DURATION_MS
     }
     if (msg.type === 'moveChosen') {
       const piece = findPiece(this.players, msg.color, msg.pieceIndex)
