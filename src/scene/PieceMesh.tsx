@@ -353,16 +353,25 @@ const STAR_TWINKLE_SPEED = 2.1
 const STAR_COLOR = '#ffd873'
 
 const IDLE_SCALE = 1
-const SELECTABLE_SCALE = 1.3
-const SELECTABLE_EMISSIVE = 0.55
+// Reported directly ("차례가되였을때 말들의 크기를 더크게하지말고 색갈을 좀더 밝고 두드러지게한다거나
+// 다른 새효과를 넣는다던가" - when it's your turn, instead of making the pieces bigger, make the
+// color brighter/more prominent, or add some other new effect instead): a selectable piece's own
+// body used to grow up to SELECTABLE_SCALE (1.3x) on top of the ring/glow/marker cue below - the
+// size change itself is what's being asked to go, not the cue as a whole. The piece's own body now
+// always renders at its real, unscaled size; SELECTABLE_EMISSIVE (bumped well past its old 0.55) is
+// what carries the "you can act on this one" signal instead, the piece's own color glowing
+// noticeably hotter rather than the piece itself growing.
+const SELECTABLE_EMISSIVE = 0.95
 const TURN_EMISSIVE = 0.32
 const IDLE_EMISSIVE = 0.18
 
-// The moment a piece becomes selectable, it pops in (scale overshoots via easeOutBack) and briefly
-// flashes brighter/bigger rings before settling to the steady selectable state above - a distinct,
-// eye-catching "this just became movable" beat instead of the same static look simply appearing.
+// The moment a piece becomes selectable, it briefly flashes even brighter before settling to the
+// steady selectable glow above - a distinct, eye-catching "this just became movable" beat instead
+// of the same static look simply appearing. Used to also pop the piece's own size via easeOutBack
+// (FLASH_RING_SCALE_BOOST, removed - see SELECTABLE_EMISSIVE's own doc comment above) - the ring's
+// own flash-scale is untouched, only the piece body's is gone.
 const FLASH_DURATION = 0.35 // seconds
-const FLASH_EMISSIVE_BOOST = 0.45
+const FLASH_EMISSIVE_BOOST = 0.6
 const FLASH_RING_SCALE_BOOST = 0.6
 
 // Renders as a small bouncing peg-pawn rather than a flat token: at board scale a flat disc barely
@@ -425,10 +434,12 @@ export function PieceMesh({
 
     const flashT = Math.min(1, flashElapsedRef.current / FLASH_DURATION)
     // Eased decay from 1 (the instant it becomes selectable) to 0 (steady state) - drives the
-    // brightness/ring-size flash. Scale itself uses easeOutBack directly below for the pop-overshoot.
+    // brightness/ring-size flash - see SELECTABLE_EMISSIVE's own doc comment for why the piece
+    // body's own scale no longer pops here at all (crowdedScale, for stacking, still applies - and
+    // the hop animation's own squash/stretch, further below, still multiplies against this).
     const flashFade = showIndicator ? 1 - easeOutCubic(flashT) : 0
 
-    const uniformScale = crowdedScale * (showIndicator ? THREE.MathUtils.lerp(IDLE_SCALE, SELECTABLE_SCALE, easeOutBack(flashT)) : IDLE_SCALE)
+    const uniformScale = crowdedScale * IDLE_SCALE
     mesh.scale.setScalar(uniformScale)
     if (bodyMaterialRef.current) {
       const steadyEmissive = showIndicator ? SELECTABLE_EMISSIVE : isCurrentTurn ? TURN_EMISSIVE : IDLE_EMISSIVE
