@@ -55,6 +55,19 @@ const loader = new THREE.TextureLoader()
 // concurrent caller just subscribing to its result instead of starting its own.
 const inFlight = new Map<string, Set<(texture: THREE.Texture) => void>>()
 
+// Reported directly again, still blank on Windows after every fix above had already shipped, this
+// time with a DevTools Network-tab screenshot: the board texture wasn't a failed request retrying
+// (nothing in the request log showed a completed error at all) - unrelated requests were sitting
+// at "(pending)" indefinitely, evidence of a stalled connection (a flaky Windows network stack, a
+// proxy/antivirus swallowing the response, anything that stops a request from ever actually
+// finishing) rather than one that errors out cleanly. Image()-based loads have no built-in timeout -
+// a request that never fires either load or error just hangs forever, and every retry mechanism
+// above only ever triggers *on* an error event, so a genuinely stuck request defeats all of it
+// silently, with nothing to react to. A watchdog timer now treats "still not settled after
+// LOAD_TIMEOUT_MS" the same as an explicit error - it retries via the exact same backoff path -
+// so a hung request eventually gets abandoned for a fresh one instead of blocking forever.
+const LOAD_TIMEOUT_MS = 10_000
+
 function loadWithRetry(url: string, attempt: number) {
   // A failed fetch can still be an HTTP 200 (e.g. an SPA history-fallback serving index.html for a
   // path that doesn't exist, which several static hosts - including this app's own preview/deploy
@@ -66,9 +79,25 @@ function loadWithRetry(url: string, attempt: number) {
   // one is a genuinely fresh request, sidestepping the browser's own cache/revalidation behavior
   // for `Image()`-triggered loads entirely rather than depending on it working correctly.
   const requestUrl = attempt === 1 ? url : `${url}${url.includes('?') ? '&' : '?'}retry=${attempt}`
+  // Guards against both the watchdog and the real onload/onerror firing for the same attempt (a
+  // late success arriving just after the watchdog already moved on to a fresh attempt is simply
+  // dropped - the new attempt's own callbacks are what carry the texture through from here).
+  let settled = false
+  const retryAfterFailure = () => {
+    if (settled) return
+    settled = true
+    // See MAX_RETRY_DELAY_MS's own doc comment above - never actually gives up; the fallback
+    // stays showing only until whichever attempt finally lands.
+    const delay = Math.min(RETRY_BASE_DELAY_MS * attempt, MAX_RETRY_DELAY_MS)
+    setTimeout(() => loadWithRetry(url, attempt + 1), delay)
+  }
+  const watchdog = setTimeout(retryAfterFailure, LOAD_TIMEOUT_MS)
   loader.load(
     requestUrl,
     (texture) => {
+      if (settled) return
+      settled = true
+      clearTimeout(watchdog)
       textureCache.set(url, texture)
       const subscribers = inFlight.get(url)
       inFlight.delete(url)
@@ -76,10 +105,8 @@ function loadWithRetry(url: string, attempt: number) {
     },
     undefined,
     () => {
-      // See MAX_RETRY_DELAY_MS's own doc comment above - never actually gives up; the fallback
-      // stays showing only until whichever attempt finally lands.
-      const delay = Math.min(RETRY_BASE_DELAY_MS * attempt, MAX_RETRY_DELAY_MS)
-      setTimeout(() => loadWithRetry(url, attempt + 1), delay)
+      clearTimeout(watchdog)
+      retryAfterFailure()
     },
   )
 }
