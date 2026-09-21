@@ -356,16 +356,21 @@ export class BotController {
     const exitMoves = moves.filter((m) => m.kind === 'ExitYard')
     if (exitMoves.length > 0) {
       const chosen = exitMoves[0]
-      this.pieceHighlighted.emit(chosen.piece)
-      this.scheduleRespectingBusy(this.thinkDelayMs, () => {
-        // See onTurnStarted's own matching !botColors.has(color) comment - same race, same fix.
-        if (this.session.currentPlayer.color !== color || !this.botColors.has(color)) {
+      // See this method's own second pieceHighlighted.emit call, further below, for why this
+      // waits on scheduleRespectingBusy(0, ...) before ever lighting up.
+      this.scheduleRespectingBusy(0, () => {
+        if (this.session.currentPlayer.color !== color || !this.botColors.has(color)) return // stale
+        this.pieceHighlighted.emit(chosen.piece)
+        this.schedule(() => {
+          // See onTurnStarted's own matching !botColors.has(color) comment - same race, same fix.
+          if (this.session.currentPlayer.color !== color || !this.botColors.has(color)) {
+            this.pieceHighlighted.emit(null)
+            return
+          }
+          this.markBusy(chosen.amount * this.hopDurationMs + this.extraBounceMs(chosen))
           this.pieceHighlighted.emit(null)
-          return
-        }
-        this.markBusy(chosen.amount * this.hopDurationMs + this.extraBounceMs(chosen))
-        this.pieceHighlighted.emit(null)
-        this.session.submitMoveForBot(chosen.piece, chosen.amount)
+          this.session.submitMoveForBot(chosen.piece, chosen.amount)
+        }, this.thinkDelayMs)
       })
       return
     }
@@ -527,37 +532,51 @@ export class BotController {
     // candidate there already shares the same minimum amount).
     const largestAmount = candidates.reduce((best: MoveOption | undefined, m) => (best === undefined || m.amount > best.amount ? m : best), undefined)
     const chosen = largestAmount ?? finalMoves[0] ?? safeMoves[0] ?? nonBarrierMoves[0] ?? moves[0]
-    // Fired now, not inside the scheduled callback below - the highlight should cover this whole
-    // think-delay (see this class's own pieceHighlighted doc comment), not just flash right before
-    // the move actually submits.
-    this.pieceHighlighted.emit(chosen.piece)
-    this.scheduleRespectingBusy(this.thinkDelayMs, () => {
-      // See onTurnStarted's own matching !botColors.has(color) comment - same race, same fix.
-      if (this.session.currentPlayer.color !== color || !this.botColors.has(color)) {
-        this.pieceHighlighted.emit(null) // stale - nothing will submit, so nothing should stay lit
-        return
-      }
-      // This move's own hop animation - amount is the exact number of squares it covers (see
-      // MoveOption), same duration-per-square PieceMesh itself uses. Set *before* submitting, not
-      // after - same ordering fix as the diceRolled subscriber above and for the same reason:
-      // submitMoveForBot's own submitMove (turnManager.ts) resolves synchronously and, if a second
-      // die is still unspent, re-emits moveChoicesReady for it *before* this call even returns -
-      // this class's own onMoveChoicesReady for that second die would then compute its own schedule
-      // against whatever busyUntilMs was set *before* this move, not this move's own hop duration,
-      // if that update happened after submitting instead of before.
-      // See CELEBRATION_HOLD_MS's own doc comment - predictable *before* submitting from the move
-      // itself (allowParkillerCapture: true here, unlike capturingMoves' own preference-ranking use
-      // of this same helper just above - this is a real elimination this move is about to cause
-      // either way, whichever piece the earlier preference chain actually ended up choosing, not a
-      // ranking decision between candidates). The one celebration-worthy outcome this can't see
-      // coming is a fully automatic Parkiller-vs-Parkiller elimination (PK6/PK7 via the black die,
-      // not a pawn's own move) - session.diceRolled's own busy-window extension just above already
-      // covers that hop's *animation* time, but has no way to know a Parki actually died from it;
-      // BotDrivableSession's narrow interface has no event for that at all.
-      const triggersCelebration = chosen.kind === 'FinishMove' || wouldCapture(this.session.board, chosen, this.session.players, true)
-      this.markBusy(chosen.amount * this.hopDurationMs + this.extraBounceMs(chosen) + (triggersCelebration ? CELEBRATION_HOLD_MS : 0))
-      this.pieceHighlighted.emit(null)
-      this.session.submitMoveForBot(chosen.piece, chosen.amount)
+    // Reported directly, with a screenshot: a piece was already glowing as "this is what the bot
+    // picked" while the dice (specifically the black Parkiller die) were still visibly spinning -
+    // "오락의 모든과정은 하나씩 차례대로 진행되여야한다" (every step of the game should happen one at a
+    // time, in order). Root cause: onMoveChoicesReady runs synchronously as part of resolving the
+    // roll, well before the dice-spin's own cosmetic reveal animation (or the Parkiller's own
+    // automatic move, if this roll had one) has actually finished on screen - this emit used to fire
+    // immediately, with nothing waiting on either. session.diceRolled's own subscriber above already
+    // extends busyUntilMs to cover exactly that window (dice spin + Parkiller reveal hold + its own
+    // hop) every single roll, so waiting on scheduleRespectingBusy(0, ...) here - not fired directly
+    // - lines this emit up with the same "dice have visibly settled" moment a human player's own
+    // selectable-piece cue now waits for (GameBoardScreen.tsx's own visiblePendingMoves). Once that
+    // clears, the highlight still covers the *entire* think-delay below rather than just flashing
+    // right before the move submits (this method's own established behavior, unchanged) - only the
+    // starting point moved, not the fact that it leads the submit by a real pause.
+    this.scheduleRespectingBusy(0, () => {
+      if (this.session.currentPlayer.color !== color || !this.botColors.has(color)) return // stale
+      this.pieceHighlighted.emit(chosen.piece)
+      this.schedule(() => {
+        // See onTurnStarted's own matching !botColors.has(color) comment - same race, same fix.
+        if (this.session.currentPlayer.color !== color || !this.botColors.has(color)) {
+          this.pieceHighlighted.emit(null) // stale - nothing will submit, so nothing should stay lit
+          return
+        }
+        // This move's own hop animation - amount is the exact number of squares it covers (see
+        // MoveOption), same duration-per-square PieceMesh itself uses. Set *before* submitting, not
+        // after - same ordering fix as the diceRolled subscriber above and for the same reason:
+        // submitMoveForBot's own submitMove (turnManager.ts) resolves synchronously and, if a second
+        // die is still unspent, re-emits moveChoicesReady for it *before* this call even returns -
+        // this class's own onMoveChoicesReady for that second die would then compute its own schedule
+        // against whatever busyUntilMs was set *before* this move, not this move's own hop duration,
+        // if that update happened after submitting instead of before.
+        // See CELEBRATION_HOLD_MS's own doc comment - predictable *before* submitting from the move
+        // itself (allowParkillerCapture: true here, unlike capturingMoves' own preference-ranking use
+        // of this same helper just above - this is a real elimination this move is about to cause
+        // either way, whichever piece the earlier preference chain actually ended up choosing, not a
+        // ranking decision between candidates). The one celebration-worthy outcome this can't see
+        // coming is a fully automatic Parkiller-vs-Parkiller elimination (PK6/PK7 via the black die,
+        // not a pawn's own move) - session.diceRolled's own busy-window extension just above already
+        // covers that hop's *animation* time, but has no way to know a Parki actually died from it;
+        // BotDrivableSession's narrow interface has no event for that at all.
+        const triggersCelebration = chosen.kind === 'FinishMove' || wouldCapture(this.session.board, chosen, this.session.players, true)
+        this.markBusy(chosen.amount * this.hopDurationMs + this.extraBounceMs(chosen) + (triggersCelebration ? CELEBRATION_HOLD_MS : 0))
+        this.pieceHighlighted.emit(null)
+        this.session.submitMoveForBot(chosen.piece, chosen.amount)
+      }, this.thinkDelayMs)
     })
   }
 

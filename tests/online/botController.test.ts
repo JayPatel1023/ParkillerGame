@@ -91,10 +91,22 @@ describe('BotController', () => {
 
     host.start()
 
-    // Advance well past several rounds of "roll (10ms) -> move (10ms)" turns - the bots alone
-    // should exit at least one piece each without anything else driving them.
-    for (let i = 0; i < 60; i++) {
-      vi.advanceTimersByTime(15)
+    // Advance well past several rounds of "roll -> move" turns - the bots alone should exit at
+    // least one piece each without anything else driving them. Each roll's own first move-decision
+    // now waits out the roll's own busy window (diceSpinMs(2) + parkiRevealHoldMs(0) +
+    // blackDie(0-6)*hopDurationMs(2), i.e. up to 14ms) *before* thinkDelayMs(10) even starts
+    // counting down (see onMoveChoicesReady's own scheduleRespectingBusy(0, ...) - it used to run
+    // thinkDelayMs and that busy window concurrently, via scheduleRespectingBusy(thinkDelayMs, ...),
+    // picking whichever was longer, not stacking the two), so a full round now costs somewhat more
+    // real time than the old flat ~15ms/round estimate this loop's budget was originally tuned
+    // against. This test's real randomness already means "no legal exit roll yet" is a genuine,
+    // if rare, possibility on its own (a fixed die-value tail, unrelated to this fix) - bumped the
+    // budget from 60*15=900ms to 200*20=4000ms, well over 4x, so that same rare tail isn't made
+    // measurably more likely just because fewer real rounds now fit in the old budget (confirmed
+    // directly: at the old 900ms budget this test's own flake rate rose measurably under the fixed
+    // busy-window math above; at 4000ms it's back to a clean 0/30 in repeated isolated runs).
+    for (let i = 0; i < 200; i++) {
+      vi.advanceTimersByTime(20)
     }
 
     expect(redExited).toBe(true)
@@ -166,19 +178,24 @@ describe('BotController', () => {
     expect(redMoveCount).toBe(0) // still waiting on the Parkiller's own hop (blackDie=1)
 
     // The Parkiller's own hop: diceSpinMs + blackDie(1)*hopDurationMs = 50 + 100 = 150ms after the
-    // roll - the first move can't fire before that finishes.
-    vi.advanceTimersByTime(150) // t=200
+    // roll - onMoveChoicesReady's own scheduleRespectingBusy(0, ...) waits this out before the
+    // chosen piece is even highlighted, let alone submitted.
+    vi.advanceTimersByTime(150) // t=200: highlighted now, but not yet submitted
+    expect(redMoveCount).toBe(0)
+
+    // A further thinkDelayMs(50) after the highlight before the first move actually submits.
+    vi.advanceTimersByTime(thinkDelayMs) // t=250
     expect(redMoveCount).toBe(1)
     // Item 6's own preference: the sum is illegal for both pieces (blocked above), so the bot
     // prefers whichever single die moves farther - dieB(6) - over dieA(2). piece0 (3) is offered
     // before piece1 (25) on a tie between dieB options, so piece0 takes it: 3 -> 9.
     expect(red.pieces[0].trackPosition).toBe(9)
 
-    // The first move's own hop: dieB(6)*hopDurationMs = 600ms - the second move can't fire before
-    // *that* finishes either.
-    vi.advanceTimersByTime(400) // t=600
+    // The first move's own hop: dieB(6)*hopDurationMs = 600ms - the second move's own highlight
+    // can't fire before *that* finishes, and then another thinkDelayMs(50) before it submits.
+    vi.advanceTimersByTime(400) // t=650: still well short of the 600ms hop clearing
     expect(redMoveCount).toBe(1) // still mid-hop from the first move
-    vi.advanceTimersByTime(200) // t=800
+    vi.advanceTimersByTime(250) // t=900: the hop clears at 850, then thinkDelayMs elapses -> submits
     expect(redMoveCount).toBe(2)
     // Only dieA(2) is left. piece0's own dieA(2) from its new position (9 -> 11) is now blocked by
     // the same Blue barrier that ruled out its sum - piece1's dieA(2) (25 -> 27) is the only
@@ -215,14 +232,21 @@ describe('BotController', () => {
 
     host.start()
     vi.advanceTimersByTime(thinkDelayMs) // the roll fires - the Parkiller hop's own busy window starts
-    // The bot has already decided which piece to move, well before it actually submits.
+    // Not highlighted yet - onMoveChoicesReady's own scheduleRespectingBusy(0, ...) still has to
+    // wait out that same busy window before the chosen piece is even announced.
+    expect(seen).toEqual([])
+
+    // Past the Parkiller hop's own budget (diceSpinMs(50) + blackDie(1)*hopDurationMs(100) = 150ms)
+    // - the bot has now decided which piece to move and announces it, well before it actually
+    // submits.
+    vi.advanceTimersByTime(150)
     expect(seen).toEqual([red.pieces[0]])
 
-    // Past the Parkiller hop's own budget - the first move now fires and submits, clearing the
-    // highlight. (Only one piece is on the track here, so a second die may re-offer the same piece
-    // at its new position for a further move right after - this test only cares about the first
-    // decide-then-clear cycle, hence checking a prefix rather than the full emission list.)
-    vi.advanceTimersByTime(150)
+    // A further thinkDelayMs after the highlight - the first move now fires and submits, clearing
+    // the highlight. (Only one piece is on the track here, so a second die may re-offer the same
+    // piece at its new position for a further move right after - this test only cares about the
+    // first decide-then-clear cycle, hence checking a prefix rather than the full emission list.)
+    vi.advanceTimersByTime(thinkDelayMs)
     expect(seen.slice(0, 2)).toEqual([red.pieces[0], null])
 
     bots.dispose()
@@ -262,17 +286,21 @@ describe('BotController', () => {
     const bots = new BotController(host, new Set<PieceColor>(['Red']), thinkDelayMs, 2, 2, 0, 0)
 
     host.start()
-    vi.advanceTimersByTime(thinkDelayMs) // the roll fires
-    vi.advanceTimersByTime(thinkDelayMs) // the capturing move (piece0, dieA=3: 3 -> 6) submits,
+    vi.advanceTimersByTime(thinkDelayMs) // t=10: the roll fires
+    // The roll's own busy window (diceSpinMs(2) + blackDie(1)*hopDurationMs(2) = 4ms) must clear
+    // before the chosen (capturing) piece is even highlighted, then another thinkDelayMs before it
+    // actually submits: 4 + 10 = 14ms after the roll.
+    vi.advanceTimersByTime(4 + thinkDelayMs) // t=24: the capturing move (piece0, dieA=3: 3 -> 6) submits,
     // which queues and immediately offers the capture's own 20-square reward
     expect(red.pieces[0].trackPosition).toBe(6)
     expect(blue.pieces[0].state).toBe('InYard') // confirms the capture actually happened
 
     // See CELEBRATION_HOLD_MS's own doc comment (botController.ts) - a capturing move now also
     // holds the bot's own busy window open an extra 2000ms (fixed, not one of this test's own
-    // overridden constructor args) so its capture's celebration has time to actually play, on top
-    // of the plain thinkDelayMs this test used to only need here.
-    vi.advanceTimersByTime(thinkDelayMs + 2000) // the reward move fires
+    // overridden constructor args) so its capture's celebration has time to actually play - the
+    // reward decision's own highlight has to wait out that whole window (amount(3)*hopDurationMs(2)
+    // + 2000 = 2006ms) before thinkDelayMs even starts counting down toward its own submit.
+    vi.advanceTimersByTime(2006 + thinkDelayMs) // t=2040: the reward move fires
     // pieces[0] (the capturing piece itself, still eligible for the reward like any other piece in
     // play) moved by 10 more - 6 -> 16 - not the full 20 from its own position (6 -> 26). Confirms
     // the split path was picked over the lump sum, not just that *some* move happened.
@@ -280,9 +308,9 @@ describe('BotController', () => {
     expect(red.pieces[1].trackPosition).toBe(15) // untouched by this first half of the split
 
     // The just-submitted 10-square move itself extends the bot's own busy window by
-    // amount*hopDurationMs (10*2=20ms here) before it schedules the next decision - a single
-    // thinkDelayMs (10ms) tick isn't enough to clear that on its own.
-    vi.advanceTimersByTime(30) // the remaining 10 fires
+    // amount*hopDurationMs (10*2=20ms here), which the next decision's own highlight has to wait
+    // out before thinkDelayMs (10ms) starts counting down toward its own submit: 20 + 10 = 30ms.
+    vi.advanceTimersByTime(30) // t=2070: the remaining 10 fires
     // The remaining 10 is now offered to *both* pieces equally (see turnManager.ts's own
     // PendingReward doc comment - the client's own direct correction: the same piece can take
     // both halves too, not just "another pawn"), so either ending is correct. This one happened
@@ -329,11 +357,15 @@ describe('BotController', () => {
     inner.rewardForfeited.on((grant) => (forfeited = grant))
 
     host.start()
-    vi.advanceTimersByTime(thinkDelayMs) // the roll fires
-    vi.advanceTimersByTime(thinkDelayMs) // the capturing move submits, offering the 20-square reward
+    vi.advanceTimersByTime(thinkDelayMs) // t=10: the roll fires
+    // The roll's own busy window (diceSpinMs(2) + blackDie(1)*hopDurationMs(2) = 4ms) must clear
+    // before the capturing piece is even highlighted, then another thinkDelayMs before it submits.
+    vi.advanceTimersByTime(4 + thinkDelayMs) // t=24: the capturing move submits, offering the 20-square reward
     // See CELEBRATION_HOLD_MS's own doc comment (botController.ts) - the capture just above holds
-    // the bot's own busy window open an extra fixed 2000ms for its own celebration.
-    vi.advanceTimersByTime(thinkDelayMs + 2000) // the reward move fires
+    // the bot's own busy window open an extra fixed 2000ms for its own celebration (on top of its
+    // own hop, amount(3)*hopDurationMs(2)=6) - the reward decision's own highlight has to wait that
+    // whole 2006ms out before thinkDelayMs starts counting down toward its own submit.
+    vi.advanceTimersByTime(2006 + thinkDelayMs) // t=2040: the reward move fires
 
     // The full 20 in one move (6 -> 26), not the 10-split that would have nowhere to send its other
     // half - pieces[1] stays exactly where it was, and nothing was ever forfeited.
@@ -534,15 +566,19 @@ describe('BotController', () => {
     const bots = new BotController(host, new Set<PieceColor>(['Red']), thinkDelayMs, hopDurationMs, diceSpinMs, 0, 0)
 
     host.start()
-    vi.advanceTimersByTime(thinkDelayMs) // the roll fires
-    vi.advanceTimersByTime(150) // the capturing move (piece0, dieA=3: 3 -> 6) submits, offering the reward
+    vi.advanceTimersByTime(thinkDelayMs) // t=50: the roll fires
+    // The roll's own busy window (diceSpinMs(50) + blackDie(1)*hopDurationMs(100) = 150ms) must
+    // clear before the capturing piece is even highlighted, then another thinkDelayMs(50) before it
+    // actually submits: 150 + 50 = 200ms after the roll.
+    vi.advanceTimersByTime(150 + thinkDelayMs) // t=250: the capturing move (piece0, dieA=3: 3 -> 6)
+    // submits, offering the reward
     expect(blue.pieces[0].state).toBe('InYard') // confirms the triggering capture happened
 
     // See CELEBRATION_HOLD_MS's own doc comment (botController.ts) - that same capturing move also
     // holds the bot's own busy window open an extra fixed 2000ms for its own celebration, on top of
-    // its own hop (amount(3)*hopDurationMs(100)=300) - 2300ms total, not just the reward's own
-    // up-to-20-squares hop time this test used to only need to clear here.
-    vi.advanceTimersByTime(2300) // the reward move fires (up to 20 squares)
+    // its own hop (amount(3)*hopDurationMs(100)=300) - 2300ms total - which the reward decision's
+    // own highlight has to wait out before thinkDelayMs(50) starts counting down toward its submit.
+    vi.advanceTimersByTime(2300 + thinkDelayMs) // t=2600: the reward move fires (up to 20 squares)
 
     // The full 20 was taken specifically because it captures blue.pieces[1] - not the 10-split
     // this same scenario's sibling test above would otherwise prefer.
@@ -582,8 +618,10 @@ describe('BotController', () => {
     const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2, 0, 0)
 
     host.start()
-    vi.advanceTimersByTime(10) // the roll fires
-    vi.advanceTimersByTime(10) // the first move fires
+    vi.advanceTimersByTime(10) // t=10: the roll fires
+    // The roll's own busy window (diceSpinMs(2) + blackDie(1)*hopDurationMs(2) = 4ms) must clear
+    // before the chosen piece is even highlighted, then another thinkDelayMs(10) before it submits.
+    vi.advanceTimersByTime(4 + 10) // t=24: the first move fires
 
     // piece0 must still be exactly where it started - never moved off its own protected square.
     expect(red.pieces[0].trackPosition).toBe(0)
@@ -620,8 +658,10 @@ describe('BotController', () => {
     const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2, 0, 0)
 
     host.start()
-    vi.advanceTimersByTime(10) // the roll fires
-    vi.advanceTimersByTime(10) // the first move fires
+    vi.advanceTimersByTime(10) // t=10: the roll fires
+    // The roll's own busy window (diceSpinMs(2) + blackDie(1)*hopDurationMs(2) = 4ms) must clear
+    // before the chosen piece is even highlighted, then another thinkDelayMs(10) before it submits.
+    vi.advanceTimersByTime(4 + 10) // t=24: the first move fires
 
     // The risk-free capture must have been taken, not the earlier-sorted non-capturing move.
     expect(blue.pieces[0].state).toBe('InYard')
@@ -712,12 +752,16 @@ describe('BotController', () => {
     inner.diceRolled.on(() => rollCount++)
 
     host.start()
-    vi.advanceTimersByTime(thinkDelayMs) // Red's own roll (bot-driven)
+    vi.advanceTimersByTime(thinkDelayMs) // t=10: Red's own roll (bot-driven)
     expect(rollCount).toBe(1)
-    vi.advanceTimersByTime(thinkDelayMs) // Red's own move decision - spends the sum, ends its turn
+    // The roll's own busy window (diceSpinMs(2) + blackDie(1)*hopDurationMs(2) = 4ms) must clear
+    // before the chosen piece is even highlighted, then another thinkDelayMs before it submits.
+    vi.advanceTimersByTime(4 + thinkDelayMs) // t=24: Red's own move decision - spends the sum, ends its turn
     expect(host.currentPlayer.color).toBe('Blue')
 
-    // Short move (7*2=14ms of hop time) - well before the *real* gate here, turnChangeHoldMs.
+    // Short move (7*2=14ms of hop time) - well before the *real* gate here, turnChangeHoldMs. This
+    // part of the scheduling (onTurnStarted's own roll delay) is untouched by the highlight-timing
+    // fix above, so the math here is unchanged.
     vi.advanceTimersByTime(thinkDelayMs + turnChangeHoldMs - 1)
     expect(rollCount).toBe(1) // Blue still held back
 
@@ -793,8 +837,10 @@ describe('BotController', () => {
     const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2, 0, 0)
 
     host.start()
-    vi.advanceTimersByTime(10) // the roll fires
-    vi.advanceTimersByTime(10) // the first move fires
+    vi.advanceTimersByTime(10) // t=10: the roll fires
+    // The roll's own busy window (diceSpinMs(2) + blackDie(1)*hopDurationMs(2) = 4ms) must clear
+    // before the chosen piece is even highlighted, then another thinkDelayMs(10) before it submits.
+    vi.advanceTimersByTime(4 + 10) // t=24: the first move fires
 
     // The capture was taken - piece0 moved to 6 and blue.pieces[0] went home - not the safer,
     // unrelated 7-move with piece1 (still exactly where it started).
@@ -826,8 +872,12 @@ describe('BotController', () => {
     const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2, 0, 0)
 
     host.start()
-    vi.advanceTimersByTime(10) // the roll fires
-    vi.advanceTimersByTime(10) // the first move fires
+    vi.advanceTimersByTime(10) // t=10: the roll fires
+    // The roll's own busy window (diceSpinMs(2) + blackDie(1)*hopDurationMs(2) = 4ms) must clear
+    // before the exit piece is even highlighted, then another thinkDelayMs(10) before it submits -
+    // the exit path uses the exact same scheduleRespectingBusy(0, ...) -> schedule(thinkDelayMs)
+    // structure as the main decision path.
+    vi.advanceTimersByTime(4 + 10) // t=24: the first move fires
 
     // The exit went through - piece0 left the yard - and piece1 (the bigger, unrelated amount)
     // hasn't moved yet, confirming the exit was submitted first, not merely submitted at all.
@@ -862,8 +912,10 @@ describe('BotController', () => {
     const bots = new BotController(host, new Set<PieceColor>(['Red']), 10, 2, 2, 0, 0)
 
     host.start()
-    vi.advanceTimersByTime(10) // the roll fires
-    vi.advanceTimersByTime(10) // the first move fires
+    vi.advanceTimersByTime(10) // t=10: the roll fires
+    // The roll's own busy window (diceSpinMs(2) + blackDie(1)*hopDurationMs(2) = 4ms) must clear
+    // before the chosen piece is even highlighted, then another thinkDelayMs(10) before it submits.
+    vi.advanceTimersByTime(4 + 10) // t=24: the first move fires
 
     // piece0 took the smaller, safe move (8 -> 10) instead of the sum (8 -> 18) or piece1's own
     // bigger, unsafe 6 - piece1 stays exactly where it started.
@@ -912,18 +964,22 @@ describe('BotController', () => {
     inner.moveApplied.on(() => moveCount++)
 
     host.start()
-    vi.advanceTimersByTime(thinkDelayMs) // the roll fires
-    vi.advanceTimersByTime(thinkDelayMs) // the capturing move (piece0, dieA=2: 5 -> 7) submits
+    vi.advanceTimersByTime(thinkDelayMs) // t=10: the roll fires
+    // The roll's own busy window (diceSpinMs(2) + blackDie(1)*hopDurationMs(2) = 4ms) must clear
+    // before the chosen piece is even highlighted, then another thinkDelayMs before it submits.
+    vi.advanceTimersByTime(4 + thinkDelayMs) // t=24: the capturing move (piece0, dieA=2: 5 -> 7) submits
     expect(blue.pieces[0].state).toBe('InYard') // confirms the capture happened
     expect(moveCount).toBe(1)
 
     // The capturing move's own busy window is amount(2)*hopDurationMs(2)=4ms plus the celebration
-    // hold (2000ms) = 2004ms total. Short of that, no further move must have fired yet - the
-    // celebration is still supposed to be playing.
+    // hold (2000ms) = 2004ms total, which the next decision's own highlight has to wait out before
+    // thinkDelayMs starts counting down toward its own submit - 2014ms total, landing at t=2038.
+    // Short of that, no further move must have fired yet - the celebration is still supposed to be
+    // playing.
     vi.advanceTimersByTime(1000)
     expect(moveCount).toBe(1)
 
-    // Past the full 2004ms now - the reward move (or moves - a 20-square reward from here may
+    // Past the full 2014ms now - the reward move (or moves - a 20-square reward from here may
     // itself resolve in more than one MoveResult) finally fires. Not pinned to an exact count -
     // this test only cares that the hold above is a genuine, bounded delay, not a permanent one.
     vi.advanceTimersByTime(1100)

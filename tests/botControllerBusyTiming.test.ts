@@ -175,6 +175,12 @@ describe('BotController busy-window timing around a PK5 self-elimination', () =>
 
     session.turnStarted.emit(red) // Red's turn starts
     vi.advanceTimersByTime(thinkDelayMs) // Red's think-delay elapses -> rollForBot() -> moveChoicesReady
+    // The roll's own busy window (diceSpinMs(10) + parkiRevealHoldMs(0) + blackDie(0)*hopDurationMs
+    // = 10ms - FakeSession.rollForBot's own diceRolled.emit always uses blackDie: 0, see its own
+    // comment) must clear before the chosen piece is even highlighted, via onMoveChoicesReady's own
+    // scheduleRespectingBusy(0, ...).
+    const rollBusyMs = diceSpinMs + 0 /* parkiRevealHoldMs */ + 0 /* blackDie */ * hopDurationMs
+    vi.advanceTimersByTime(rollBusyMs) // the roll's own busy window clears -> the piece is highlighted
     vi.advanceTimersByTime(thinkDelayMs) // Red's own move-decision think-delay elapses -> submitMoveForBot()
     // -> moveApplied, then (this move ends Red's turn) turnStarted(blue) fires synchronously, exactly
     // like a real TurnManager's endTurn() would while the self-elimination "flung home" bounce is

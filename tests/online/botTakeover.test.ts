@@ -73,7 +73,9 @@ describe('BotController takeOverColor/releaseColor (idle/disconnect bot takeover
 
     bots.takeOverColor('Red')
     vi.advanceTimersByTime(10) // the roll itself (thinkDelayMs)
-    vi.advanceTimersByTime(10) // the exit move that follows it
+    // The roll's own busy window (diceSpinMs(2) + blackDie(1)*hopDurationMs(2) = 4ms) must clear
+    // before the exit piece is even highlighted, then another thinkDelayMs(10) before it submits.
+    vi.advanceTimersByTime(4 + 10) // the exit move that follows it
 
     expect(players[0].pieces.some((p) => p.state === 'OnTrack' && p.trackPosition === 0)).toBe(true)
   })
@@ -97,7 +99,10 @@ describe('BotController takeOverColor/releaseColor (idle/disconnect bot takeover
     expect(players[0].pieces.every((p) => p.state === 'InYard')).toBe(true) // rolled, not yet moved
 
     bots.takeOverColor('Red')
-    vi.advanceTimersByTime(10) // the already-pending exit move
+    // The already-pending roll's own busy window (diceSpinMs(2) + blackDie(1)*hopDurationMs(2) =
+    // 4ms) must clear before the exit piece is even highlighted, then another thinkDelayMs(10)
+    // before it submits.
+    vi.advanceTimersByTime(4 + 10) // the already-pending exit move
 
     expect(players[0].pieces.some((p) => p.state === 'OnTrack' && p.trackPosition === 0)).toBe(true)
   })
