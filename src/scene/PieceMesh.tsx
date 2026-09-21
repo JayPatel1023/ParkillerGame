@@ -367,12 +367,23 @@ const STAR_ORBIT_SPEED = 0.6 // radians/sec - slow drift around the shared cente
 const STAR_BOB_SPEED = 1.4
 const STAR_SIZE = PIECE_BASE_RADIUS * 0.52
 const STAR_TWINKLE_SPEED = 2.1
-const HALO_SIZE = PIECE_BASE_RADIUS * 2.4
-const HALO_COLOR = '#fff0b8'
-const HALO_BASE_OPACITY = 0.4
+// Requested directly right after the size fix above landed, once the cluster was actually visible
+// ("아이들의 동심에 맞게 재미나고 멋지게 만들라" - make it fun and cool, fitting a child's sense of
+// wonder): big enough to see now, but a single pale cream disc behind monotone gold stars still read
+// as plain, not magical. The halo is now two layered discs (a soft wide outer glow + a smaller,
+// warmer, brighter core) instead of one flat circle, faking the soft-edged falloff a real light
+// source has; the stars now cycle through a small fairy-dust palette (gold/pink/sky-blue/white)
+// instead of all being identical, the same "each one is its own little twinkle" idea a monotone set
+// couldn't read even when correctly sized.
+const HALO_SIZE = PIECE_BASE_RADIUS * 2.6
+const HALO_CORE_SIZE = PIECE_BASE_RADIUS * 1.35
+const HALO_COLOR = '#ffe9a8'
+const HALO_CORE_COLOR = '#fff7d6'
+const HALO_BASE_OPACITY = 0.38
+const HALO_CORE_OPACITY = 0.6
 const HALO_PULSE_AMPLITUDE = 0.18
 const HALO_PULSE_SPEED = 1.7
-const STAR_COLOR = '#ffd873'
+const STAR_COLORS = ['#ffd873', '#ff9ecb', '#8fd6ff', '#ffffff']
 
 const IDLE_SCALE = 1
 // Reported directly ("차례가되였을때 말들의 크기를 더크게하지말고 색갈을 좀더 밝고 두드러지게한다거나
@@ -418,6 +429,7 @@ export function PieceMesh({
   const indicatorGroupRef = useRef<Group>(null)
   const starRefs = useRef<(Mesh | null)[]>([])
   const haloRef = useRef<Mesh>(null)
+  const haloCoreRef = useRef<Mesh>(null)
   const indicatorElapsedRef = useRef(0)
   const bodyMaterialRef = useRef<THREE.MeshPhysicalMaterial>(null)
   const prevSelectableRef = useRef(false)
@@ -471,15 +483,28 @@ export function PieceMesh({
         const t = indicatorElapsedRef.current
 
         // Soft halo behind the star cluster - floating in open air above the head (not flat on the
-        // board, see HALO_SIZE's own doc comment above), billboarded like the stars. Gives the
-        // cluster a bright warm backdrop of its own so it reads as one unmissable glowing spot even
-        // before the eye resolves the individual stars, the same "reads before the ring itself"
-        // trick this file's old base glow disc used - just up here instead of flush on the ground.
+        // board, see HALO_SIZE's own doc comment above), billboarded like the stars. Two layered
+        // discs (a wide soft outer glow + a smaller, brighter core) instead of one flat circle -
+        // fakes the soft falloff a real light source has, so the cluster reads as one unmissable
+        // warm glowing spot even before the eye resolves the individual stars, the same "reads
+        // before the ring itself" trick this file's old base glow disc used - just up here instead
+        // of flush on the ground.
         if (haloRef.current) {
           const haloPulse = Math.sin(t * HALO_PULSE_SPEED) * 0.5 + 0.5
           haloRef.current.position.set(0, STAR_CENTER_Y, 0)
           haloRef.current.quaternion.copy(camera.quaternion)
           ;(haloRef.current.material as THREE.MeshBasicMaterial).opacity = HALO_BASE_OPACITY + haloPulse * HALO_PULSE_AMPLITUDE
+        }
+        if (haloCoreRef.current) {
+          const corePulse = Math.sin(t * HALO_PULSE_SPEED + 0.6) * 0.5 + 0.5
+          haloCoreRef.current.position.set(0, STAR_CENTER_Y, 0)
+          haloCoreRef.current.quaternion.copy(camera.quaternion)
+          // Nudged toward the camera along its own local Z (post-billboard-rotation) so it never
+          // z-fights with the outer halo disc sitting at the exact same world position.
+          haloCoreRef.current.translateZ(0.002)
+          const coreScale = 1 + corePulse * 0.12
+          haloCoreRef.current.scale.setScalar(coreScale)
+          ;(haloCoreRef.current.material as THREE.MeshBasicMaterial).opacity = HALO_CORE_OPACITY + corePulse * HALO_PULSE_AMPLITUDE
         }
 
         // A small handful of stars drifting slowly around a shared center above the head, each
@@ -690,14 +715,19 @@ export function PieceMesh({
           (SELECTABLE_EMISSIVE above) plus the halo+stars below carry the whole cue - see STAR_COUNT's
           own doc comment for why an earlier ground-level ring/glow disc was dropped in favor of this. */}
       <group ref={indicatorGroupRef} visible={false}>
-        {/* Soft halo behind the star cluster - see HALO_SIZE's own doc comment above. */}
+        {/* Soft two-layer halo behind the star cluster - see HALO_SIZE's own doc comment above. */}
         <mesh ref={haloRef}>
           <circleGeometry args={[HALO_SIZE, 24]} />
           <meshBasicMaterial color={HALO_COLOR} transparent opacity={HALO_BASE_OPACITY} depthWrite={false} />
         </mesh>
+        <mesh ref={haloCoreRef}>
+          <circleGeometry args={[HALO_CORE_SIZE, 24]} />
+          <meshBasicMaterial color={HALO_CORE_COLOR} transparent opacity={HALO_CORE_OPACITY} depthWrite={false} />
+        </mesh>
         {/* A few real five-pointed stars drifting slowly above the head, each on its own twinkle
-            phase - the "this is yours, act on it" cue, in a plainly magical/childlike language
-            instead of the previous scanning-ring/radar-ping/spinning-gem mechanism. */}
+            phase, each its own color from a small fairy-dust palette (STAR_COLORS above) rather than
+            a single monotone gold - the "this is yours, act on it" cue, in a plainly magical/
+            childlike language instead of the previous scanning-ring/radar-ping/spinning-gem mechanism. */}
         {Array.from({ length: STAR_COUNT }, (_, i) => (
           <mesh
             key={i}
@@ -706,7 +736,7 @@ export function PieceMesh({
             }}
             geometry={starGeometry}
           >
-            <meshBasicMaterial color={STAR_COLOR} transparent opacity={0} depthWrite={false} side={THREE.DoubleSide} />
+            <meshBasicMaterial color={STAR_COLORS[i % STAR_COLORS.length]} transparent opacity={0} depthWrite={false} side={THREE.DoubleSide} />
           </mesh>
         ))}
       </group>
