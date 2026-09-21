@@ -468,7 +468,18 @@ export function GameBoardScreen({
     playCaptureSound()
     setParkillerVictim(victim)
     const timer = setTimeout(() => setParkillerVictim(null), holdMsFor(ALERT_HOLD_MS, currentPlayer.color))
-    return () => clearTimeout(timer)
+    // Reported directly, with a screenshot: the card stayed on screen indefinitely ("없어지지 않고
+    // 계속 유지된다" - doesn't go away, stays there permanently). Root cause: this effect only
+    // depends on animationsSettled, so if it flips back to false again (a new roll/move starting)
+    // before this timer's own holdMs elapses, React runs this cleanup - clearTimeout(timer) alone -
+    // and the effect body then bails out immediately on its own next invocation (animationsSettled
+    // is false), never arming a replacement. Nothing was left to ever clear parkillerVictim again,
+    // for the rest of the game. Clearing it right here too - not just the timer - means a fresh
+    // animation starting always supersedes a still-showing card instead of orphaning it.
+    return () => {
+      clearTimeout(timer)
+      setParkillerVictim(null)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [animationsSettled])
 
