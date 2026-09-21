@@ -337,6 +337,18 @@ interface PieceMeshProps {
 // (SELECTABLE_EMISSIVE, boosted the same round the piece stopped growing when selectable - see its
 // own doc comment) and the stars above the head, both already-established parts of this same cue,
 // carry the "you can act on this one" signal on their own now.
+// Asked directly right after, for a replacement ("복잡하지않는새로운효과를 넣어달라, 아이들의 동심에
+// 맞게 재미나게" - add a new, uncomplicated effect, fun and fitting a child's sense of wonder): the
+// piece itself now hops gently in place (BOB_*, in the idle-position branch below) while selectable
+// - one moving part, no new geometry or color, and a real 3D object bouncing can't blend into the
+// board underneath the way a flat decal could, sidestepping the exact problem the ring above had.
+// Reads as "this piece is excited, pick me" rather than a UI affordance, which is the "동심" ask.
+// 0.12 read as a faint flutter once actually checked at real board scale - close to BOUNCE_HEIGHT
+// (the real, between-squares hop's own arc) instead, so this reads as an unmistakable little jump,
+// not a shiver.
+const BOB_AMPLITUDE = PAWN_TOTAL_HEIGHT * 0.26
+const BOB_SPEED = 5.6 // radians/sec - abs(sin()) below turns this into ~1.8 little hops/sec
+
 const STAR_COUNT = 3
 // PAWN_TOTAL_HEIGHT (below, near the profile constants) * 1.3 - comfortably clears the head with
 // real margin, scaling correctly with piece size instead of a fixed guess.
@@ -499,7 +511,11 @@ export function PieceMesh({
     }
 
     if (hops.length === 0 || !hopFrom || hopIndexRef.current >= hops.length) {
-      mesh.position.set(restPosition[0], restPosition[1], restPosition[2])
+      // See BOB_AMPLITUDE's own doc comment above - a little excited hop-in-place, only while this
+      // piece is actually selectable/highlighted; abs(sin()) touches back down to restPosition
+      // itself at the bottom of every beat rather than settling into a mid-air offset.
+      const bob = showIndicator ? Math.abs(Math.sin(indicatorElapsedRef.current * BOB_SPEED)) * BOB_AMPLITUDE : 0
+      mesh.position.set(restPosition[0], restPosition[1] + bob, restPosition[2])
       if (!notifiedRef.current) {
         notifiedRef.current = true
         onHopsComplete?.()
