@@ -55,7 +55,11 @@ function shade(hex: string, percent: number): string {
 // toast has actually appeared on screen post-animation-settle - moveApplied unconditionally nulls
 // the raw value on every subsequent move regardless of what that move itself does, so a later,
 // unrelated move's own animation settling again can never make a stale grant "reappear" here.
-const ALERT_HOLD_MS = 2000
+// Reported directly ("알림은 약 3초동안은 유지하게해줘" - keep the notification up for about 3
+// seconds): bumped from 2000 - still squarely inside the client's own previously-stated "2 o 3
+// segundos" range for a bot's own pacing (see HUMAN_REVEAL_HOLD_MS's own doc comment just below),
+// just at the top of it instead of the bottom.
+const ALERT_HOLD_MS = 3000
 
 function useHeldAlert<T>(value: T | null, holdMs: number = ALERT_HOLD_MS): T | null {
   const [held, setHeld] = useState<T | null>(value)
@@ -106,8 +110,9 @@ function useHeldAlert<T>(value: T | null, holdMs: number = ALERT_HOLD_MS): T | n
 // useTurnManager.ts's own turnStarted handler - it fires, and clears lastRoll, on every turn
 // transition, not just a handoff to a different player). A bit more generous than ALERT_HOLD_MS -
 // two or three numbers to read and cross-reference against which pieces just moved takes longer to
-// register than a single toast message.
-const DICE_DISPLAY_HOLD_MS = 2800
+// register than a single toast message. Bumped by the same amount ALERT_HOLD_MS just was, so that
+// gap between the two stays what it was rather than shrinking to a fraction of itself.
+const DICE_DISPLAY_HOLD_MS = 3800
 
 // Reported directly ("hay que dejar 20 segundos de espacio de tiempo entre cada movimiento de cada
 // peón... para poder contar donde caen los dados y las recompensas. Al bot déjale 2 o 3 segundos
