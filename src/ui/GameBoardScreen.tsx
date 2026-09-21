@@ -10,7 +10,7 @@ import type { MoveOption } from '../core/rules/moveOption'
 import { useTurnManager } from '../hooks/useTurnManager'
 import { BoardScene } from '../scene/BoardScene'
 import { getHopSoundLabel, getSelectedHopSoundIndex, nextHopSound, playHopSound } from '../scene/hopSound'
-import { playCaptureSound, playFinishSound, playGameWonSound } from './celebrationSound'
+import { playCaptureFanfare, playCaptureSound, playFinishSound, playGameWonSound } from './celebrationSound'
 import { ColorDrawModal, type ColorDrawEntry } from './ColorDrawModal'
 import { Confetti } from './Confetti'
 import { EliminationToast } from './EliminationToast'
@@ -434,7 +434,7 @@ export function GameBoardScreen({
   useEffect(() => {
     const grant = visiblePendingReward ?? visibleForfeitedReward
     if (!grant) return
-    if (grant.reason === 'capture') playCaptureSound()
+    if (grant.reason === 'capture') playCaptureFanfare()
     else playFinishSound()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visiblePendingReward, visibleForfeitedReward])
@@ -465,7 +465,7 @@ export function GameBoardScreen({
     if (!animationsSettled || !pendingParkillerVictimRef.current) return
     const victim = pendingParkillerVictimRef.current
     pendingParkillerVictimRef.current = null
-    playCaptureSound()
+    playCaptureFanfare()
     setParkillerVictim(victim)
     const timer = setTimeout(() => setParkillerVictim(null), holdMsFor(ALERT_HOLD_MS, currentPlayer.color))
     // Reported directly, with a screenshot: the card stayed on screen indefinitely ("없어지지 않고

@@ -12,7 +12,17 @@ import { getColor } from '../core/colorPalette'
 // penalty palette (smoky grey/red) instead of the reward toast's gold - this is a piece coming HOME
 // off a bad roll, not a prize, and should read that way at a glance.
 const PENALTY_COLORS = ['#c94a4a', '#8f8f8f', '#5c5c5c', '#e0e0e0']
+// Requested directly ("...재미난 음악효과와 장식효과를 주어야한다" - a capture should get fun
+// decoration, not just a notification): 'parkiller' (a Parki eating a pawn outright, PK5) used to
+// share the same smoky grey/red palette as 'doubles' - but unlike that case, this genuinely is a
+// capture, not a penalty (see this file's own comment on 'doubles' below), so it gets RewardBurst's
+// own vivid capture palette instead - one consistent "you just got eaten" color language across
+// every capture path in the game, not a third, unrelated scheme invented just for this card.
+const PARKI_COLORS = ['#ff6a4a', '#ffae42', '#ff3b3b', '#ffd76a']
 const SPARK_COUNT = 16
+// See RewardBurst.tsx's own comment on this same shape - PieceMesh.tsx's five-pointed star,
+// already this game's established "something magical is happening" language for children.
+const STAR_CLIP_PATH = 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)'
 
 interface Spark {
   angle: number
@@ -22,7 +32,7 @@ interface Spark {
   color: string
 }
 
-function useSparks(seed: number): Spark[] {
+function useSparks(seed: number, colors: string[]): Spark[] {
   return useMemo(
     () =>
       Array.from({ length: SPARK_COUNT }, (_, i) => ({
@@ -30,7 +40,7 @@ function useSparks(seed: number): Spark[] {
         distance: 60 + Math.random() * 40,
         delay: Math.random() * 0.05,
         size: 4 + Math.random() * 4,
-        color: PENALTY_COLORS[Math.floor(Math.random() * PENALTY_COLORS.length)],
+        color: colors[Math.floor(Math.random() * colors.length)],
       })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [seed],
@@ -56,7 +66,8 @@ export function EliminationToast({ eliminatedPiece, reason = 'doubles' }: { elim
     if (eliminatedPiece) keyRef.current++
   }, [eliminatedPiece])
 
-  const sparks = useSparks(keyRef.current)
+  const isCapture = reason === 'parkiller'
+  const sparks = useSparks(keyRef.current, isCapture ? PARKI_COLORS : PENALTY_COLORS)
 
   if (!eliminatedPiece) return null
   const color = getColor(eliminatedPiece.color)
@@ -64,7 +75,7 @@ export function EliminationToast({ eliminatedPiece, reason = 'doubles' }: { elim
   return (
     <div key={keyRef.current} style={wrapperStyle}>
       <div style={burstWrapperStyle}>
-        <div style={ringStyle} />
+        <div style={{ ...ringStyle, borderColor: isCapture ? '#ff6a4a' : '#c94a4a' }} />
         {sparks.map((s, i) => (
           <span
             key={i}
@@ -73,11 +84,13 @@ export function EliminationToast({ eliminatedPiece, reason = 'doubles' }: { elim
                 position: 'absolute',
                 top: '50%',
                 left: '50%',
-                width: s.size,
-                height: s.size,
-                borderRadius: '50%',
+                width: isCapture ? s.size * 1.6 : s.size,
+                height: isCapture ? s.size * 1.6 : s.size,
+                borderRadius: isCapture ? 0 : '50%',
+                clipPath: isCapture ? STAR_CLIP_PATH : undefined,
                 background: s.color,
-                boxShadow: `0 0 6px ${s.color}`,
+                boxShadow: isCapture ? 'none' : `0 0 6px ${s.color}`,
+                filter: isCapture ? `drop-shadow(0 0 4px ${s.color})` : undefined,
                 '--angle': `${s.angle}deg`,
                 '--distance': `${s.distance}px`,
                 animation: `elimination-spark 0.6s ease-out ${s.delay}s both`,

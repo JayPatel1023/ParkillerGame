@@ -12,6 +12,15 @@ const CAPTURE_COLORS = ['#ff6a4a', '#ffae42', '#ff3b3b', '#ffd76a']
 const FINISH_COLORS = ['#ffe08a', '#ffd24a', '#fff4c2', '#ffb347']
 const SPARK_COUNT = 18
 
+// Requested directly ("...재미난 음악효과와 장식효과를 주어야한다" - a capture should get fun
+// decoration too, not just a notification): capture's own sparks used to be plain circles, same as
+// finish's - reused PieceMesh.tsx's own five-pointed star shape (already established there as this
+// game's "something magical is happening" language for children, not a scanning/UI-affordance
+// shape) via a CSS clip-path instead, for capture's sparks specifically. Finish keeps its plain
+// circles - it already gets its own separate on-board firework treatment (FinishCelebrationEffect),
+// and the ask here was specifically about captures.
+const STAR_CLIP_PATH = 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)'
+
 interface Spark {
   angle: number
   distance: number
@@ -52,11 +61,13 @@ function Burst({ reason, seed }: { reason: 'capture' | 'finish'; seed: number })
               position: 'absolute',
               top: '50%',
               left: '50%',
-              width: s.size,
-              height: s.size,
-              borderRadius: '50%',
+              width: reason === 'capture' ? s.size * 1.6 : s.size,
+              height: reason === 'capture' ? s.size * 1.6 : s.size,
+              borderRadius: reason === 'capture' ? 0 : '50%',
+              clipPath: reason === 'capture' ? STAR_CLIP_PATH : undefined,
               background: s.color,
-              boxShadow: `0 0 6px ${s.color}`,
+              boxShadow: reason === 'capture' ? 'none' : `0 0 6px ${s.color}`,
+              filter: reason === 'capture' ? `drop-shadow(0 0 4px ${s.color})` : undefined,
               '--angle': `${s.angle}deg`,
               '--distance': `${s.distance}px`,
               animation: `reward-spark 0.6s ease-out ${s.delay}s both`,
