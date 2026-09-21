@@ -349,16 +349,29 @@ interface PieceMeshProps {
 const BOB_AMPLITUDE = PAWN_TOTAL_HEIGHT * 0.26
 const BOB_SPEED = 5.6 // radians/sec - abs(sin()) below turns this into ~1.8 little hops/sec
 
-const STAR_COUNT = 3
+// Reported directly again, live during play, with a wide (not zoomed-in) board screenshot ("이런효과
+//이니까 잘알리지도않는다" - because it's this [quiet] kind of effect, it doesn't even properly let
+// you know): at real gameplay zoom - not the close-up crops used to check it during development -
+// the star cluster read as a barely-there speck. STAR_SIZE roughly doubled, one more star, and a
+// soft halo glow added behind the cluster (HALO_*, below - a billboard floating in open air above
+// the head, not a flat decal lying on the board, so it can't repeat the ring's own blending-into-
+// the-board problem) - together big/bright enough to actually catch the eye at a glance, not just
+// on close inspection.
+const STAR_COUNT = 4
 // PAWN_TOTAL_HEIGHT (below, near the profile constants) * 1.3 - comfortably clears the head with
 // real margin, scaling correctly with piece size instead of a fixed guess.
 const STAR_CENTER_Y = PAWN_TOTAL_HEIGHT * 1.3
-const STAR_ORBIT_RADIUS = PIECE_BASE_RADIUS * 0.5
+const STAR_ORBIT_RADIUS = PIECE_BASE_RADIUS * 0.6
 const STAR_BOB_AMPLITUDE = PIECE_BASE_RADIUS * 0.12
 const STAR_ORBIT_SPEED = 0.6 // radians/sec - slow drift around the shared center
 const STAR_BOB_SPEED = 1.4
-const STAR_SIZE = PIECE_BASE_RADIUS * 0.28
+const STAR_SIZE = PIECE_BASE_RADIUS * 0.52
 const STAR_TWINKLE_SPEED = 2.1
+const HALO_SIZE = PIECE_BASE_RADIUS * 2.4
+const HALO_COLOR = '#fff0b8'
+const HALO_BASE_OPACITY = 0.4
+const HALO_PULSE_AMPLITUDE = 0.18
+const HALO_PULSE_SPEED = 1.7
 const STAR_COLOR = '#ffd873'
 
 const IDLE_SCALE = 1
@@ -404,6 +417,7 @@ export function PieceMesh({
   const introRef = useRef({ done: false, elapsed: 0 })
   const indicatorGroupRef = useRef<Group>(null)
   const starRefs = useRef<(Mesh | null)[]>([])
+  const haloRef = useRef<Mesh>(null)
   const indicatorElapsedRef = useRef(0)
   const bodyMaterialRef = useRef<THREE.MeshPhysicalMaterial>(null)
   const prevSelectableRef = useRef(false)
@@ -455,6 +469,18 @@ export function PieceMesh({
         indicatorGroupRef.current.visible = true
         indicatorElapsedRef.current += delta
         const t = indicatorElapsedRef.current
+
+        // Soft halo behind the star cluster - floating in open air above the head (not flat on the
+        // board, see HALO_SIZE's own doc comment above), billboarded like the stars. Gives the
+        // cluster a bright warm backdrop of its own so it reads as one unmissable glowing spot even
+        // before the eye resolves the individual stars, the same "reads before the ring itself"
+        // trick this file's old base glow disc used - just up here instead of flush on the ground.
+        if (haloRef.current) {
+          const haloPulse = Math.sin(t * HALO_PULSE_SPEED) * 0.5 + 0.5
+          haloRef.current.position.set(0, STAR_CENTER_Y, 0)
+          haloRef.current.quaternion.copy(camera.quaternion)
+          ;(haloRef.current.material as THREE.MeshBasicMaterial).opacity = HALO_BASE_OPACITY + haloPulse * HALO_PULSE_AMPLITUDE
+        }
 
         // A small handful of stars drifting slowly around a shared center above the head, each
         // gently bobbing and twinkling on its own offset phase - calm and steady rather than
@@ -661,9 +687,14 @@ export function PieceMesh({
       </mesh>
       {/* Movable cue: visible only on the piece(s) with an actual legal move this roll - not on
           every piece belonging to the current player for the whole turn. The piece's own body glow
-          (SELECTABLE_EMISSIVE above) plus these stars carry the whole cue - see this const's own
-          doc comment for why an earlier ground-level ring/glow disc was dropped. */}
+          (SELECTABLE_EMISSIVE above) plus the halo+stars below carry the whole cue - see STAR_COUNT's
+          own doc comment for why an earlier ground-level ring/glow disc was dropped in favor of this. */}
       <group ref={indicatorGroupRef} visible={false}>
+        {/* Soft halo behind the star cluster - see HALO_SIZE's own doc comment above. */}
+        <mesh ref={haloRef}>
+          <circleGeometry args={[HALO_SIZE, 24]} />
+          <meshBasicMaterial color={HALO_COLOR} transparent opacity={HALO_BASE_OPACITY} depthWrite={false} />
+        </mesh>
         {/* A few real five-pointed stars drifting slowly above the head, each on its own twinkle
             phase - the "this is yours, act on it" cue, in a plainly magical/childlike language
             instead of the previous scanning-ring/radar-ping/spinning-gem mechanism. */}
