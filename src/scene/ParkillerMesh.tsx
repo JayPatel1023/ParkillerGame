@@ -383,14 +383,27 @@ export function ParkillerModel({ color, config }: { color: PieceColor; config: P
 }
 
 // The client sent an actual 3D scan of the real physical figurine ("STL file... FIGURA DEL
-// PARKILLER", 112,636 triangles) rather than another reference photo to re-approximate by eye -
-// this renders that scan directly instead of ParkillerModel's hand-tuned lathe-and-primitives
-// approximation above. ParkillerModel/DEFAULT_PARKILLER_CONFIG are left completely untouched
-// (still exported, still what ParkillerEditor.tsx's #parkiller-editor tool shows) since that tool
-// exists specifically to tune the *old* approximation against a photo - not relevant to a real
-// scan, but not this change's job to remove either. SCAN_MODEL_SCALE itself lives up with
-// MODEL_SCALE/PARKILLER_FOOTPRINT_RADIUS above, not here, since that constant needs to exist
-// before this file's own footprint-radius export runs.
+// PARKILLER") rather than another reference photo to re-approximate by eye - this renders that
+// scan directly instead of ParkillerModel's hand-tuned lathe-and-primitives approximation above.
+// ParkillerModel/DEFAULT_PARKILLER_CONFIG are left completely untouched (still exported, still
+// what ParkillerEditor.tsx's #parkiller-editor tool shows) since that tool exists specifically to
+// tune the *old* approximation against a photo - not relevant to a real scan, but not this change's
+// job to remove either. SCAN_MODEL_SCALE itself lives up with MODEL_SCALE/PARKILLER_FOOTPRINT_RADIUS
+// above, not here, since that constant needs to exist before this file's own footprint-radius
+// export runs.
+//
+// Reported directly, via a client-supplied Network-tab screenshot: this file alone took 17.7s to
+// load, the single largest asset on the page by far. Root cause: the raw scan's own export was
+// 112,636 triangles (5.6MB, binary STL) - far more detail than a piece rendered this small on a
+// board ever needs, or than this app's own real geometric detail (a couple dozen profile points
+// lathed into a mesh, see MODEL_RAW_HEIGHT/the primitive approximation above) usually carries at
+// all. Decimated to 6,000 triangles (trimesh's quadric-decimation, preserving the silhouette almost
+// exactly - verified directly with a rendered before/after comparison, plus this scene's own
+// smooth-shaded computeVertexNormals() makes the reduced facet count even less visible than a flat-
+// shaded preview would suggest) - 300KB, a 94.7% reduction, with no visible quality loss at this
+// piece's actual on-screen size. SCAN_MODEL_RAW_HEIGHT/SCAN_MODEL_RAW_FOOTPRINT_RADIUS below are
+// unchanged - checked directly, the decimated mesh's own bounding box shifted by <0.05% on every
+// axis, nowhere near worth touching those already-carefully-tuned constants over.
 const PARKILLER_STL_URL = '/parkiller.stl'
 
 export function ParkillerScanModel({ color }: { color: PieceColor }) {

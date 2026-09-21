@@ -18,6 +18,12 @@
 // never actually limited to the intro/lobby screens - App.tsx's own screen-driven effect was what
 // silenced it the instant a game started. That's the piece that changed (see App.tsx), not
 // anything here; the same 3 tracks/picker now carry straight through into gameplay.
+// Reported directly, via a client-supplied Network-tab screenshot: music-3.mp3 alone was 7.2MB,
+// noticeably heavier than the other two tracks (3.3MB/4.3MB) despite a near-identical 3-minute
+// length - it turned out to be encoded at 320kbps (MP3's own maximum) while its siblings sit around
+// 185-190kbps, an inconsistency rather than a deliberate quality choice. Re-encoded to 160kbps (well
+// above what background game music needs to sound clean, still a bit more conservative than its
+// siblings' own bitrate) - 3.6MB, exactly half, with no other change.
 const TRACKS: { url: string; label: string }[] = [
   { url: '/music/intro.mp3', label: 'Melodía 1' },
   { url: '/music/music-2.mp3', label: 'Melodía 2' },
