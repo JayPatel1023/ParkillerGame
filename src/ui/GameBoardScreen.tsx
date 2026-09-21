@@ -416,7 +416,17 @@ export function GameBoardScreen({
   // is. Without this gate, a piece would glow as selectable (and be clickable) on a client whose
   // turn it isn't - the Master would reject the resulting move intent, but the clicking player's
   // own board never should have offered it in the first place.
-  const visiblePendingMoves = isMyTurn && animationsSettled && !paused ? pendingMoves : []
+  //
+  // Reported directly, with a screenshot: pieces were already glowing/bouncing as selectable while
+  // the dice (specifically the black Parkiller die) were still visibly spinning - "오락의 모든과정은
+  // 하나씩 차례대로 진행되여야한다" (every step of the game should happen one at a time, in order).
+  // Root cause: TurnManager's own moveChoicesReady event fires synchronously as part of resolving
+  // the roll, well before the dice-spin's own cosmetic reveal animation (DICE_SPIN_MS,
+  // useTurnManager.ts) has actually finished - useTurnManager.ts's own `rolling` flag exists
+  // specifically to track that window, and awaitingPieceChoice (this file, driving the "Elija una
+  // ficha" text prompt) already correctly waits on it - this value, driving every piece's own
+  // `selectable` prop instead, was the one place that check got missed.
+  const visiblePendingMoves = isMyTurn && !rolling && animationsSettled && !paused ? pendingMoves : []
   // See ALERT_HOLD_MS's own doc comment above - held so a fast-following move can't clear these
   // again before there's been real time to read them.
   const visiblePendingReward = useHeldAlert(animationsSettled ? pendingReward : null, holdMsFor(ALERT_HOLD_MS, currentPlayer.color))
