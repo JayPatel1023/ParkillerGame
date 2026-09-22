@@ -20,15 +20,38 @@ import { STLLoader } from 'three-stdlib'
 const RETRY_BASE_DELAY_MS = 800
 const MAX_RETRY_DELAY_MS = 15_000
 
+// Reported again ("A veces al cargar sigue apareciendo la pantalla sin tablero" - sometimes on
+// load the screen without a board still shows up), after useRobustTexture.ts's own watchdog fix
+// for exactly this had already shipped - this file was never given the same fix. A request that
+// hangs (never fires either load or error) defeats every retry-on-error mechanism above with
+// nothing to react to, same root cause and same fix as that sibling hook's own LOAD_TIMEOUT_MS -
+// see its doc comment for the full reasoning (a stalled connection, not a clean failure, evidenced
+// there directly via a stuck "(pending)" DevTools request).
+const LOAD_TIMEOUT_MS = 10_000
+
 const geometryCache = new Map<string, BufferGeometry>()
 const loader = new STLLoader()
 const inFlight = new Map<string, Set<(geometry: BufferGeometry) => void>>()
 
 function loadWithRetry(url: string, attempt: number) {
   const requestUrl = attempt === 1 ? url : `${url}${url.includes('?') ? '&' : '?'}retry=${attempt}`
+  // See LOAD_TIMEOUT_MS's own doc comment above, and useRobustTexture.ts's matching `settled`
+  // guard - stops both the watchdog and a late-arriving real load/error from double-handling the
+  // same attempt.
+  let settled = false
+  const retryAfterFailure = () => {
+    if (settled) return
+    settled = true
+    const delay = Math.min(RETRY_BASE_DELAY_MS * attempt, MAX_RETRY_DELAY_MS)
+    setTimeout(() => loadWithRetry(url, attempt + 1), delay)
+  }
+  const watchdog = setTimeout(retryAfterFailure, LOAD_TIMEOUT_MS)
   loader.load(
     requestUrl,
     (geometry) => {
+      if (settled) return
+      settled = true
+      clearTimeout(watchdog)
       // The client's own STL scan (etc/'s "FIGURA DEL PARKILLER") was exported Z-up (tallest
       // dimension, hood-tip to base, is its Z axis - 33mm vs 18x18) rather than three.js's own
       // Y-up convention - rendered as-is, the whole figure lay on its side. Baked in once here
@@ -52,11 +75,8 @@ function loadWithRetry(url: string, attempt: number) {
     },
     undefined,
     () => {
-      // See MAX_RETRY_DELAY_MS's own doc comment above - never actually gives up; the fallback
-      // (no Parkiller mesh rendered at all - see ParkillerMesh's own null-geometry handling) stays
-      // showing only until whichever attempt finally lands.
-      const delay = Math.min(RETRY_BASE_DELAY_MS * attempt, MAX_RETRY_DELAY_MS)
-      setTimeout(() => loadWithRetry(url, attempt + 1), delay)
+      clearTimeout(watchdog)
+      retryAfterFailure()
     },
   )
 }
