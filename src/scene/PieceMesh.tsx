@@ -122,7 +122,12 @@ export const PIECE_PROFILE_RAW: [number, number][] = [
 // to ~0.90 - a comfortable ~78% ratio (matching the eleventh round's own "clearly separated, not
 // touching" checkpoint, ~66% at the time) with real stacking-offset room (~0.17) restored on every
 // board, not just the tightest one.
-export const PIECE_BASE_RADIUS = 0.4
+//
+// Bumped a sixteenth time, 0.4 -> 0.44, alongside BOARD_SIZE's own matching 50 -> 55
+// (boardGeometry.ts) - see that constant's own comment for the exact reasoning (same ~1.1x factor
+// on both, so the fifteenth round's own fit/headroom numbers above scale uniformly rather than
+// drifting again).
+export const PIECE_BASE_RADIUS = 0.44
 export const PROFILE_SCALE = PIECE_BASE_RADIUS / Math.max(...PIECE_PROFILE_RAW.map(([r]) => r))
 // Stretches the profile taller without widening the base - requested directly, twice now ("peones
 // más alargados" both times), each time with a reference photo of taller pawns. Applied only to

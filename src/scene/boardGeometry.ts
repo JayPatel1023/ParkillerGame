@@ -60,7 +60,17 @@
 // 벗어난다"). Growing this alongside shrinking the piece (rather than only shrinking the piece,
 // which risked reopening ten rounds' worth of "still too small" reports) restores real room for a
 // Parkiller+pawn pair to fit - and stay visibly separated - in one square on every board.
-export const BOARD_SIZE = 50
+// Bumped an eleventh time, 50 -> 55, alongside PIECE_BASE_RADIUS's own matching 0.4 -> 0.44
+// (PieceMesh.tsx) - reported directly ("Los peones deben ser un poco más grandes y visibles" - the
+// pawns should be a bit bigger and more visible). Both scale by the exact same ~1.1x factor, same
+// recipe every earlier round here used (see the second round's own comment) - PARKILLER_FOOTPRINT_
+// RADIUS is a fixed linear function of PIECE_BASE_RADIUS (ParkillerMesh.tsx's own SCAN_MODEL_SCALE
+// chain), so scaling both constants by the same factor scales the whole piece/tile system
+// uniformly, leaving the tenth round's own hard-won Parkiller-vs-tile fit and pawn-vs-Parkiller
+// stacking headroom exactly as tight (or as loose) as it already was - neither reopening the
+// overflow that round fixed nor helping the still-open "peón barely visible next to a Parki"
+// report on its own. A bigger jump risked doing the former for no gain on the latter.
+export const BOARD_SIZE = 55
 // Just enough clearance above TrackTile's own surface (which itself sits at this same height - see
 // TrackTile.tsx) to avoid z-fighting between a piece's base and the tile underneath it. Only
 // correct for pieces actually standing on a raised TrackTile, i.e. OnTrack - see FLAT_SURFACE_HEIGHT
