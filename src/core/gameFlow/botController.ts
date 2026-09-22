@@ -439,6 +439,32 @@ export class BotController {
     // specifically exposed the capturing piece to an ordinary pawn, not the Parkiller).
     const unexposedMoves = safeFromParkiller.filter((m) => !this.wouldLeavePieceExposedToPawn(m) || wouldCapture(this.session.board, m, this.session.players, false))
     const riskAwareMoves = unexposedMoves.length > 0 ? unexposedMoves : safeFromParkiller
+    // Reported directly ("No tiene sentido que si tenía una en riesgo a 6 arriesguee el segundo
+    // peon a uno" - it makes no sense to risk a second pawn at distance 1 when one was already at
+    // risk at distance 6): investigated at length (a full reconstruction + real-engine simulation
+    // + adversarial verification pass). unexposedMoves' own fallback right above only ever
+    // distinguishes "still exposed to a pawn, yes/no" - once every remaining candidate is exposed
+    // (this fallback actually triggered), nothing ranks *how* exposed one is against another, so
+    // the plain amount tiebreak far below settles it purely on distance covered, with zero risk
+    // weighting either way.
+    //
+    // The client's own intuition here - "distance 6 is safer than distance 1, so keep it there
+    // instead" - turned out to be backwards for this game's actual dice rules, not confirmation of
+    // that framing: every roll independently offers dieA, dieB, AND their sum as legal moves (see
+    // turnManager.ts's own getValidMoves, 'sum' diceSource), so within the 1-6 band a threat can
+    // reach next roll, a *larger* distance has strictly more (dieA, dieB) combinations that hit it -
+    // distance 6 is reachable via a=6, b=6, OR any of five (a,b) pairs summing to 6 (16/36 total);
+    // distance 1 only via a lone die showing 1, never a sum (11/36 total). Smaller distance is the
+    // objectively safer one to end up exposed at - see pawnThreatDistance's own doc comment for the
+    // full derivation. Only ranks pieces already known to be pawn-exposed (unexposedMoves came back
+    // empty) - never touches the earlier, correct "unexposed beats exposed" preference above, and
+    // deliberately does not apply this same ranking to Parkiller exposure (PK2's own black die is a
+    // single uniform 1-6 roll, so every distance in that band is equally likely - there is no
+    // safer distance to rank toward there).
+    const leastRiskyPawnExposure =
+      unexposedMoves.length === 0
+        ? riskAwareMoves.filter((m) => this.pawnThreatDistance(m) === Math.min(...riskAwareMoves.map((other) => this.pawnThreatDistance(other))))
+        : riskAwareMoves
     // Requested directly ("si algún peón del bot está en una casilla protegida no debería
     // arriesgarse a ser eliminado salvo para eliminar a otro peón. Es mejor que se mueva otro
     // peón y nunca suicidarse avanzando sin contar contra un parki" - if a bot's pawn is on a
@@ -449,12 +475,12 @@ export class BotController {
     // to a destination neither check flags as risky. Among otherwise equally-safe options, prefer
     // leaving that piece exactly where it is and moving a different one instead - unless this
     // move itself captures, worth trading the shelter for.
-    const keepsProtectedPiecesSheltered = riskAwareMoves.filter((m) => {
+    const keepsProtectedPiecesSheltered = leastRiskyPawnExposure.filter((m) => {
       const leavesProtectedSquare = m.piece.state === 'OnTrack' && this.session.board.safeTrackIndices.has(m.piece.trackPosition)
       if (!leavesProtectedSquare) return true
       return wouldCapture(this.session.board, m, this.session.players, false)
     })
-    const notAbandoningShelter = keepsProtectedPiecesSheltered.length > 0 ? keepsProtectedPiecesSheltered : riskAwareMoves
+    const notAbandoningShelter = keepsProtectedPiecesSheltered.length > 0 ? keepsProtectedPiecesSheltered : leastRiskyPawnExposure
     // Requested directly ("EL BOT DEBE DE INTENTAR COLOCAR LOS PEONES EN CASILLAS PROTEGIDAS Y NO
     // ABANDONARLAS SI NO ES NECESARIO PARA NO ARRIESGAR Y ELIMINAR SI LES ES POSIBLE" - the bot
     // should try to place pawns on protected squares, and not abandon them unless necessary, to
@@ -659,6 +685,30 @@ export class BotController {
       }
     }
     return false
+  }
+
+  // See leastRiskyPawnExposure's own doc comment (onMoveChoicesReady) for the reported complaint
+  // and the full probability derivation this ranking is based on - only ever used to rank moves
+  // wouldLeavePieceExposedToPawn already flagged true for, never to decide exposed-vs-not on its
+  // own (that stays wouldLeavePieceExposedToPawn's own job, unchanged). Returns the *closest*
+  // threatening distance (the binding, highest-probability threat) among every opposing pawn that
+  // can reach this destination next roll, or Infinity if genuinely none can - smaller is safer
+  // within this game's own dieA/dieB/sum rules, the opposite of the intuitive "farther is safer"
+  // most players (and this bug's own original report) assume.
+  private pawnThreatDistance(move: MoveOption): number {
+    if (move.resultingTrackPosition === -1) return Infinity
+    if (this.session.board.safeTrackIndices.has(move.resultingTrackPosition)) return Infinity
+    const trackLength = this.session.board.trackLength
+    let closest = Infinity
+    for (const player of this.session.players) {
+      if (player.color === move.piece.color) continue
+      for (const piece of player.pieces) {
+        if (piece.state !== 'OnTrack') continue
+        const distance = (((move.resultingTrackPosition - piece.trackPosition) % trackLength) + trackLength) % trackLength
+        if (distance >= 1 && distance <= 6) closest = Math.min(closest, distance)
+      }
+    }
+    return closest
   }
 
   private markBusy(durationMs: number): void {

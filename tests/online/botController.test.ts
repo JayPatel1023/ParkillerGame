@@ -1,15 +1,40 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BoardData } from '../../src/core/board/boardData'
 import type { DiceLike } from '../../src/core/dice'
+import type { DiceRoll } from '../../src/core/gameFlow/turnManager'
+import type { BotDrivableSession } from '../../src/core/gameFlow/botController'
+import type { Listenable } from '../../src/core/gameFlow/turnManagerLike'
 import { createPlayerState } from '../../src/core/gameFlow/playerState'
+import type { PlayerState } from '../../src/core/gameFlow/playerState'
 import { TurnManager } from '../../src/core/gameFlow/turnManager'
 import type { PieceColor } from '../../src/core/pieceColor'
 import type { Piece } from '../../src/core/pieces/piece'
+import type { MoveOption, MoveResult } from '../../src/core/rules/moveOption'
 import { defaultRuleSettings } from '../../src/core/rules/ruleSettings'
 import { BotController } from '../../src/core/gameFlow/botController'
 import { RecordingDice } from '../../src/online/dice'
 import { HostTurnManagerBridge } from '../../src/online/HostTurnManagerBridge'
 import { FakeRoomNetwork } from './fakeRoomTransport'
+
+// A minimal, test-only Listenable a test can fire by hand (a real TurnManager's own EventEmitter
+// never exposes .emit() outside gameFlow/ - see Listenable's own doc comment) - lets a test drive
+// BotController.onMoveChoicesReady with an exact, hand-picked MoveOption[] directly, bypassing
+// getValidMoves/offerMoves entirely, for scenarios where hand-computing every side-effect a real
+// roll would also legally offer (barriers, overshoot, reward chains, ...) would be more noise than
+// signal - what actually matters is only the ranking BotController itself applies to the two
+// options handed to it.
+class FakeChannel<T> implements Listenable<T> {
+  private listeners: Array<(value: T) => void> = []
+  on(listener: (value: T) => void): () => void {
+    this.listeners.push(listener)
+    return () => {
+      this.listeners = this.listeners.filter((l) => l !== listener)
+    }
+  }
+  fire(value: T): void {
+    this.listeners.forEach((listener) => listener(value))
+  }
+}
 
 // Same technique as turnManager.test.ts's own ScriptedDice - a fixed, hand-picked sequence
 // (RecordingDice needs a real DiceLike to wrap, not a bare array).
@@ -984,6 +1009,87 @@ describe('BotController', () => {
     // this test only cares that the hold above is a genuine, bounded delay, not a permanent one.
     vi.advanceTimersByTime(1100)
     expect(moveCount).toBeGreaterThan(1)
+
+    bots.dispose()
+  })
+
+  // Reported directly ("No tiene sentido que si tenía una en riesgo a 6 arriesguee el segundo peon
+  // a uno" - it makes no sense to risk a second pawn at distance 1 when one was already at risk at
+  // distance 6): see pawnThreatDistance's own doc comment (botController.ts) for the full
+  // probability derivation - within this game's own dieA/dieB/sum rules, distance 6 (16/36 ways to
+  // hit) is objectively *more* dangerous than distance 1 (11/36 ways), the opposite of the
+  // intuitive reading. Builds the two competing MoveOptions by hand and fires them straight at
+  // BotController's own moveChoicesReady listener (see FakeChannel above) - hand-computing every
+  // OTHER move a real roll on a real board would also legally offer here (barrier checks, reward
+  // chains, overshoot) would just be noise around the one thing this test actually verifies: given
+  // two already-pawn-exposed candidates, does the bot rank them by real risk instead of by amount.
+  it('prefers the objectively-safer distance among two already-exposed pawns, not the bigger amount', () => {
+    const board = buildBigTestBoard() // trackLength 40, safeTrackIndices {0, 20}
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 19
+    // Threatens trackPosition 16 (Red piece0's own move destination, below) at distance 6 - the
+    // riskier exposure (16/36 ways an opposing roll can reach it, via a lone die of 6 or any of
+    // five (dieA,dieB) pairs summing to 6).
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 10
+    // Threatens trackPosition 25 (Red piece1's own move destination, below) at distance 1 - the
+    // objectively safer exposure (only 11/36 ways: a lone die showing 1, never reachable via a sum).
+    blue.pieces[1].state = 'OnTrack'
+    blue.pieces[1].trackPosition = 24
+
+    const moveBiggerButRiskier: MoveOption = {
+      piece: red.pieces[0],
+      kind: 'TrackMove',
+      resultingTrackPosition: 16, // 5 + 11 - distance 6 from the Blue pawn at 10
+      resultingCorridorPosition: -1,
+      amount: 11,
+      diceSource: 'sum',
+    }
+    const moveSmallerButSafer: MoveOption = {
+      piece: red.pieces[1],
+      kind: 'TrackMove',
+      resultingTrackPosition: 25, // 19 + 6 - distance 1 from the Blue pawn at 24
+      resultingCorridorPosition: -1,
+      amount: 6,
+      diceSource: 'dieA',
+    }
+
+    const turnStarted = new FakeChannel<PlayerState>()
+    const diceRolled = new FakeChannel<DiceRoll>()
+    const moveChoicesReady = new FakeChannel<MoveOption[]>()
+    const moveApplied = new FakeChannel<MoveResult>()
+    let submittedPiece: Piece | null = null
+    let submittedAmount: number | undefined
+    const fakeSession: BotDrivableSession = {
+      currentPlayer: red,
+      players: [red, blue],
+      board,
+      turnStarted,
+      diceRolled,
+      moveChoicesReady,
+      moveApplied,
+      rollForBot() {},
+      submitMoveForBot(piece, amount) {
+        submittedPiece = piece
+        submittedAmount = amount
+        return null
+      },
+    }
+
+    const bots = new BotController(fakeSession, new Set<PieceColor>(['Red']), 10, 2, 2, 0, 0)
+    moveChoicesReady.fire([moveBiggerButRiskier, moveSmallerButSafer])
+    vi.advanceTimersByTime(10_000) // well past busyUntilMs (0, never armed here) + thinkDelayMs(10)
+
+    // The smaller, objectively safer move (distance 1) wins - not the bigger amount (distance 6,
+    // the more dangerous exposure). Confirmed this actually distinguishes the fix from the old
+    // code: reverting leastRiskyPawnExposure back to plain riskAwareMoves in botController.ts makes
+    // this assertion fail, picking the bigger-amount/riskier move instead.
+    expect(submittedPiece).toBe(red.pieces[1])
+    expect(submittedAmount).toBe(6)
 
     bots.dispose()
   })
