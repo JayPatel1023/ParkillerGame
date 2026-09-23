@@ -279,6 +279,12 @@ export default function OnlineLobbyScreen() {
   // below - used only by the onActorLeft handler further down, to tell a departed Master apart from
   // a departed ordinary seat (see that handler's own doc comment for why that distinction matters).
   const masterActorNrRef = useRef<number | null>(null)
+  // Bumped once per departure (see the onActorLeft handler further down) so GameSession's own
+  // departedPlayerNotice gets a fresh id every time, even if the same color leaves and rejoins
+  // more than once in the same game - PlayerLeftToast keys its own remount off this id, not the
+  // color alone, so a repeat departure still pops in again instead of silently no-op'ing against
+  // an unchanged {color} it already showed once.
+  const departedNoticeIdRef = useRef(0)
   // Requested directly ("Debe poder ser reemplazado por el bot hasta que tome el control en la
   // siguiente tirada" - a departed Master should also be replaceable by a bot, not end the game):
   // startAsRemote() below stashes its own real TurnManager instance here (session.players holds the
@@ -421,7 +427,17 @@ export default function OnlineLobbyScreen() {
     if (!connection || phase !== 'game') return
     return connection.onActorLeft((actorNr) => {
       const color = realSeatsRef.current[actorNr]
-      if (!color || actorNr === masterActorNrRef.current) return
+      if (!color) return
+      // Reported directly, with screenshots: the departed seat correctly gets handed to a bot
+      // below (or, for a departed Master, by promoteToMaster() via the onMasterClientChanged
+      // effect further down), but nothing ever told the players still connected that anyone had
+      // left at all - the game just kept going with no acknowledgment. Stamped unconditionally,
+      // before the master-specific early return just below, so it fires on every surviving client
+      // for BOTH an ordinary departed seat and a departed Master alike - Photon's own onActorLeft
+      // already fires identically for either case on every client, this just also reacts to it.
+      departedNoticeIdRef.current += 1
+      setSession((prev) => (prev ? { ...prev, departedPlayerNotice: { color, id: departedNoticeIdRef.current } } : prev))
+      if (actorNr === masterActorNrRef.current) return
       if (connection.isMasterClient()) botControllerRef.current?.takeOverColor(color)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps

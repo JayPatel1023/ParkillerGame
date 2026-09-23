@@ -17,6 +17,7 @@ import { Confetti } from './Confetti'
 import { EliminationToast } from './EliminationToast'
 import { HelpModal } from './HelpModal'
 import { getSelectedTrackIndex, getTrackLabel, isMusicMuted, nextMusicTrack, toggleMusicMuted } from './introMusic'
+import { PlayerLeftToast } from './PlayerLeftToast'
 import { RewardBurst } from './RewardBurst'
 import { RewardToast } from './RewardToast'
 import { StartingPlayerModal } from './StartingPlayerModal'
@@ -396,6 +397,17 @@ export interface GameSession {
    * the room - Pause is a local-play-only feature, see the Pause button's own doc comment below). */
   pauseBots?: () => void
   resumeBots?: () => void
+  /** Set once per real player who leaves an online room mid-game (OnlineLobbyScreen's own
+   * onActorLeft handler, both for an ordinary departed seat and a departed Master alike - Photon
+   * fires onActorLeft on every surviving client either way). Reported directly, with screenshots
+   * showing one side already back at the main menu while the other side's game just kept going
+   * with no acknowledgment anything happened: the game correctly keeps running (BotController.
+   * takeOverColor hands the departed seat to a bot instead of ending the match for everyone), but
+   * that handoff had no on-screen notice at all - silently correct, but reads as "is this stuck?"
+   * to whoever's still there. A fresh {color, id} each time (not just color) so the same color
+   * leaving and rejoining twice still remounts PlayerLeftToast's own pop-in the second time.
+   * Undefined for local play, which has no room to leave. */
+  departedPlayerNotice?: { color: PieceColor; id: number }
 }
 
 export function GameBoardScreen({
@@ -994,6 +1006,7 @@ export function GameBoardScreen({
       <RewardToast pendingReward={visiblePendingReward} forfeitedReward={visibleForfeitedReward} />
       <EliminationToast eliminatedPiece={eliminatedByDoubles} reason="doubles" />
       <EliminationToast eliminatedPiece={parkillerVictim} reason="parkiller" />
+      <PlayerLeftToast notice={session.departedPlayerNotice ?? null} />
       <InteractiveCursorOverlay />
 
       <div style={turnCardStyle}>
