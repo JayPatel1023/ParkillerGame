@@ -243,16 +243,26 @@ export default function OnlineLobbyScreen() {
   // every disconnect.
   const [reconnecting, setReconnecting] = useState(false)
   // Reported directly, via a screen recording of two real clients: the creator clicked "Empezar
-  // partida" alone (fully clickable the instant the room exists - see startGame()'s own comment on
-  // why solo-start is unrestricted) a few seconds before a friend finished typing in the room code,
-  // and that friend's join was rejected outright ("room has already started" - closeRoom() below
-  // means exactly that). Nothing was actually broken - solo-vs-bots play needs exactly this
-  // unrestricted button - but there was also no warning that clicking it alone commits the room
-  // and locks out anyone still on their way in, which is very easy to trigger by accident if a
-  // second real player was in fact expected. Confirming only in that specific case (still alone,
-  // i.e. the exact moment a friend joining a second later would get shut out) adds one extra click
-  // for genuine solo-vs-bots play without touching the gate itself.
-  const [confirmingSoloStart, setConfirmingSoloStart] = useState(false)
+  // partida" alone a few seconds before a friend finished typing in the room code, and that
+  // friend's join was rejected outright ("room has already started" - closeRoom() below means
+  // exactly that). Nothing was actually broken - solo-vs-bots play needs exactly this kind of
+  // start-without-everyone button - but there was also no warning that clicking it commits the
+  // room and locks out anyone still on their way in, which is very easy to trigger by accident if
+  // more real players were in fact expected. This confirmation step is that warning.
+  //
+  // Widened later, requested directly ("si falta uno los jugadores que faltan deben ser
+  // reemplazado por el BOT pero que se pueda empezar la partida" - if one is missing, the missing
+  // player(s) should be replaced by a bot, but so the game CAN be started): this used to only ever
+  // offer bot-fill while the host was still completely alone (seats.length <= 1) - once a second
+  // real person joined, "Empezar partida" simply went disabled with no way to proceed at all until
+  // literally every seat filled, e.g. a 3-player room stuck forever at 2/3 if the third never
+  // shows up. That was a deliberate gate (see the button's own comment below for why starting
+  // early is risky), just one with no escape hatch - the real risk it guards against (a friend
+  // mid-join getting silently bot-swapped) is exactly what this same confirm-and-warn dialog
+  // already handles for the solo case, so reusing it for "some but not all seats filled" solves
+  // both at once: any host can now choose to start with bots covering whichever seats are still
+  // empty, at any fill level, as long as they explicitly confirm it first.
+  const [confirmingBotFill, setConfirmingBotFill] = useState(false)
   const connectionRef = useRef<PhotonConnection | null>(null)
   // Stored so the cleanup below can dispose it - startGame() constructs this imperatively (always,
   // as of the idle/disconnect bot-takeover fix - see that effect's own doc comment for why an
@@ -642,11 +652,11 @@ export default function OnlineLobbyScreen() {
   function startGame() {
     const connection = connectionRef.current
     if (!connection) return
-    // Belt-and-suspenders alongside the disabled button below - once 2+ real people are present,
-    // every real seat must be filled before a game can start (see the lobby's own banner for why);
-    // alone, starting against bots is unrestricted.
-    const actorCount = connection.getActors().length
-    if (actorCount > 1 && actorCount < playerCount) return
+    // Used to bail out here whenever 2+ real people were present but the room wasn't full yet -
+    // that was the *only* gate (the button was hard-disabled in that state, nothing ever called
+    // startGame() to trip this). Starting with some seats still empty is a legitimate, requested
+    // flow now (confirmingBotFill above), reached only after the host explicitly confirms it, so
+    // this function no longer needs its own separate check - the confirmation dialog is the gate.
     const colors = TURN_ORDER_BY_COUNT[playerCount]
     const board = toBoardData(BOARD_DEFINITIONS[playerCount])
     const players = colors.map((color) => createPlayerState(color, board))
@@ -1066,18 +1076,18 @@ export default function OnlineLobbyScreen() {
                 })
               })()}
             </div>
-            {/* Reported directly, every board size (2p-6p) the same way: starting once a SECOND
-                real person had joined but before every seat was filled is exactly what let a bot
-                silently take over a seat a friend was still in the middle of joining - the room-
-                closing fix (see closeRoom()) stops a LATE join from becoming a phantom player, but
-                starting early never needed a late join to go wrong in the first place. The creator
-                playing solo against bots is a different, legitimate case though (reported directly
-                right after shipping the first version of this gate, which blocked that too) - only
-                2+ real people present requires every seat filled before "Empezar partida" is even
-                clickable; alone, starting is unrestricted the same as it always was. Once full, a
+            {/* Starting before every seat is filled always goes through the confirmingBotFill
+                dialog below instead of running straight into startGame() (see that state's own
+                doc comment - both the original solo-only gate and its later widening to any
+                partial fill live there). The button itself is therefore never actually disabled
+                any more - the host can always either start clean (full room) or start-with-bots
+                (anything less), the confirm step is what stands in for a hard block. Once full, a
                 clear banner announces it's ready, matching "다들어왔다는 alert". */}
             {seats.length > 1 && seats.length < playerCount && (
-              <p style={hintStyle}>Esperando a que se unan todos los jugadores ({seats.length}/{playerCount})...</p>
+              <p style={hintStyle}>
+                Esperando a que se unan todos los jugadores ({seats.length}/{playerCount})... o empiece ya y un bot
+                ocupará cada plaza que falte.
+              </p>
             )}
             {seats.length >= playerCount && (
               <div
@@ -1098,9 +1108,8 @@ export default function OnlineLobbyScreen() {
             {connectionRef.current.isMasterClient() ? (
               <button
                 className="chunky-btn"
-                onClick={() => (seats.length <= 1 ? setConfirmingSoloStart(true) : startGame())}
-                disabled={seats.length > 1 && seats.length < playerCount}
-                style={chunkyButtonStyle(seats.length <= 1 || seats.length >= playerCount)}
+                onClick={() => (seats.length < playerCount ? setConfirmingBotFill(true) : startGame())}
+                style={chunkyButtonStyle(true)}
               >
                 Empezar partida
               </button>
@@ -1110,20 +1119,22 @@ export default function OnlineLobbyScreen() {
           </div>
         )}
 
-        {confirmingSoloStart && (
+        {confirmingBotFill && (
           <div style={overlayStyle}>
-            <div style={{ fontSize: 17, fontWeight: 700, color: '#f2ede0', textAlign: 'center' }}>¿Empezar solo/a?</div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: '#f2ede0', textAlign: 'center' }}>¿Empezar con bots?</div>
             <p style={{ ...hintStyle, textAlign: 'center', maxWidth: 260, marginTop: 0 }}>
-              Las plazas vacías se llenarán con bots y nadie más va a poder unirse a esta sala después de esto.
+              {playerCount - seats.length === 1
+                ? 'La plaza vacía se llenará con un bot y nadie más va a poder unirse a esta sala después de esto.'
+                : `Las ${playerCount - seats.length} plazas vacías se llenarán con bots y nadie más va a poder unirse a esta sala después de esto.`}
             </p>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button className="chunky-btn" onClick={() => setConfirmingSoloStart(false)} style={secondaryButtonStyle}>
+              <button className="chunky-btn" onClick={() => setConfirmingBotFill(false)} style={secondaryButtonStyle}>
                 Cancelar
               </button>
               <button
                 className="chunky-btn"
                 onClick={() => {
-                  setConfirmingSoloStart(false)
+                  setConfirmingBotFill(false)
                   startGame()
                 }}
                 style={chunkyButtonStyle(true)}
