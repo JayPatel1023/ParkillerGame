@@ -3,6 +3,7 @@ import type { BoardData } from '../src/core/board/boardData'
 import type { DiceLike } from '../src/core/dice'
 import { createPlayerState } from '../src/core/gameFlow/playerState'
 import { TurnManager, type DiceRoll, type RewardGrant } from '../src/core/gameFlow/turnManager'
+import type { MoveOption } from '../src/core/rules/moveOption'
 import { defaultRuleSettings } from '../src/core/rules/ruleSettings'
 
 // Rolls a fixed, hand-picked sequence instead of a seed - a seed is deterministic but its face
@@ -763,6 +764,64 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     expect(blue.pieces[0].state).toBe('InYard')
     expect(offered).toBeNull()
     expect(forfeited).toEqual([{ amount: 20, reason: 'capture' }])
+  })
+
+  // Reported directly ("anuncios de recompensas... se quedan bloqueadas... deben borrarse
+  // inmediatamente después de usarlas" - reward announcements get stuck on screen, they should
+  // clear immediately after being used): useTurnManager.ts's own moveApplied handler used to null
+  // out only pendingReward, leaving forfeitedReward/eliminatedByDoubles to be cleared *only* by
+  // diceRolled's own delayed setTimeout - fine for the roll that actually set them, but this
+  // exact scenario (a capture's reward forfeited with a die still unspent on the same roll) proves
+  // that's not the only way a forfeit can happen: offerReward's own no-valid-landing path fires
+  // rewardForfeited, then falls through to continueAfterMove/offerMoves for the still-unspent die,
+  // all synchronously inside this one submitMove() call - genuinely reachable any time a fresh
+  // reward has nowhere to land, not just in some rare edge case. This pins down that the *engine*
+  // really does let a second, unrelated move (and its own moveApplied) fire before any further
+  // diceRolled - which is exactly the gap the useTurnManager.ts fix (also nulling forfeitedReward/
+  // eliminatedByDoubles inside moveApplied, not just diceRolled) closes. There's no jsdom/React-
+  // hook-rendering setup in this project (vitest.config.ts only includes tests/**/*.test.ts, no
+  // @testing-library/react or react-test-renderer dependency) to mount useTurnManager.ts itself and
+  // assert on its React state directly, so this exercises the same TurnManager engine class the
+  // rest of this file already tests, at the exact boundary the hook's fix depends on.
+  it('a reward forfeited mid-roll (die still unspent) offers the next move in the very same submitMove call, with no diceRolled in between (PC 5)', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 14
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 17
+    // Same setup as the forfeit test above: dieA=3 captures blue.pieces[0] (14 -> 17) and its own
+    // 20-square reward has nowhere legal to land, so it's forfeited outright - dieB=1 is still
+    // unspent afterwards.
+    const dice = new ScriptedDice([3, 1, 1])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    const events: string[] = []
+    manager.diceRolled.on(() => events.push('diceRolled'))
+    manager.moveApplied.on(() => events.push('moveApplied'))
+    manager.rewardForfeited.on(() => events.push('rewardForfeited'))
+    let pendingMoves: MoveOption[] = []
+    manager.moveChoicesReady.on((moves) => {
+      events.push('moveChoicesReady')
+      pendingMoves = moves
+    })
+
+    manager.requestRoll()
+    events.length = 0 // discard the initial roll's own diceRolled/moveChoicesReady - only the move's own aftermath matters below
+    manager.submitMove(red.pieces[0]) // 14 -> 17: captures, forfeits its own reward, offers dieB=1 next
+
+    expect(events).toEqual(['moveApplied', 'rewardForfeited', 'moveChoicesReady'])
+    expect(pendingMoves.length).toBeGreaterThan(0) // dieB=1's move really was offered, same call
+
+    events.length = 0
+    manager.submitMove(pendingMoves[0].piece, pendingMoves[0].amount) // spends dieB=1, ends the turn
+
+    // The second move's own moveApplied fires with no further diceRolled before it - the exact
+    // gap useTurnManager.ts's moveApplied handler (not just diceRolled's) has to close by nulling
+    // forfeitedReward/eliminatedByDoubles itself, or the first move's stale forfeit toast would
+    // have nothing left to ever clear it until whatever roll comes next.
+    expect(events).toEqual(['moveApplied'])
   })
 
   it('locks a capturing piece to its capturing move, but leaves a different, non-capturing piece completely free (PC3/PK8)', () => {

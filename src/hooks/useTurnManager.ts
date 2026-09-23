@@ -304,6 +304,23 @@ export function useTurnManager(turnManager: TurnManagerLike) {
         // Cleared here and re-set by rewardOffered/rewardForfeited if this move earned another one -
         // both happen synchronously within the same submitMove call, so React batches them together.
         setPendingReward(null)
+        // Reported directly ("anuncios de recompensas... se quedan bloqueadas... deben borrarse
+        // inmediatamente después de usarlas" - reward announcements get stuck on screen, they
+        // should clear immediately after being used): forfeitedReward/eliminatedByDoubles used to
+        // be cleared *only* inside diceRolled's own delayed setTimeout above - fine for the roll
+        // that actually set them, but submitMove() can forfeit a reward (offerReward -> no valid
+        // landing -> rewardForfeited.emit) and then immediately offer the same roll's still-unspent
+        // die again (continueAfterMove -> offerMoves), all synchronously, with no diceRolled in
+        // between. That left a stale forfeitedReward/eliminatedByDoubles sitting there with no
+        // timer ever going to clear it - and, worse, GameBoardScreen's own useHeldAlert re-arms its
+        // full hold countdown on every null->non-null transition, so animationsSettled cycling
+        // false/true across this move's own animation kept re-exposing the same stale value as if
+        // it were brand new, on every subsequent move within the same roll. Cleared here too, same
+        // as pendingReward just above, so a genuinely new forfeit/elimination on *this* move still
+        // wins (rewardForfeited/pieceEliminatedByDoubles fire later in the same synchronous batch
+        // and React batches the re-set on top of this clear).
+        setForfeitedReward(null)
+        setEliminatedByDoubles(null)
         pushLogEntry(result.movedPiece.color, describeMove(result))
       }),
       // Fires from inside TurnManager.submitMove() itself, not built here around a UI-triggered
