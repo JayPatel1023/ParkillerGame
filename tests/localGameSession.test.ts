@@ -33,6 +33,23 @@ describe('beginLocalGame - classic hotseat (humanColor omitted)', () => {
     expect(session.turnManager.localPlayerColor).toBeUndefined()
     expect(session.dispose).toBeUndefined()
   })
+
+  // Found via a real online-room recording: GameBoardScreen.tsx's own isLocalGame used to read
+  // session.deferredStart, which a575898 ("online game no longer starts before showing who goes
+  // first") made OnlineLobbyScreen.tsx set to true as well - leaving isLocalGame permanently true
+  // for online games too (wrong idle-timeout pacing/copy, a Pause button that shouldn't exist
+  // online, and autoPlayIdleTurn silently rolling/moving on an online player's own behalf). Fixed
+  // by switching isLocalGame to `session.colorDraw === undefined` instead - colorDraw is set
+  // unconditionally by both of OnlineLobbyScreen.tsx's own setSession call sites and never by local
+  // play. This only guards the local half of that discriminator (the only half testable without
+  // component-rendering infrastructure, which this codebase doesn't have - OnlineLobbyScreen.tsx's
+  // own two setSession calls, which always include colorDraw, aren't covered by any test): a local
+  // session must never carry a colorDraw property, or GameBoardScreen would wrongly treat it as
+  // online again.
+  it('never sets colorDraw - GameBoardScreen relies on that to tell local play apart from online', () => {
+    const session = beginLocalGame(BOARD_DEFINITIONS[2], TURN_ORDER_BY_COUNT[2])
+    expect((session as { colorDraw?: unknown }).colorDraw).toBeUndefined()
+  })
 })
 
 // Reported directly ("EL JUGADOR AL INICIO DEBE PODER ELEGIR EL COLOR Y JUGAR CONTRA LOS OTROS
@@ -47,6 +64,10 @@ describe('beginLocalGame - vs bots (humanColor provided)', () => {
   it('locks localPlayerColor to the human\'s own chosen color', () => {
     const session = beginLocalGame(BOARD_DEFINITIONS[2], TURN_ORDER_BY_COUNT[2], 'Red')
     expect(session.turnManager.localPlayerColor).toBe('Red')
+    // See the classic-hotseat describe block's own matching "never sets colorDraw" test above -
+    // this is the vs-bots return site's own copy of that same guard (beginLocalGame has two
+    // distinct return statements; either one regressing would break isLocalGame the same way).
+    expect((session as { colorDraw?: unknown }).colorDraw).toBeUndefined()
     // Undisposed leaves its own BotController's fake-timer-based setTimeouts pending in the
     // shared global timer queue - confirmed directly, this alone was enough to disrupt a *later*
     // test's own vi.advanceTimersByTime() calls in the same file. Every session this file creates

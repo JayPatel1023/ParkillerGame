@@ -116,9 +116,18 @@ export interface LocalGameSession {
   startingPlayerResult: StartingPlayerResult
   /** Always true here - see beginLocalGame's own doc comment on why turnManager.start() moved out
    * of this function and into GameBoardScreen's own StartingPlayerModal onDone handler instead.
-   * Online play's own GameSession (OnlineLobbyScreen.tsx) never sets this - its bridge.start() call
-   * already happens on its own timing, before GameBoardScreen even mounts, and calling start() a
-   * second time here would double-fire turnStarted for it. */
+   * NOTE: this comment used to claim online's own GameSession (OnlineLobbyScreen.tsx) never sets
+   * this, and that GameBoardScreen.tsx could therefore treat it as a reliable local-vs-online
+   * discriminator - that stopped being true once a575898 ("fix: online game no longer starts
+   * before showing who goes first") gave online the exact same deferred-start need and made both
+   * of OnlineLobbyScreen.tsx's own setSession call sites set deferredStart: true too, for that
+   * unrelated reason (holding off bridge.start()/remote.start() until online's own starting-player
+   * reveal finishes, same as here). Nobody updated GameBoardScreen.tsx's isLocalGame derivation
+   * when that landed, so every online game was silently misclassified as local from that commit
+   * onward - confirmed against a real recorded online game (the "¿Sigue ahí?" idle overlay showed
+   * local play's own 10s countdown/copy and a live Pause button). Fixed by switching isLocalGame to
+   * key off session.colorDraw instead (GameBoardScreen.tsx), which - unlike deferredStart - really
+   * is still online-only; don't reuse deferredStart as a local/online discriminator again. */
   deferredStart: true
 }
 

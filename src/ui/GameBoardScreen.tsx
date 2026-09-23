@@ -238,10 +238,29 @@ export function GameBoardScreen({
   const localColor = session.turnManager.localPlayerColor
   const isMyTurn = localColor == null || localColor === currentPlayer.color
 
-  // See HUMAN_REVEAL_HOLD_MS's own doc comment - session.deferredStart is only ever set by
-  // beginLocalGame (localGameSession.ts's own doc comment on that field), so this is a reliable,
-  // already-existing way to tell local play apart from online without a new flag.
-  const isLocalGame = session.deferredStart === true
+  // See HUMAN_REVEAL_HOLD_MS's own doc comment - this used to read session.deferredStart, on the
+  // premise that it was only ever set by beginLocalGame. That stopped being true once online's own
+  // color-draw-reveal-ordering fix (see GameSession's own deferredStart doc comment) made
+  // OnlineLobbyScreen.tsx's startAsRemote()/startGame() start setting deferredStart: true as well,
+  // to hold off turnManager.start() for the reveal there too - deferredStart has been true for
+  // every session, local and online alike, ever since, so it could no longer tell them apart.
+  //
+  // Found via a real online-room recording: a static "TURNO DE BLUE / Elija una ficha para mover"
+  // moment was followed ~10.5s later by the "¿Sigue ahí?" idle warning firing with a 10-count
+  // countdown and the local-only "Se jugará este turno en su lugar por inactividad" copy - both
+  // exactly the *local* IDLE_WARNING_MS/COUNTDOWN_S pacing and copy, not online's - and the Pause
+  // button (documented below as local-only) was rendering online too. All three trace back to this
+  // same isLocalGame always evaluating true. Worse than a cosmetic mismatch: with isLocalGame stuck
+  // true, the autoPlayIdleTurn effect further below no longer bails out for online (its
+  // `if (!isLocalGame) return` guard never returns), so it silently rolls dice and picks a move on
+  // an online player's behalf after the (wrongly short) countdown - exactly what online was designed
+  // never to do (see that effect's own doc comment).
+  //
+  // session.colorDraw is the reliable discriminator instead: set unconditionally by both online
+  // session-construction sites (OnlineLobbyScreen.tsx's startAsRemote()/startGame()) and never set
+  // by local play (localGameSession.ts's own beginLocalGame never populates it - see ColorSelector's
+  // own "the player must be able to choose" requirement, colorDraw's own doc comment above).
+  const isLocalGame = session.colorDraw === undefined
   // `color` is whichever player's turn produced the value being held - eliminatedByDoubles/
   // pendingReward/forfeitedReward/lastRoll are all set (and held) *before* any turn-ending
   // transition can move currentPlayer on to someone else (a pending reward or an unresolved
@@ -592,7 +611,19 @@ export function GameBoardScreen({
         currentPlayerColor={currentPlayer.color}
         diceValues={diceValues}
         rolling={rolling}
-        nudgeDice={nudgeDice}
+        // nudgeDice itself is armed by idleTriggerActive (canRoll || awaitingPieceChoice - see that
+        // const's own doc comment above), on purpose: the idle timers need to cover *both* halves of
+        // a human's turn so the warning/countdown/autoPlayIdleTurn below still fire while a piece
+        // choice is pending, not just pre-roll. But the dice's own bounce visual doesn't share that
+        // double duty - it only ever means "roll me". Reported directly, with a screenshot (a white
+        // die mid-bounce while a piece was already the pending choice): passing nudgeDice straight
+        // through with no further gating made the dice visibly nudge during awaitingPieceChoice too,
+        // pointing the player at the wrong element - the dice aren't even clickable then
+        // (canRollDice={canRoll} below is already false), and the pieces themselves already carry
+        // their own always-on selectable glow/bob for that phase (see PieceMesh.tsx), so they need
+        // no extra idle-triggered cue. ANDing with canRoll here scopes the visual back to the one
+        // phase it actually applies to, without touching idleTriggerActive/the timers themselves.
+        nudgeDice={nudgeDice && canRoll}
         onRollDice={() => canRoll && rollDice()}
         canRollDice={canRoll}
         moveAnimation={moveAnimation}

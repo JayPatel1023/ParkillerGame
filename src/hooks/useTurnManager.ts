@@ -198,6 +198,18 @@ export function useTurnManager(turnManager: TurnManagerLike) {
         // which is exactly the state a fresh turn starts in - reading as "the dice are already
         // rolled" when nothing has happened yet this turn at all.
         setLastRoll(null)
+        // Found via close video review (a double with no legal white-dice move: the "Ningún
+        // movimiento posible con esta tirada" banner stayed on screen for 9+ seconds while the
+        // TIRAR DADOS button had already re-enabled for the bonus roll): this same-player branch
+        // used to clear only pendingMoves/lastRoll, never noMoveReason. The different-player
+        // branch above already clears it (after its own TURN_CHANGE_HOLD_MS delay) because a turn
+        // handoff means the reason no longer describes the player now on turn - but a same-player
+        // bonus turn is exactly the same situation: the forfeited roll that produced noMoveReason
+        // is over, and canRoll (GameBoardScreen.tsx) never gates on noMoveReason at all, so the
+        // button re-enabling here left the stale banner as the only thing still describing the
+        // previous, already-resolved roll. Clearing it here means it can't outlive the turn it
+        // was about.
+        setNoMoveReason(null)
       }),
       turnManager.diceRolled.on((roll) => {
         // The roll itself (and every consequence of it - Parkiller move, capture, etc.) has

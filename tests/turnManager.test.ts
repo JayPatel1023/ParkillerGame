@@ -269,6 +269,39 @@ describe('TurnManager - two-dice rulebook flow', () => {
     expect(manager.currentPlayer.color).toBe('Red')
     expect(red.pieces.every((p) => p.state === 'InYard')).toBe(true)
   })
+
+  // Found via close video review of a recorded online game (the "Ningún movimiento posible con
+  // esta tirada" banner stayed on screen for 9+ seconds after the TIRAR DADOS button had already
+  // re-enabled for the very next roll): a double that offers no legal move fires moveNotPossible
+  // and then turnStarted for that *same* player, all inside this one requestRoll() call - no
+  // different-player handoff in between. useTurnManager.ts's turnStarted handler used to only
+  // clear this on a different-player handoff (via TURN_CHANGE_HOLD_MS), leaving noMoveReason
+  // stale across a same-player bonus turn even though the button itself re-enables immediately.
+  // This test locks in the TurnManager-side half of that sequence - moveNotPossible then
+  // turnStarted(same player), same tick - which is exactly what useTurnManager.ts's own
+  // same-player branch must react to by clearing noMoveReason too (see its own comment).
+  it('a double with no legal move fires moveNotPossible then turnStarted for the same player, in that order, same tick (PC 5)', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board) // every piece defaults to InYard
+    const blue = createPlayerState('Blue', board)
+
+    const dice = new ScriptedDice([4, 4, 1]) // double 4,4 - not the exit roll (5), nothing to move
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    const events: string[] = []
+    let turnStartedPlayerColor: string | null = null
+    manager.moveNotPossible.on(() => events.push('moveNotPossible'))
+    manager.turnStarted.on((p) => {
+      events.push('turnStarted')
+      turnStartedPlayerColor = p.color
+    })
+
+    manager.requestRoll()
+
+    expect(events).toEqual(['moveNotPossible', 'turnStarted'])
+    expect(turnStartedPlayerColor).toBe('Red') // same player continuing - not a handoff to Blue
+    expect(manager.currentPlayer.color).toBe('Red')
+  })
 })
 
 describe('TurnManager - mandatory departure (PC2.1)', () => {
