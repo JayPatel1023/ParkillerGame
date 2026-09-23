@@ -12,6 +12,11 @@ const CAPTURE_COLORS = ['#ff6a4a', '#ffae42', '#ff3b3b', '#ffd76a']
 const FINISH_COLORS = ['#ffe08a', '#ffd24a', '#fff4c2', '#ffb347']
 const FORFEIT_COLORS = ['#8a7a6a', '#5c5248', '#43392f', '#7a3a2e']
 const SPARK_COUNT = 18
+// Eliminating an opposing Parkiller (PK6/PK7) reuses the plain capture's own star shape/orange
+// palette (same "something magical" language - see STAR_CLIP_PATH's own doc comment) but with more
+// sparks flying further, so it visibly reads as "bigger than a plain capture" rather than identical
+// to one - see RING_COLOR/Burst below for the second half of that "bigger" treatment, an extra ring.
+const PARKILLER_CAPTURE_SPARK_COUNT = 26
 const SHARD_COUNT = 12
 
 // Requested directly ("...재미난 음악효과와 장식효과를 주어야한다" - a capture should get fun
@@ -27,7 +32,7 @@ const STAR_CLIP_PATH = 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 
 // distinct from the star (magic) and circle (glow) shapes the two success reasons already use.
 const SHARD_CLIP_PATH = 'polygon(50% 0%, 100% 38%, 62% 100%, 15% 68%)'
 
-type BurstReason = 'capture' | 'finish' | 'forfeit'
+type BurstReason = 'capture' | 'parkillerCapture' | 'finish' | 'forfeit'
 
 interface Spark {
   angle: number
@@ -55,10 +60,15 @@ function useSparks(reason: BurstReason, seed: number): Spark[] {
         color: FORFEIT_COLORS[Math.floor(Math.random() * FORFEIT_COLORS.length)],
       }))
     }
-    const colors = reason === 'capture' ? CAPTURE_COLORS : FINISH_COLORS
-    return Array.from({ length: SPARK_COUNT }, (_, i) => ({
-      angle: (360 / SPARK_COUNT) * i + (Math.random() - 0.5) * 14,
-      distance: 70 + Math.random() * 50,
+    const colors = reason === 'finish' ? FINISH_COLORS : CAPTURE_COLORS
+    const count = reason === 'parkillerCapture' ? PARKILLER_CAPTURE_SPARK_COUNT : SPARK_COUNT
+    // A Parkiller kill's own sparks fly noticeably further, on top of there simply being more of
+    // them (count, above) - both read together as "a bigger hit" without changing the shape/color
+    // language a plain capture already established.
+    const distanceBoost = reason === 'parkillerCapture' ? 40 : 0
+    return Array.from({ length: count }, (_, i) => ({
+      angle: (360 / count) * i + (Math.random() - 0.5) * 14,
+      distance: 70 + distanceBoost + Math.random() * 50,
       delay: Math.random() * 0.05,
       size: 5 + Math.random() * 5,
       color: colors[Math.floor(Math.random() * colors.length)],
@@ -67,16 +77,32 @@ function useSparks(reason: BurstReason, seed: number): Spark[] {
   }, [seed])
 }
 
-const RING_COLOR: Record<BurstReason, string> = { capture: '#ff6a4a', finish: '#ffd24a', forfeit: '#6b4a3a' }
+// parkillerCapture reuses the plain capture's own ring color (same orange "hit" language) - what
+// makes it read as bigger is the *second* ring Burst renders below for this reason alone, not a
+// different color here.
+const RING_COLOR: Record<BurstReason, string> = { capture: '#ff6a4a', parkillerCapture: '#ff6a4a', finish: '#ffd24a', forfeit: '#6b4a3a' }
 
 function Burst({ reason, seed }: { reason: BurstReason; seed: number }) {
   const sparks = useSparks(reason, seed)
   const isForfeit = reason === 'forfeit'
+  // A Parkiller elimination (PK6/PK7) reuses the plain capture's own star-shaped, orange-glow
+  // sparks (isStar below) - the client's "something magical" language for a capture, not a
+  // different look - see RewardReason's own doc comment in turnManager.ts for why this event needs
+  // to read as *bigger*, not differently themed.
+  const isStar = reason === 'capture' || reason === 'parkillerCapture'
   return (
     <div style={burstWrapperStyle}>
       {/* Expanding ring shockwave - the "impact" half of the effect, distinct from the sparks'
           own "scatter" half so a capture (or a broken reward) reads as a hit, not just a sparkle. */}
       <div style={{ ...ringStyle, borderColor: RING_COLOR[reason] }} />
+      {reason === 'parkillerCapture' && (
+        // A second, delayed, bigger ring - the same overlapping-double-ring trick
+        // FinishCelebrationEffect.tsx already uses for the on-board finish burst (two expanding
+        // rings, the second started slightly later and ending bigger) - so eliminating an opposing
+        // Parkiller visibly reads as a bigger hit than a plain capture's single ring, not an
+        // identical one just relabeled.
+        <div style={{ ...ringStyle, borderColor: RING_COLOR[reason], animation: 'reward-ring-2 0.65s ease-out 0.1s both' }} />
+      )}
       {sparks.map((s, i) => (
         <span
           key={i}
@@ -85,13 +111,13 @@ function Burst({ reason, seed }: { reason: BurstReason; seed: number }) {
               position: 'absolute',
               top: '50%',
               left: '50%',
-              width: reason === 'capture' ? s.size * 1.6 : s.size,
-              height: reason === 'capture' ? s.size * 1.6 : s.size,
+              width: isStar ? s.size * 1.6 : s.size,
+              height: isStar ? s.size * 1.6 : s.size,
               borderRadius: reason === 'finish' ? '50%' : 0,
-              clipPath: reason === 'capture' ? STAR_CLIP_PATH : isForfeit ? SHARD_CLIP_PATH : undefined,
+              clipPath: isStar ? STAR_CLIP_PATH : isForfeit ? SHARD_CLIP_PATH : undefined,
               background: s.color,
               boxShadow: reason === 'finish' ? `0 0 6px ${s.color}` : 'none',
-              filter: reason === 'capture' ? `drop-shadow(0 0 4px ${s.color})` : undefined,
+              filter: isStar ? `drop-shadow(0 0 4px ${s.color})` : undefined,
               '--angle': `${s.angle}deg`,
               '--distance': `${s.distance}px`,
               animation: isForfeit
@@ -113,6 +139,10 @@ function Burst({ reason, seed }: { reason: BurstReason; seed: number }) {
         @keyframes reward-ring {
           0% { transform: scale(0.2); opacity: 0.8; border-width: 4px; }
           100% { transform: scale(2.6); opacity: 0; border-width: 1px; }
+        }
+        @keyframes reward-ring-2 {
+          0% { transform: scale(0.4); opacity: 0.7; border-width: 4px; }
+          100% { transform: scale(3.4); opacity: 0; border-width: 1px; }
         }
       `}</style>
     </div>

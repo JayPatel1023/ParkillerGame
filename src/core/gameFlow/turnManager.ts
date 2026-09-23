@@ -88,7 +88,19 @@ export interface MoveAnimationInfo {
   eliminatedByParkillerColor?: PieceColor
 }
 
-export type RewardReason = 'capture' | 'finish'
+// 'parkillerCapture' split off from the plain 'capture' reason - reported directly ("¿ELIMINAR UN
+// PEON, UN PARKI... DEBEN SER FESTEJADAS... CADA MOVIMIENTO SEPARADO" - eliminating a pawn, a
+// Parki... they should be celebrated, each move separately - see botController.ts's own doc
+// comment quoting this in full): eliminating an opposing Parkiller (PK6: a pawn kills it, PK7: a
+// Parkiller kills it) shared this exact same reason value with an everyday pawn capture, so every
+// listener that reads it - RewardToast's own label, RewardBurst's own spark/ring styling - had no
+// way to tell the two apart and showed the same generic "¡Captura!" treatment for both, even though
+// the client explicitly treats a Parkiller kill as the bigger, separately-noteworthy event. The
+// reward math itself (amount, split-into-two-10s eligibility) stays identical to a plain capture -
+// only the *display* reason changes - so every place that keys off 'capture' to decide behavior
+// rather than just cosmetics (offerReward's own canSplit, GameBoardScreen's own fanfare-vs-finish-
+// sound choice) was updated to treat 'parkillerCapture' the same way it already treats 'capture'.
+export type RewardReason = 'capture' | 'parkillerCapture' | 'finish'
 
 // The amount actually being offered *this* time - RewardToast/RewardBurst (and every other
 // external listener) only ever need to know what's on the table right now, not the internal
@@ -410,12 +422,14 @@ export class TurnManager {
     // offerReward()'s own fallback (continueAfterMove()) already knows how to fall through to
     // offerMoves() once the reward is spent or forfeited.
     if (parkillerResult.capturedParkillerColor) {
-      this.pendingRewardQueue.push({ reason: 'capture', amount: REWARD_UNIT * 2 })
+      // PK7: a Parkiller-vs-Parkiller kill - its own distinct reason (see RewardReason's own doc
+      // comment), not the plain 'capture' every ordinary pawn capture still uses.
+      this.pendingRewardQueue.push({ reason: 'parkillerCapture', amount: REWARD_UNIT * 2 })
       // "PARKI REMOVES TWO PARKIS": each of the two eliminations earns its own reward, same as two
       // separate captures would - queued together and drained one grant at a time, same as any
       // other chain (see offerNextReward's own comment).
       if (parkillerResult.secondCapturedParkillerColor) {
-        this.pendingRewardQueue.push({ reason: 'capture', amount: REWARD_UNIT * 2 })
+        this.pendingRewardQueue.push({ reason: 'parkillerCapture', amount: REWARD_UNIT * 2 })
       }
       this.offerNextReward()
       return
@@ -988,9 +1002,15 @@ export class TurnManager {
 
     // PC 3/PC 4: capturing or finishing earns a reward, and PC 6.2 places collecting it ahead of
     // any dice still unspent. A move landing on this same reward can itself capture again, in
-    // which case PC 5 adds the new reward on top rather than replacing it. PK7 rewards eliminating
-    // an opposing Parkiller the same way a regular capture does.
-    if (result.capturedPiece || result.capturedParkillerColor) this.pendingRewardQueue.push({ reason: 'capture', amount: REWARD_UNIT * 2 })
+    // which case PC 5 adds the new reward on top rather than replacing it. PK6 rewards eliminating
+    // an opposing Parkiller the same size as a regular capture (REWARD_UNIT*2), but under its own
+    // 'parkillerCapture' reason (see RewardReason's own doc comment) rather than plain 'capture' -
+    // checked first since a single move can, per applyMove's own capturedPiece/capturedParkillerColor
+    // interaction (a pawn+foreign-Parkiller pair, a different color from the Parkiller, can have
+    // this same move eliminate both the pawn and, via PK6's single-die window, the Parkiller too),
+    // set both at once - the bigger, Parkiller-elimination event is the one worth surfacing.
+    if (result.capturedParkillerColor) this.pendingRewardQueue.push({ reason: 'parkillerCapture', amount: REWARD_UNIT * 2 })
+    else if (result.capturedPiece) this.pendingRewardQueue.push({ reason: 'capture', amount: REWARD_UNIT * 2 })
     if (result.pieceFinished) this.pendingRewardQueue.push({ reason: 'finish', amount: REWARD_UNIT })
 
     this.offerNextReward()
@@ -1042,7 +1062,10 @@ export class TurnManager {
   // amount leaves the rest queued (handled back in submitMove, right after this move applies);
   // picking the full amount resolves the whole grant in this one move.
   private offerReward(grant: PendingReward) {
-    const canSplit = grant.reason === 'capture' && grant.amount > REWARD_UNIT
+    // 'parkillerCapture' is the same size/split-eligible reward a plain 'capture' is (see
+    // RewardReason's own doc comment) - only 'finish' (a flat, non-splittable REWARD_UNIT) is
+    // ever excluded here.
+    const canSplit = grant.reason !== 'finish' && grant.amount > REWARD_UNIT
     const fullMoves = getValidMoves(this.board, this.currentPlayer, this.players, grant.amount, this.settings, 'reward')
     const splitMoves = canSplit ? getValidMoves(this.board, this.currentPlayer, this.players, REWARD_UNIT, this.settings, 'reward') : []
 

@@ -16,7 +16,13 @@ import type { RewardGrant, RewardReason } from '../core/gameFlow/turnManager'
 // overlay that flashes on impact, and a light-sweep shine across the card - dramatic and eye-
 // catching without looking like a win. RewardBurst.tsx pairs this with its own falling-shard
 // particle burst behind the card.
+// Reported directly, and confirmed against current source rather than assumed fixed already:
+// eliminating an opposing Parkiller (PK6/PK7) shared this exact 'capture' reason with an everyday
+// pawn capture, so it showed the same generic "¡Captura!" text as a plain capture - despite the
+// client explicitly treating a Parkiller kill as the bigger, separately-noteworthy event. Its own
+// distinct reason ('parkillerCapture' - see RewardReason's own doc comment) now gets its own label.
 function rewardLabel(reason: RewardReason): string {
+  if (reason === 'parkillerCapture') return '¡Parki eliminado!'
   return reason === 'capture' ? '¡Captura!' : '¡Meta!'
 }
 

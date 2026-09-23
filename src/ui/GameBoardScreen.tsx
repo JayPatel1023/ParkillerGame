@@ -457,17 +457,21 @@ export function GameBoardScreen({
 
   // Requested directly ("cuando se elimina a un peón o un peón llega a la meta debe haber alguna
   // celebración con música"): every capture (a regular pawn's own move, or a Parki eliminating an
-  // opposing Parki - PK6/PK7) always queues a reward grant (PC5), reason 'capture' either way, and
-  // a finished piece always queues one too, reason 'finish' - so watching *either* the pendingReward
-  // or the forfeitedReward on this same reward exactly matches "a capture/finish just happened",
-  // regardless of whether the resulting bonus itself could actually be spent. Gated on the already-
-  // animation-settled visible* versions (not the raw pendingReward/forfeitedReward), so this fires
-  // at the same moment RewardToast/RewardBurst reveal themselves, not the instant the underlying
-  // game state updates well before the capturing piece's own hop has visually landed.
+  // opposing Parki - PK6/PK7) always queues a reward grant (PC5) - reason 'capture' for the former,
+  // 'parkillerCapture' for the latter (split into its own reason so RewardToast/RewardBurst can
+  // finally tell the two apart - see RewardReason's own doc comment in turnManager.ts) - and a
+  // finished piece always queues one too, reason 'finish'. Both capture-flavored reasons still play
+  // the exact same fanfare here (only the *visual* toast/burst treatment differs) - so watching
+  // *either* the pendingReward or the forfeitedReward on this same reward exactly matches "a
+  // capture/finish just happened", regardless of whether the resulting bonus itself could actually
+  // be spent. Gated on the already-animation-settled visible* versions (not the raw pendingReward/
+  // forfeitedReward), so this fires at the same moment RewardToast/RewardBurst reveal themselves,
+  // not the instant the underlying game state updates well before the capturing piece's own hop has
+  // visually landed.
   useEffect(() => {
     const grant = visiblePendingReward ?? visibleForfeitedReward
     if (!grant) return
-    if (grant.reason === 'capture') playCaptureFanfare()
+    if (grant.reason === 'capture' || grant.reason === 'parkillerCapture') playCaptureFanfare()
     else playFinishSound()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visiblePendingReward, visibleForfeitedReward])
