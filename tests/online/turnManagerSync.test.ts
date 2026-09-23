@@ -4,8 +4,11 @@ import { createPlayerState, type PlayerState } from '../../src/core/gameFlow/pla
 import { TurnManager } from '../../src/core/gameFlow/turnManager'
 import type { DiceLike } from '../../src/core/dice'
 import type { PieceColor } from '../../src/core/pieceColor'
+import { createPiece } from '../../src/core/pieces/piece'
+import type { MoveResult } from '../../src/core/rules/moveOption'
 import { defaultRuleSettings } from '../../src/core/rules/ruleSettings'
 import { RecordingDice, QueueDice } from '../../src/online/dice'
+import type { GameMessage } from '../../src/online/protocol'
 import { HostTurnManagerBridge } from '../../src/online/HostTurnManagerBridge'
 import { RemoteTurnManager } from '../../src/online/RemoteTurnManager'
 import { FakeRoomNetwork } from './fakeRoomTransport'
@@ -269,6 +272,47 @@ describe('HostTurnManagerBridge + RemoteTurnManager convergence', () => {
 
     vi.advanceTimersByTime(100) // past t=9280
     expect(rollCount).toBe(2) // Blue's roll only replays once the move's own real duration has passed
+  })
+
+  // Reported again, separately, still with the same "reverts to its start square" symptom, even
+  // after the long-move fix just above shipped: an *ordinary* capture (not self-elimination)
+  // still under-budgeted its own extra bounce time. Root cause: applyMessage's own extraBounceMs
+  // only checked result.eliminatedByParkiller, never result.capturedPiece - but BoardScene.tsx
+  // feeds a captured pawn's own "flung home" bounce (captureFlight) the exact same diceSettledAt
+  // gate a plain hop uses (see PieceMesh.tsx's own hopFrom hold), so under-budgeting it here let
+  // the next queued broadcast re-arm that gate while the victim's own bounce was still genuinely
+  // playing. Matches botController.ts's own equivalent human-move listener, which already checks
+  // `result.eliminatedByParkiller || result.capturedPiece` for exactly this reason. Exercises
+  // applyMessage directly (not through a full capture setup) so the pacing math itself is pinned
+  // down precisely, independent of whatever board/rules scenario happens to produce a capture.
+  it("budgets a captured pawn's own bounce-home time too, not just a self-elimination's, before the next broadcast replays", () => {
+    const board = buildTestBoard()
+    const network = new FakeRoomNetwork(MASTER_ACTOR)
+    const remote = buildRemote(board, network)
+    const capturedPiece = createPiece('Blue', 0)
+
+    // Stubs the inner TurnManager's own submitMove so the returned MoveResult is pinned down
+    // exactly (an ordinary capture, amount=6, not a self-elimination) rather than depending on a
+    // real board/rules setup happening to produce one.
+    const fakeResult: MoveResult = {
+      movedPiece: remote.players[0].pieces[0],
+      amount: 6,
+      capturedPiece,
+      capturedParkillerColor: null,
+      pieceFinished: false,
+      eliminatedByParkiller: false,
+    }
+    const remoteInternals = remote.bridge as unknown as { inner: TurnManager; applyMessage(msg: GameMessage): number }
+    remoteInternals.inner.submitMove = () => fakeResult
+
+    const msg: GameMessage = { type: 'moveChosen', color: 'Red', pieceIndex: 0, amount: 6 }
+    const waitMs = remoteInternals.applyMessage(msg)
+
+    const HOP_DURATION_MS = 480
+    const CAPTURE_RETURN_HOPS = 3
+    // Not just >= REMOTE_MOVE_PACING_MS (2000) - the fixed budget has to actually include the
+    // captured piece's own bounce-home time on top of the mover's own plain hop.
+    expect(waitMs).toBeGreaterThanOrEqual(6 * HOP_DURATION_MS + CAPTURE_RETURN_HOPS * HOP_DURATION_MS)
   })
 
   it("the Master rejects a roll intent from an actor whose seat isn't the current turn", () => {

@@ -190,11 +190,17 @@ export class RemoteTurnManager implements TurnManagerLike {
       if (!piece) return REMOTE_MOVE_PACING_MS
       const result = this.inner.submitMove(piece, msg.amount)
       if (!result) return REMOTE_MOVE_PACING_MS
-      // Scoped to self-elimination only, same as botController.ts's own extraBounceMs - an
-      // ordinary captured pawn's own bounce-home is a separate piece's own animation, not this
-      // move's own hop, so it doesn't extend how long *this* move needs before the next broadcast
-      // is safe to apply.
-      const extraBounceMs = result.eliminatedByParkiller ? CAPTURE_RETURN_HOPS * HOP_DURATION_MS : 0
+      // Covers both self-elimination (PK5) and an ordinary capture - matching botController.ts's
+      // own extraBounceMs for its equivalent human-move listener (see its own doc comment for the
+      // exact history). This used to check eliminatedByParkiller only, on the reasoning that a
+      // captured pawn's own bounce-home is a *separate* piece's own animation, not this move's own
+      // hop, so it wouldn't extend how long *this* move needs before the next broadcast is safe to
+      // apply - but BoardScene.tsx feeds that captured piece's own captureFlight bounce the very
+      // same shared diceSettledAt gate this move's own hop uses (see PieceMesh.tsx's own hopFrom
+      // hold), so under-budgeting it here let the *next* broadcast re-arm that gate while the
+      // victim's own bounce was still genuinely playing - same "reverts to its start square, then
+      // catches up" symptom class, just for an ordinary capture instead of a self-elimination.
+      const extraBounceMs = (result.eliminatedByParkiller || result.capturedPiece) ? CAPTURE_RETURN_HOPS * HOP_DURATION_MS : 0
       return Math.max(REMOTE_MOVE_PACING_MS, result.amount * HOP_DURATION_MS + extraBounceMs)
     }
     return REMOTE_MOVE_PACING_MS
