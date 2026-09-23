@@ -9,6 +9,7 @@ import type { Piece } from '../core/pieces/piece'
 import type { MoveOption } from '../core/rules/moveOption'
 import { useTurnManager } from '../hooks/useTurnManager'
 import { BoardScene } from '../scene/BoardScene'
+import { InteractiveCursorOverlay } from '../scene/InteractiveCursorOverlay'
 import { getHopSoundLabel, getSelectedHopSoundIndex, nextHopSound, playHopSound } from '../scene/hopSound'
 import { playCaptureFanfare, playCaptureSound, playFinishSound, playGameWonSound } from './celebrationSound'
 import { ColorDrawModal, type ColorDrawEntry } from './ColorDrawModal'
@@ -623,6 +624,7 @@ export function GameBoardScreen({
       <RewardToast pendingReward={visiblePendingReward} forfeitedReward={visibleForfeitedReward} />
       <EliminationToast eliminatedPiece={eliminatedByDoubles} reason="doubles" />
       <EliminationToast eliminatedPiece={parkillerVictim} reason="parkiller" />
+      <InteractiveCursorOverlay />
 
       <div style={turnCardStyle}>
         <div style={turnCardHeaderStyle}>

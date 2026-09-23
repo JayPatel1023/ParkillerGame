@@ -6,7 +6,7 @@ import { getColor } from '../core/colorPalette'
 import type { PieceColor } from '../core/pieceColor'
 import { BASE_HEIGHT } from './boardGeometry'
 import { playHopSound } from './hopSound'
-import { INTERACTIVE_CURSOR } from './interactiveCursor'
+import { setInteractiveCursorActive } from './interactiveCursorState'
 import {
   BOUNCE_HEIGHT,
   HOP_DURATION,
@@ -591,10 +591,10 @@ export function ParkillerMesh({
       // too" hover cue, not a selectability signal the way PieceMesh/DiceMesh's own cursor changes
       // are.
       onPointerOver={() => {
-        document.body.style.cursor = INTERACTIVE_CURSOR
+        setInteractiveCursorActive(true)
       }}
       onPointerOut={() => {
-        document.body.style.cursor = 'auto'
+        setInteractiveCursorActive(false)
       }}
     >
       <ParkillerScanModel color={color} />

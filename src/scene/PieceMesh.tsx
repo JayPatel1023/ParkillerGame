@@ -6,7 +6,7 @@ import { getColor } from '../core/colorPalette'
 import type { Piece } from '../core/pieces/piece'
 import { BASE_HEIGHT } from './boardGeometry'
 import { playHopSound } from './hopSound'
-import { INTERACTIVE_CURSOR } from './interactiveCursor'
+import { setInteractiveCursorActive } from './interactiveCursorState'
 
 // Re-traced from a clean reference photo of classic parchís pawns (reported directly: the
 // previous silhouette read as bulbous/hourglass-shaped, not a proper cone-and-ball pawn) - the
@@ -641,10 +641,10 @@ export function PieceMesh({
         onSelect(piece)
       }}
       onPointerOver={() => {
-        if (selectable) document.body.style.cursor = INTERACTIVE_CURSOR
+        if (selectable) setInteractiveCursorActive(true)
       }}
       onPointerOut={() => {
-        if (selectable) document.body.style.cursor = 'auto'
+        if (selectable) setInteractiveCursorActive(false)
       }}
     >
       <mesh castShadow receiveShadow>

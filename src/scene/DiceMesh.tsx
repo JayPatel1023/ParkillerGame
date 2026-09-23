@@ -4,7 +4,7 @@ import * as THREE from 'three'
 import type { Mesh } from 'three'
 import { RoundedBoxGeometry } from 'three-stdlib'
 import { BOARD_SIZE } from './boardGeometry'
-import { INTERACTIVE_CURSOR } from './interactiveCursor'
+import { setInteractiveCursorActive } from './interactiveCursorState'
 
 extend({ RoundedBoxGeometry })
 
@@ -324,10 +324,10 @@ export function DiceMesh({
         castShadow
         onClick={onClick}
         onPointerOver={() => {
-          if (interactive) document.body.style.cursor = INTERACTIVE_CURSOR
+          if (interactive) setInteractiveCursorActive(true)
         }}
         onPointerOut={() => {
-          if (interactive) document.body.style.cursor = 'auto'
+          if (interactive) setInteractiveCursorActive(false)
         }}
       >
         {/* Rounded corners/edges (not a sharp cardboard cube) to match the reference die photo -
