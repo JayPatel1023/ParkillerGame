@@ -6,6 +6,8 @@ import type { Piece } from '../core/pieces/piece'
 import type { MoveOption } from '../core/rules/moveOption'
 import { playDiceRollSound } from '../ui/diceSound'
 import { CaptureFlightHoldTracker } from './captureFlightHold'
+import { DeferredTurnSwitchTracker } from './deferredTurnSwitch'
+import { turnHandoffDelayMs } from './turnHandoffDelay'
 
 /**
  * The opponent piece a move captured, if any. Rules apply a capture the instant the move is
@@ -107,15 +109,24 @@ export function useTurnManager(turnManager: TurnManagerLike) {
   const [forfeitedReward, setForfeitedReward] = useState<RewardGrant | null>(null)
   // See TURN_CHANGE_HOLD_MS's own comment - noMoveReason/turnEndingSoon are what the "no move
   // possible" message and the disabled-until-it-clears roll button are driven from;
-  // deferredTurnTimeoutRef is the plumbing that holds a genuine turn handoff back for the reveal.
+  // deferredTurnSwitchRef (lazy-initialized further below) is the plumbing that holds a genuine
+  // turn handoff back for the reveal.
   const [noMoveReason, setNoMoveReason] = useState<MoveNotPossibleReason | null>(null)
   const [turnEndingSoon, setTurnEndingSoon] = useState(false)
-  const deferredTurnTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Stale-closure workaround for the turnStarted handler below (this effect only ever runs once
   // per turnManager instance, so reading the `currentPlayer` state variable directly inside it
   // would always see its very first value, never an updated one) - see that handler's own comment
   // on why it needs to know the *previous* current player, not just the incoming one.
   const currentPlayerColorRef = useRef(turnManager.currentPlayer.color)
+  // See turnHandoffDelayMs's own doc comment for the bug this fixes: the different-player branch
+  // of turnStarted below used to hold its handoff back by a single flat TURN_CHANGE_HOLD_MS,
+  // regardless of how long the move that triggered it will actually take to animate on screen.
+  // Set on every moveApplied (the move that's about to - possibly - trigger a handoff), read back
+  // by that same turnStarted handler, which fires synchronously within the same call stack as the
+  // moveApplied that preceded it (submitMove -> ... -> endTurn -> turnStarted.emit, all
+  // synchronous - see turnManager.ts's own submitMove) - so this is always this handoff's own
+  // move, never a stale one left over from earlier.
+  const lastMoveForHandoffRef = useRef<{ amount: number; captured: boolean }>({ amount: 0, captured: false })
   // Captured pawn (PC3/PC4) or Parki-eliminated pawn (PK5, via moveAnimation.capturedPiece) and a
   // pawn a Parkiller itself sends home (parkillerAnimation.capturedPawn) both spawn their own
   // separate "flung home" bounce-home animation once the CAPTURING piece's own hop finishes
@@ -143,6 +154,32 @@ export function useTurnManager(turnManager: TurnManagerLike) {
   if (!captureFlightHoldRef.current) {
     captureFlightHoldRef.current = new CaptureFlightHoldTracker(setCaptureFlightPending, CAPTURE_RETURN_HOPS * HOP_DURATION_MS)
   }
+  // Lazy-initialized once per hook instance, same pattern as captureFlightHoldRef just above -
+  // see DeferredTurnSwitchTracker's own doc comment (deferredTurnSwitch.ts) for the bug this
+  // fixes: the turn-card header/avatar (GameBoardScreen.tsx) read `currentPlayer` directly, with
+  // no animationsSettled gate of their own, so a turnHandoffDelayMs-estimated hold that still
+  // undershot the real hop animation (a longer-than-estimated reward chain, ordinary timer
+  // jitter) let the header flip to the incoming player while the outgoing player's own move was
+  // still visibly animating. The onSwitch callback below is exactly the different-player branch's
+  // old setTimeout body, unchanged - only *when* it fires has moved into the tracker.
+  const deferredTurnSwitchRef = useRef<DeferredTurnSwitchTracker<PlayerState> | null>(null)
+  if (!deferredTurnSwitchRef.current) {
+    deferredTurnSwitchRef.current = new DeferredTurnSwitchTracker<PlayerState>((player) => {
+      currentPlayerColorRef.current = player.color
+      setCurrentPlayer(player)
+      setPendingMoves([])
+      setLastRoll(null)
+      setNoMoveReason(null)
+      setTurnEndingSoon(false)
+    })
+  }
+  // Keeps the tracker's own notion of animationsSettled current - see its own
+  // setAnimationsSettled doc comment for why this needs to be pushed on every change rather than
+  // read back lazily (the tracker has no React state of its own to re-render off of).
+  useEffect(() => {
+    deferredTurnSwitchRef.current?.setAnimationsSettled(!moveAnimation && !parkillerAnimation && !captureFlightPending)
+  }, [moveAnimation, parkillerAnimation, captureFlightPending])
+  useEffect(() => () => deferredTurnSwitchRef.current?.dispose(), [])
   // Trailing-edge detection, same pattern as BoardScene.tsx's own captureFlights-spawning effects
   // (moveAnimation/parkillerAnimation going from "had a capture" to null, in that exact tick) - see
   // captureFlightPending's own doc comment just above for why this needs its own tracking here too,
@@ -174,16 +211,14 @@ export function useTurnManager(turnManager: TurnManagerLike) {
         // again."
         if (player.color !== currentPlayerColorRef.current) {
           setTurnEndingSoon(true)
-          if (deferredTurnTimeoutRef.current) clearTimeout(deferredTurnTimeoutRef.current)
-          deferredTurnTimeoutRef.current = setTimeout(() => {
-            deferredTurnTimeoutRef.current = null
-            currentPlayerColorRef.current = player.color
-            setCurrentPlayer(player)
-            setPendingMoves([])
-            setLastRoll(null)
-            setNoMoveReason(null)
-            setTurnEndingSoon(false)
-          }, TURN_CHANGE_HOLD_MS)
+          // See deferredTurnSwitchRef's own doc comment above - the hold itself is still
+          // turnHandoffDelayMs's per-move estimate (unchanged), but the tracker now also waits for
+          // animationsSettled to genuinely be true before it actually calls setCurrentPlayer, so a
+          // move whose real hop outlasts that estimate no longer flips the header/avatar early.
+          deferredTurnSwitchRef.current?.schedule(
+            player,
+            turnHandoffDelayMs(TURN_CHANGE_HOLD_MS, lastMoveForHandoffRef.current.amount, HOP_DURATION_MS, lastMoveForHandoffRef.current.captured, CAPTURE_RETURN_HOPS),
+          )
           return
         }
         currentPlayerColorRef.current = player.color
@@ -255,7 +290,13 @@ export function useTurnManager(turnManager: TurnManagerLike) {
         setPendingMoves([])
         setNoMoveReason(reason)
       }),
-      turnManager.moveApplied.on(() => {
+      turnManager.moveApplied.on((result) => {
+        // See lastMoveForHandoffRef's own doc comment above - captured the same way
+        // botController.ts's/RemoteTurnManager.ts's own matching capture-bounce checks are (never
+        // capturedParkillerColor - an eliminated Parkiller has no yard to bounce home to, so it
+        // spawns no captureFlights animation to budget for, see this file's own captureFlightPending
+        // doc comment).
+        lastMoveForHandoffRef.current = { amount: result.amount, captured: Boolean(result.eliminatedByParkiller || result.capturedPiece) }
         setPendingMoves([])
         // Cleared here and re-set by rewardOffered/rewardForfeited if this move earned another one -
         // both happen synchronously within the same submitMove call, so React batches them together.
@@ -299,7 +340,7 @@ export function useTurnManager(turnManager: TurnManagerLike) {
     ]
     return () => {
       unsubscribers.forEach((off) => off())
-      if (deferredTurnTimeoutRef.current) clearTimeout(deferredTurnTimeoutRef.current)
+      deferredTurnSwitchRef.current?.dispose()
     }
   }, [turnManager])
 

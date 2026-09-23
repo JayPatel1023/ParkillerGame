@@ -87,7 +87,25 @@ function useHeldAlert<T>(value: T | null, holdMs: number = ALERT_HOLD_MS): T | n
       setHeld(value)
       shownAtRef.current = Date.now()
       holdMsRef.current = holdMs
-      return
+      // Bug found by close video review of a real local recording (b2_0586.jpg onward): the
+      // forfeited-reward "Perdida" toast stayed on screen unchanged through an entire turn
+      // handoff and the next player's whole idle-nudge/warning/countdown cycle - ~40+ seconds,
+      // not the ~20s HUMAN_REVEAL_HOLD_MS this hook is meant to cap it at. Root cause: this
+      // branch used to only *record* shownAtRef/holdMsRef and return, arming no timer of its own -
+      // the actual setTimeout lived solely in the value===null branch below, so the alert only
+      // ever cleared once the caller's raw source value (forfeitedReward/pendingReward/etc. in
+      // useTurnManager.ts) itself transitioned back to null, which only happens on that *same*
+      // player's own next diceRolled/moveApplied. If that player instead goes idle, the raw value
+      // never clears, this effect never re-runs, and the held alert is stuck indefinitely - the
+      // hold was enforcing a minimum display time, never the maximum it was meant to be. Arming
+      // the clear timer here too closes that gap: it lands on the exact same shownAt+holdMs
+      // deadline the value===null branch already computes below, so a fast-following event still
+      // gets its full minimum hold unchanged - this just also guarantees the alert self-clears by
+      // holdMs even if the source value never goes back to null on its own.
+      clearTimerRef.current = setTimeout(() => setHeld(null), holdMs)
+      return () => {
+        if (clearTimerRef.current) clearTimeout(clearTimerRef.current)
+      }
     }
     const elapsed = Date.now() - shownAtRef.current
     const remaining = Math.max(0, holdMsRef.current - elapsed)
@@ -99,6 +117,220 @@ function useHeldAlert<T>(value: T | null, holdMs: number = ALERT_HOLD_MS): T | n
   }, [value, holdMs])
 
   return held
+}
+
+// Bug found by close video review of a real local recording (b1_0451.jpg): with a reward already
+// chosen and its piece visibly hopping forward square by square, the turn-status header stayed
+// frozen on "Elija una ficha para su recompensa" for the whole ~10-12s of that animation. Root
+// cause: the header used to read the same useHeldAlert-derived visiblePendingReward the toast/
+// burst use, which - by design, see useHeldAlert's own doc comment above - keeps returning its
+// last truthy value for a while after the underlying pendingReward goes back to null, so the
+// toast doesn't "pop up and vanish too fast". Choosing a reward piece nulls the raw pendingReward
+// and starts that piece's own move animation in the same tick (useTurnManager.ts's moveApplied
+// handler), so animationsSettled goes false at the same instant - but useHeldAlert only decays
+// toward null over its hold window, so the header kept the stale prompt up for that whole window
+// (HUMAN_REVEAL_HOLD_MS - 20s locally - comfortably covering the hop animation). This is the fix:
+// a plain, ungated snapshot of "is a reward choice genuinely still open right now", mirroring how
+// visiblePendingMoves (this file) already tracks its own live equivalent with no hold at all.
+// Exported as a small pure function - rather than left inlined - purely so it has a seam this
+// component's own test-free (no React-rendering infra here) file otherwise wouldn't: see
+// tests/gameBoardRewardStatus.test.ts.
+export function computeAwaitingRewardChoice<T>(params: {
+  isMyTurn: boolean
+  rolling: boolean
+  animationsSettled: boolean
+  paused: boolean
+  pendingReward: T | null
+}): T | null {
+  const { isMyTurn, rolling, animationsSettled, paused, pendingReward } = params
+  return isMyTurn && !rolling && animationsSettled && !paused ? pendingReward : null
+}
+
+// Bug found by close video review of a real local recording (b2_0248.jpg, sandwiched between
+// b2_0247.jpg and b2_0249.jpg): with a piece choice genuinely still open the whole time - dice
+// values, pawn positions and the roll button's own state all identical across the three frames -
+// the turn-status header flickered from "Elija una ficha para mover" to the stale "Dados: X y Y ·
+// Parkiller: Z" line and back, for a single frame, then never again for the rest of that same
+// choice. Root cause: the header used to read visiblePendingMoves.length > 0 (this file) -
+// deliberately ANDed with animationsSettled so a piece can't be *selected* out of order mid-
+// animation, see that value's own comment above - but that same AND makes the header just as
+// sensitive to animationsSettled as piece-selectability is, and a momentary rolling/
+// animationsSettled dip, even one with no visible on-screen animation to justify it, empties
+// visiblePendingMoves for a tick; statusLine then falls straight through to the already-held,
+// stale visibleRoll case below it. This is the fix, mirroring computeAwaitingRewardChoice just
+// above: a snapshot of "is a move choice genuinely still open right now for the header" gated only
+// on what the *text* actually needs (isMyTurn, !rolling, !paused) and deliberately not on
+// animationsSettled - unlike visiblePendingMoves itself, which keeps that gate untouched
+// everywhere it actually drives interactivity (BoardScene's own pendingMoves prop,
+// handleSelectPiece, autoPlayIdleTurn). !rolling stays required on its own: pendingMoves populates
+// synchronously well before the dice-spin reveal finishes (see visiblePendingMoves's own comment),
+// so dropping that too would show this text mid-spin - the same "every step in order" bug already
+// fixed once for piece selectability, just recurring in this line instead. Exported as its own
+// pure function for the same reason computeAwaitingRewardChoice is: see
+// tests/gameBoardMoveChoiceStatus.test.ts.
+export function computeAwaitingMoveChoice<T>(params: {
+  isMyTurn: boolean
+  rolling: boolean
+  paused: boolean
+  pendingMoves: T[]
+}): T[] {
+  const { isMyTurn, rolling, paused, pendingMoves } = params
+  return isMyTurn && !rolling && !paused ? pendingMoves : []
+}
+
+// Bug found by close video review of a real local recording (b2_0353.jpg vs b2_0355.jpg, ~2s
+// apart): right as a turn hands off to a *different* player after a long move (any capture/finish
+// reward - REWARD_UNIT*2=20 or a split 10, see turnManager.ts - or a plain sum-dice move of 7+),
+// the banner switched to this player's "Tire los dados para empezar su turno" roll prompt the
+// instant useTurnManager's own fixed TURN_CHANGE_HOLD_MS (3000ms) elapsed - but the roll button
+// right next to it (disabled={!canRoll}) stayed dark for another moment, because canRoll also
+// requires animationsSettled, which doesn't catch up until the outgoing move's own hop animation
+// genuinely finishes (HOP_DURATION 0.48s per square, hop count = pip count - piecePosition.ts's
+// getHopWaypoints - so any 7+ move already outruns the fixed 3s hold). Every other branch of
+// statusLine below is gated on animationsSettled (directly, or via something that is, e.g.
+// awaitingRewardChoice/pendingMoves.length>0&&!rolling/visibleRoll's own held value having already
+// decayed) before it can ever reach this literal string - this was the one branch that wasn't,
+// so for that ~1-2s window the banner told the player to roll while the button they'd click to do
+// it was still visibly refusing them. Gating on canRoll here can't disagree with the button, since
+// canRoll is the exact same value the button already reads (see cardRollButtonStyle/disabled
+// below) - this is a plain seam so that guarantee has a test, same reasoning as
+// computeAwaitingRewardChoice just above: see tests/gameBoardRollPromptStatus.test.ts.
+export function computeRollPromptStatusLine(params: { canRoll: boolean }): string {
+  return params.canRoll ? 'Tire los dados para empezar su turno' : 'Un momento…'
+}
+
+// Bug found by close video review of a real local recording (b3_0131.jpg, sandwiched between
+// b3_0130.jpg and b3_0133.jpg): right as a bot's roll that left it with zero legal moves handed
+// the turn straight to the next (different) player, that next player's freshly-flipped "TURNO DE
+// X" header showed the *previous* player's own "Dados: A y B · Parkiller: C" numbers for about two
+// seconds - despite no piece anywhere on the board actually moving in that window - before
+// collapsing to the correct "Tire los dados para empezar su turno" prompt. Root cause:
+// turnManager.ts's own requestRoll fires diceRolled, moveNotPossible('none') and
+// turnStarted(nextPlayer) all synchronously for that kind of forfeited roll, so useTurnManager.ts
+// arms two *independent* timers off that same instant: DICE_SPIN_MS (2000ms) later, diceRolled's
+// own handler sets the real `lastRoll` (still the forfeiting player's own roll, since
+// currentPlayer hasn't flipped yet); TURN_CHANGE_HOLD_MS (3000ms) later, turnStarted's
+// different-player branch flips currentPlayer to the next player and nulls the underlying
+// lastRoll. visibleRoll (useHeldAlert, GameBoardScreen's own render body) captures its display
+// hold at the *first* of those two instants - while currentPlayer is still the forfeiting player -
+// so by the time currentPlayer flips a second later, visibleRoll's own hold clock (holdMsFor's
+// short bot pacing, captured before the flip) still has time left on it and keeps returning that
+// stale roll, now rendered under the new player's header. A normal (non-forfeited) bot move takes
+// long enough for the hold to have already expired by the time the handoff completes, which is why
+// this only surfaces on an immediately-forfeited roll.
+//
+// Fixed by tracking whose turn a given roll actually belongs to - GameBoardScreen's own
+// rollOwnerRef, captured at the exact instant lastRoll first goes non-null, which (per the timing
+// above) is always still that roller's own turn for both this handoff case and the ordinary
+// same-player-bonus case - and refusing to show visibleRoll's numbers under any *other* player's
+// header, however much of its own display hold is still left. Exported as its own pure function,
+// same reasoning as computeAwaitingRewardChoice/computeAwaitingMoveChoice/
+// computeRollPromptStatusLine above: this component has no React-rendering test infra, so
+// tests/turnRollOwnership.test.ts exercises this gating directly instead.
+export function computeVisibleRollForOwner<T>(params: {
+  visibleRoll: T | null
+  rolling: boolean
+  rollOwnerColor: PieceColor | null
+  currentPlayerColor: PieceColor
+}): T | null {
+  const { visibleRoll, rolling, rollOwnerColor, currentPlayerColor } = params
+  return visibleRoll && !rolling && rollOwnerColor === currentPlayerColor ? visibleRoll : null
+}
+
+// Found via a real local (vs-bots) recording (b2_0369 onward): once it became a bot's turn, the
+// turn-status subtitle froze on "Esperando el turno de X..." for that bot's *entire* turn, never
+// updating even while the dice were visibly rolling (the roll button flipping RODANDO.../TIRAR
+// DADOS, the physical dice changing 1&3 -> 6&6 -> 1&1) and a pawn was visibly animating out of its
+// yard along the track. Root cause: the plain `!isMyTurn` branch this replaces was built (commit
+// da4c6dc) purely for ONLINE's untrusted-other-client case, where isMyTurn is false because the
+// turn genuinely belongs to a different device and there's nothing else honest to report - but
+// commit cb3c95b later reused that exact same localPlayerColor/isMyTurn plumbing for local
+// vs-bots play too ("so GameBoardScreen needed zero changes"), which silently swept a bot's whole
+// turn under that same online-only placeholder. useTurnManager.ts's own diceRolled/
+// moveChoicesReady handlers populate rolling/lastRoll/pendingMoves/pendingReward identically
+// regardless of whose turn it is (see that file's own "fires...regardless of who triggered it"
+// comment) - the data was there the whole time, GameBoardScreen just never read it for anyone but
+// the local human.
+//
+// This is that missing read: takes the *raw* rolling/pendingMoves/pendingReward/visibleRoll (not
+// the isMyTurn-gated visible*/awaiting* values GameBoardScreen derives for interaction-gating
+// purposes, which are always empty/null during a bot's turn since isMyTurn is false there) and
+// narrates them in third person instead of the human-directed imperative copy those drive
+// ("Elija..."). Purely a text choice, not a gate - canRoll/awaitingPieceChoice/visiblePendingMoves
+// stay isMyTurn-gated exactly as before, so a bot's turn still can't be clicked into. Falls back
+// to the same plain "Esperando el turno de X..." placeholder for a genuine online other-client
+// turn (!isLocalGame - online never reaches any of the bot-specific branches below, since only
+// local play ever has bot seats at all) and for a local bot's turn before its first roll has
+// actually landed. Exported as its own pure function, same as computeAwaitingRewardChoice just
+// above, for the same reason: this component has no React-rendering test infra, so
+// tests/gameBoardBotStatus.test.ts exercises this directly instead.
+export function computeBotStatusLine(params: {
+  isLocalGame: boolean
+  rolling: boolean
+  animationsSettled: boolean
+  pendingReward: unknown
+  pendingMoves: unknown[]
+  visibleRoll: { dieA: number; dieB: number; blackDie: number } | null
+  isDouble: boolean
+  currentPlayerColor: string
+}): string {
+  const { isLocalGame, rolling, animationsSettled, pendingReward, pendingMoves, visibleRoll, isDouble, currentPlayerColor } = params
+  const waiting = `Esperando el turno de ${currentPlayerColor}...`
+  if (!isLocalGame) return waiting
+  if (rolling) return `${currentPlayerColor} está tirando los dados...`
+  if (animationsSettled && pendingReward) return `${currentPlayerColor} está eligiendo una ficha para su recompensa...`
+  if (animationsSettled && pendingMoves.length > 0) return `${currentPlayerColor} está eligiendo una ficha...`
+  if (visibleRoll) {
+    return `Dados: ${visibleRoll.dieA} y ${visibleRoll.dieB}${isDouble ? ' (dobles)' : ''} · Parkiller: ${visibleRoll.blackDie} · ${currentPlayerColor} está jugando...`
+  }
+  return waiting
+}
+
+// Bug found by close video review of a real local recording (b2.mp4, ~t=106-119s, two-player
+// hotseat, Red's turn): with a piece choice genuinely still open the whole window - dice values,
+// pawn positions and every button state identical throughout, no piece ever completing a new hop
+// - the turn-status *text* flickered between "Elija una ficha para mover" and the stale "Dados: X
+// y Y · Parkiller: Z" line three times over ~13 seconds. computeAwaitingMoveChoice above already
+// fixes that exact text (a live snapshot no longer gated on animationsSettled at all) - but
+// visiblePendingMoves/canRoll (GameBoardScreen, both still deliberately gated on animationsSettled
+// for interactivity - see visiblePendingMoves's own comment on why piece selectability needs that)
+// were the actual root cause underneath the text symptom, and are untouched by that fix: every
+// piece's own selectable glow and the TIRAR DADOS button itself kept flickering off and back on in
+// lockstep with the same repeated animationsSettled dips, just no longer narrated by the header.
+//
+// Root cause: captureFlightHold.ts's own CaptureFlightHoldTracker.trigger() (useTurnManager.ts)
+// re-arms captureFlightPending - one of the three flags animationsSettled ANDs together - off ANY
+// capture's own trailing edge, including one from an EARLIER move wholly unrelated to whichever
+// pendingMoves choice or roll opportunity is currently on screen. Each retrigger flips
+// animationsSettled back to false for CAPTURE_RETURN_HOPS*HOP_DURATION_MS (~1.44s), and
+// visiblePendingMoves/canRoll re-collapse the instant that happens, with nothing keeping an
+// already-revealed choice/roll-button state on screen through a dip that has nothing to do with
+// it - a chain of several such captures across one long turn is exactly what stretches this into
+// several ~1.4s blips over many seconds instead of one single-frame flicker.
+//
+// computeAnimationsSettledForPendingMoves is the fix, playing the same role for interactivity that
+// computeAwaitingMoveChoice plays for the text: latches "animationsSettled has been true at least
+// once for this exact `pendingMoves` reference" and keeps returning true for that same reference
+// even if animationsSettled dips again afterward. A brand new `pendingMoves` reference - every
+// real roll/move resolving hands back a fresh array, see useTurnManager.ts's own
+// setPendingMoves([])/setPendingMoves(moves) calls - still has to wait on a genuine
+// animationsSettled=true first, so a piece still can't become selectable (or the roll button
+// re-enable) before its own animation has actually settled; only an *already-revealed* value stops
+// being re-masked by an unrelated later dip.
+//
+// Deliberately a plain function threading its own previous return value back in via the caller's
+// ref (see its call site), not a React hook of its own - same reasoning as
+// CaptureFlightHoldTracker (captureFlightHold.ts) and every other compute* function in this file:
+// no React-rendering test infra here, so this needs a seam plain vitest can call directly - see
+// tests/gameBoardPendingMovesSettled.test.ts.
+export function computeAnimationsSettledForPendingMoves<T>(
+  prev: { pendingMoves: T; settled: boolean } | undefined,
+  pendingMoves: T,
+  animationsSettled: boolean,
+): { pendingMoves: T; settled: boolean } {
+  if (!prev || prev.pendingMoves !== pendingMoves) return { pendingMoves, settled: animationsSettled }
+  if (animationsSettled && !prev.settled) return { pendingMoves, settled: true }
+  return prev
 }
 
 // Reported directly, with a screenshot of the resting dice ("주사위가 항상 말들이 움직인다음에는
@@ -338,13 +570,25 @@ export function GameBoardScreen({
     })
   }
 
-  const canRoll = isMyTurn && pendingMoves.length === 0 && !winner && !rolling && !turnEndingSoon && animationsSettled && !paused
+  // See computeAnimationsSettledForPendingMoves's own doc comment above for the exact bug this
+  // fixes - canRoll/awaitingPieceChoice/visiblePendingMoves (below) all used to read the raw
+  // `animationsSettled` directly, so a later captureFlightPending retrigger off some EARLIER,
+  // unrelated capture's own trailing edge kept re-collapsing an already-revealed pendingMoves
+  // choice/roll opportunity. Threaded through a ref, same pattern captureFlightHoldRef
+  // (useTurnManager.ts) already uses for its own plain, non-React state class.
+  const pendingMovesSettledRef = useRef<{ pendingMoves: MoveOption[]; settled: boolean } | undefined>(undefined)
+  pendingMovesSettledRef.current = computeAnimationsSettledForPendingMoves(pendingMovesSettledRef.current, pendingMoves, animationsSettled)
+  const animationsSettledForPendingMoves = pendingMovesSettledRef.current.settled
+
+  const canRoll = isMyTurn && pendingMoves.length === 0 && !winner && !rolling && !turnEndingSoon && animationsSettledForPendingMoves && !paused
   // Same conditions as canRoll, but for the *other* half of a human's own turn - already rolled,
   // still needs to pick which piece to move. canRoll alone (the only thing the idle timers below
   // used to watch) left this half of a turn with no idle coverage at all. Reads the raw
   // `pendingMoves` rather than the visiblePendingMoves declared further below (same isMyTurn/
-  // animationsSettled gating either way, just declared before this point instead of after it).
-  const awaitingPieceChoice = isMyTurn && !winner && !rolling && !turnEndingSoon && animationsSettled && !paused && pendingMoves.length > 0
+  // animationsSettledForPendingMoves gating either way, just declared before this point instead of
+  // after it).
+  const awaitingPieceChoice =
+    isMyTurn && !winner && !rolling && !turnEndingSoon && animationsSettledForPendingMoves && !paused && pendingMoves.length > 0
 
   // Idle nudge: reported directly - a player who steps away or just spaces out mid-turn leaves
   // everyone else staring at a board that never visibly asks for input. Restarts whenever canRoll
@@ -433,6 +677,50 @@ export function GameBoardScreen({
   ]
   const isDouble = visibleRoll !== null && visibleRoll.dieA === visibleRoll.dieB
 
+  // Bug found by close video review of a real local recording (b3_0131.jpg): right as a bot's roll
+  // that left it with zero legal moves handed the turn straight to the next (different) player,
+  // that next player's freshly-flipped "TURNO DE X" header showed the *previous* player's own
+  // "Dados: A y B · Parkiller: C" numbers for about two seconds before collapsing to the correct
+  // "Tire los dados para empezar su turno" prompt - despite no piece anywhere on the board actually
+  // moving in that window. Root cause: turnManager.ts's own requestRoll fires diceRolled,
+  // moveNotPossible('none') and turnStarted(nextPlayer) all synchronously on that kind of forfeited
+  // roll (see turnManager.ts around its own PENDING_REWARD/no-legal-move handling), so
+  // useTurnManager.ts arms two *independent* timers off that same instant: DICE_SPIN_MS (2000ms)
+  // later, diceRolled's own handler sets the real `lastRoll` (still the forfeiting player's own
+  // roll, since currentPlayer hasn't flipped yet); TURN_CHANGE_HOLD_MS (3000ms) later, turnStarted's
+  // different-player branch flips currentPlayer to the next player and nulls the underlying
+  // lastRoll. visibleRoll (useHeldAlert, just above) captures its hold window at the *first* of
+  // those two instants - while currentPlayer is still the forfeiting player - so by the time
+  // currentPlayer flips a second later, visibleRoll's own hold clock (holdMsFor's short bot pacing,
+  // captured before the flip) still has time left on it and keeps returning that stale roll, now
+  // rendered under the new player's header. A normal (non-forfeited) bot move takes long enough for
+  // the hold to have already expired by the time the handoff completes, which is why this only
+  // surfaces on an immediately-forfeited roll.
+  //
+  // Fixed by tracking whose turn a given lastRoll actually belongs to - captured at the exact
+  // instant it first goes non-null, which (per the timing above) is always still that roller's own
+  // turn for both this handoff case and the ordinary same-player-bonus case - and refusing to show
+  // visibleRoll's numbers under any *other* player's header, however much of its own display hold
+  // is still left.
+  const rollOwnerRef = useRef<PieceColor | null>(null)
+  useEffect(() => {
+    if (lastRoll) rollOwnerRef.current = currentPlayer.color
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastRoll])
+  // Exported as its own pure function, same reasoning as computeAwaitingRewardChoice/
+  // computeAwaitingMoveChoice/computeRollPromptStatusLine above: this component has no
+  // React-rendering test infra, so tests/turnRollOwnership.test.ts exercises this gating directly
+  // instead. Returns visibleRoll unchanged when it's genuinely still the current player's own roll
+  // (the ordinary case, every render outside the handoff-race window above), null otherwise so the
+  // ternary below falls through to computeRollPromptStatusLine instead of showing someone else's
+  // numbers.
+  const rollToShow = computeVisibleRollForOwner({
+    visibleRoll,
+    rolling,
+    rollOwnerColor: rollOwnerRef.current,
+    currentPlayerColor: currentPlayer.color,
+  })
+
   // Only the current turn's own piece choices are ever meant to be actionable - every online
   // client replays the same broadcast dice roll locally (see MoveAnimationInfo's own comment), so
   // pendingMoves gets populated identically on every client regardless of whose turn it actually
@@ -449,11 +737,33 @@ export function GameBoardScreen({
   // specifically to track that window, and awaitingPieceChoice (this file, driving the "Elija una
   // ficha" text prompt) already correctly waits on it - this value, driving every piece's own
   // `selectable` prop instead, was the one place that check got missed.
-  const visiblePendingMoves = isMyTurn && !rolling && animationsSettled && !paused ? pendingMoves : []
+  //
+  // Reads animationsSettledForPendingMoves (not the raw animationsSettled) - see
+  // computeAnimationsSettledForPendingMoves's own doc comment above: a fresh pendingMoves value
+  // still has to wait for a genuine settle here, same as always, but an already-revealed one no
+  // longer gets re-masked by a later, unrelated captureFlightPending retrigger.
+  const visiblePendingMoves = isMyTurn && !rolling && animationsSettledForPendingMoves && !paused ? pendingMoves : []
   // See ALERT_HOLD_MS's own doc comment above - held so a fast-following move can't clear these
   // again before there's been real time to read them.
   const visiblePendingReward = useHeldAlert(animationsSettled ? pendingReward : null, holdMsFor(ALERT_HOLD_MS, currentPlayer.color))
   const visibleForfeitedReward = useHeldAlert(animationsSettled ? forfeitedReward : null, holdMsFor(ALERT_HOLD_MS, currentPlayer.color))
+  // Immediate, animation-gated - unlike visiblePendingReward just above (deliberately held via
+  // useHeldAlert so RewardToast/RewardBurst get their own longer visibility window, see
+  // useHeldAlert's own doc comment), the turn-status text below must stop saying "choose a piece
+  // for your reward" the instant the player actually picks one, even though that pick's own
+  // reward-move animation keeps visiblePendingReward (and so the toast/burst) alive for a while
+  // longer. Reported directly from a real local recording: the header stayed frozen on "Elija una
+  // ficha para su recompensa" for the whole ~10-12s the chosen reward piece was visibly hopping
+  // forward, because the header was reading visiblePendingReward instead of the raw, ungated
+  // pendingReward - mirrors how visiblePendingMoves above already tracks live state with no hold.
+  // Pulled out into its own exported, pure function (rather than inlined like visiblePendingMoves
+  // just above) purely so it has a testable seam - this component has no React-rendering test
+  // infra, so tests/gameBoardRewardStatus.test.ts exercises this gating directly instead.
+  const awaitingRewardChoice = computeAwaitingRewardChoice({ isMyTurn, rolling, animationsSettled, paused, pendingReward })
+  // See computeAwaitingMoveChoice's own doc comment above - the turn-status header's live,
+  // unheld snapshot of "is a piece choice still open right now", deliberately not gated on
+  // animationsSettled the way visiblePendingMoves (piece selectability) is.
+  const awaitingMoveChoice = computeAwaitingMoveChoice({ isMyTurn, rolling, paused, pendingMoves })
 
   // Requested directly ("cuando se elimina a un peón o un peón llega a la meta debe haber alguna
   // celebración con música"): every capture (a regular pawn's own move, or a Parki eliminating an
@@ -576,6 +886,24 @@ export function GameBoardScreen({
     setPieceChoice(null)
   }
 
+  // See computeBotStatusLine's own doc comment above - what the subtitle says during a bot's turn
+  // (isLocalGame && !isMyTurn), instead of the generic online-only "Esperando..." placeholder.
+  // Passes rollToShow, not the raw visibleRoll - same reasoning as rollToShow's own doc comment
+  // just above and its use in the human-facing branch further below: a still-held visibleRoll can
+  // briefly belong to the *previous* player's own immediately-forfeited roll right as the handoff
+  // to this (possibly bot-owned) turn completes, and this branch must not narrate that stale roll
+  // as if it were this player's own.
+  const botStatusLine = computeBotStatusLine({
+    isLocalGame,
+    rolling,
+    animationsSettled,
+    pendingReward,
+    pendingMoves,
+    visibleRoll: rollToShow,
+    isDouble,
+    currentPlayerColor: currentPlayer.color,
+  })
+
   // What the turn banner's subtitle says - one place for this instead of scattering the same
   // priority order (doubles warning > not-my-turn > reward > move prompt > roll prompt) across
   // JSX conditionals.
@@ -592,18 +920,25 @@ export function GameBoardScreen({
     : eliminatedByDoubles
     ? `Tercer dobles seguido: ${eliminatedByDoubles.color} pierde una ficha`
     : !isMyTurn
-      ? `Esperando el turno de ${currentPlayer.color}...`
+      ? botStatusLine
       : noMoveReason && !rolling
         ? 'Ningún movimiento posible con esta tirada'
         : pieceChoice
           ? 'Elija con qué dado moverla'
-          : visiblePendingReward
+          : awaitingRewardChoice
             ? 'Elija una ficha para su recompensa'
-            : visiblePendingMoves.length > 0
+            // See computeAwaitingMoveChoice's own doc comment above (b2_0248.jpg) - reads the raw,
+            // unheld awaitingMoveChoice rather than the animation-gated visiblePendingMoves, so a
+            // momentary rolling/animationsSettled blip can't flicker this text away for a tick.
+            : awaitingMoveChoice.length > 0
               ? 'Elija una ficha para mover'
-              : visibleRoll && !rolling
-                ? `Dados: ${visibleRoll.dieA} y ${visibleRoll.dieB}${isDouble ? ' (dobles)' : ''} · Parkiller: ${visibleRoll.blackDie}`
-                : 'Tire los dados para empezar su turno'
+              // See rollToShow's own doc comment above (b3_0131.jpg) - without the ownership check
+              // it applies, a still-held visibleRoll left over from the *previous* player's
+              // immediately-forfeited roll could keep showing that player's own numbers for a
+              // moment under this (new) player's freshly-flipped header.
+              : rollToShow
+                ? `Dados: ${rollToShow.dieA} y ${rollToShow.dieB}${isDouble ? ' (dobles)' : ''} · Parkiller: ${rollToShow.blackDie}`
+                : computeRollPromptStatusLine({ canRoll })
 
   return (
     <div className="game-screen-in" style={screenWrapperStyle}>
