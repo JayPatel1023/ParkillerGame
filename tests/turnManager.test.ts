@@ -499,6 +499,62 @@ describe('TurnManager - mandatory departure (PC2.1)', () => {
     expect(secondExit!.piece.state).toBe('OnTrack')
     expect(secondExit!.piece.trackPosition).toBe(0)
   })
+
+  // Investigated directly from a real local-play recording (roll "5 y 3": the mandatory exit
+  // correctly used the 5, but no piece ever moved with the 3, and the turn ended a few seconds
+  // later with no visible explanation ever appearing on screen) - a suspected corroboration of a
+  // separately-tracked "mandatory rule not enforced" class of bug, still worth locking in either
+  // way. Verified by direct execution, not just source reading, that this is NOT that bug: PC2.1's
+  // own exit lock only ever applies to the die that *is* the exit roll (see the sibling test just
+  // above - "the other die stays free in either order") - once that die's own mandatory exit is
+  // submitted, the *remaining* die is offered completely normally by a fresh offerMoves() call
+  // (continueAfterMove), and a genuinely empty result for it is a real, correctly-computed
+  // forfeiture (PC 5: "if the move is impossible, the roll is lost"), not a missed obligation.
+  // This is the gap the existing "reports 'none' when nothing in play could use the roll at all"
+  // test (further below) doesn't cover: that one forfeits straight from the very first
+  // offerMoves() call this roll, never having offered anything at all; this locks in the same
+  // outcome for a roll that offers (and applies) one real move first, then forfeits only the
+  // *other* die - moveApplied, then moveNotPossible, then turnStarted(the next player), all still
+  // synchronous within this one submitMove() call, exactly like the double case above but across a
+  // handoff instead of a same-player bonus turn.
+  it('forfeits the other die after a mandatory exit already used the first one, with the same synchronous moveApplied -> moveNotPossible -> turnStarted sequence', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    // Blocks die B (3) for the piece that's about to exit: PC2.4 barriers block passage, not just
+    // landing, and a barrier can never be captured - every other Red piece stays in the yard, and
+    // die B (3) isn't the exit roll, so none of them can use it either. Nothing anywhere can use
+    // die B once the exit spends die A.
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 3
+    blue.pieces[1].state = 'OnTrack'
+    blue.pieces[1].trackPosition = 3
+
+    const dice = new ScriptedDice([5, 3, 1]) // dieA=5 (the exit roll), dieB=3 - not a double
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let latestMoves: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((m) => (latestMoves = m))
+    manager.requestRoll()
+
+    const exitOption = latestMoves.find((m) => m.kind === 'ExitYard')
+    expect(exitOption).toBeTruthy()
+
+    const events: string[] = []
+    let turnStartedPlayerColor: string | null = null
+    manager.moveApplied.on(() => events.push('moveApplied'))
+    manager.moveNotPossible.on(() => events.push('moveNotPossible'))
+    manager.turnStarted.on((p) => {
+      events.push('turnStarted')
+      turnStartedPlayerColor = p.color
+    })
+
+    manager.submitMove(exitOption!.piece, exitOption!.amount)
+
+    expect(events).toEqual(['moveApplied', 'moveNotPossible', 'turnStarted'])
+    expect(turnStartedPlayerColor).toBe('Blue') // a real handoff, not a same-player bonus turn
+    expect(manager.currentPlayer.color).toBe('Blue')
+  })
 })
 
 describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
