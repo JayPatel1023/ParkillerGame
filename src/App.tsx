@@ -123,12 +123,32 @@ function LazyScreenFallback() {
 // fresh check periodically even on a long-lived tab - once a genuinely new service worker is
 // found, 'autoUpdate' mode still takes it from there (installs, activates, reloads) with no
 // further code needed here.
-const SW_UPDATE_CHECK_INTERVAL_MS = 20 * 60 * 1000
+//
+// Reported again, directly, still repeating the exact same "I already fixed this" symptom -
+// crucially, every one of those reports came only minutes after a fix had actually shipped, not
+// days. setInterval(fn, ms) never fires fn until the *first* ms has already elapsed - so a tab
+// that's been open since before this session's own fixes started shipping (the normal way this
+// app gets tested - see this comment's own opening line) genuinely could not have checked even
+// once yet, for up to the *entire* 20-minute window, no matter how many fixes landed in the
+// meantime or how hard the tab itself was reloaded (a plain reload re-navigates *through* whatever
+// service worker is already active - it doesn't make that worker itself check for a newer one any
+// sooner). Two changes: an immediate check right on registration (so a tab that's been open a
+// while catches up the instant this code itself runs, not up to 20 minutes later), and another the
+// moment the tab becomes visible again (switching back from another app/window/tab - the exact
+// moment a player is most likely to pick this back up expecting whatever was just fixed) - plus a
+// much shorter interval, since this app is under active, rapid, back-to-back testing, not the
+// occasional-use pattern a 20-minute cadence was originally sized for.
+const SW_UPDATE_CHECK_INTERVAL_MS = 2 * 60 * 1000
 
 export default function App() {
   useRegisterSW({
     onRegisteredSW(_swUrl, registration) {
       if (!registration) return
+      registration.update()
+      const onVisible = () => {
+        if (document.visibilityState === 'visible') registration.update()
+      }
+      document.addEventListener('visibilitychange', onVisible)
       setInterval(() => {
         registration.update()
       }, SW_UPDATE_CHECK_INTERVAL_MS)
