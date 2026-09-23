@@ -63,6 +63,25 @@ const DIE_SIZE = 0.34 * DICE_SCALE
 const BLACK_DIE_SCALE = 1
 const BLACK_DIE_SIZE = DIE_SIZE * BLACK_DIE_SCALE
 
+// Found via frame-by-frame review of a real local-play recording (b1_0250.jpg, mid-spin): all
+// three dice - both white ones and the black Parkiller die - showed byte-for-byte identical pip
+// orientation at the same instant, because every <DiceMesh> receives the exact same `rolling`
+// boolean (BoardScene.tsx's three call sites) and this used to advance rotation by a single fixed
+// rate (`delta*10`/`delta*8`) with no per-die variation - so three meshes fed the same `delta`
+// this frame always land on the exact same rotation. The `nudge` branch just below already solves
+// this same "reads as one rigid block" problem for the idle-nudge animation via `phaseOffset` (see
+// its own comment above); this carries that same per-die decorrelation over to the actual
+// roll-tumble, so each die spins at its own distinct rate and no longer mirrors the other two
+// frame-for-frame. Kept as a standalone pure function (rather than inlined in useFrame) so the
+// three dice's rotation deltas for a shared `delta` can be compared directly in a unit test -
+// there's no React-rendering test harness in this project to drive useFrame itself.
+export function rollingRotationDelta(delta: number, phaseOffset: number): { x: number; y: number } {
+  return {
+    x: delta * (10 + phaseOffset),
+    y: delta * (8 - phaseOffset * 0.6),
+  }
+}
+
 function pipPositions(value: number): [number, number][] {
   switch (value) {
     case 1:
@@ -271,8 +290,9 @@ export function DiceMesh({
     const mesh = meshRef.current
     if (!mesh) return
     if (rolling) {
-      mesh.rotation.x += delta * 10
-      mesh.rotation.y += delta * 8
+      const { x, y } = rollingRotationDelta(delta, phaseOffset)
+      mesh.rotation.x += x
+      mesh.rotation.y += y
       return
     }
     if (nudge) {
