@@ -40,16 +40,39 @@ button {
 }
 
 /* Confetti.tsx - each piece falls from top to well past the bottom of the overlay, drifting
-   sideways by its own random --drift and tumbling a full turn, so the burst reads as scattered
-   debris rather than uniform rain. */
+   sideways by its own random --drift. Tumbles on all three axes (rotateX/Y/Z, each piece's own
+   random --rx/--ry/--rz end value) instead of one flat 2D rotate() - paired with the wrapper's own
+   `perspective`, this is what actually makes each piece foreshorten/flip through 3D space as it
+   falls rather than just spinning in the screen plane. Requested directly ("더멋진애니머션효과도
+   넣어달라... 3D효과로" - a fancier animation, as a real 3D effect). */
 @keyframes confetti-fall {
   0% {
-    transform: translate(0, 0) rotate(0deg);
+    transform: translate3d(0, 0, 0) rotateX(0) rotateY(0) rotateZ(0);
     opacity: 1;
   }
   100% {
-    transform: translate(var(--drift), 115vh) rotate(600deg);
+    transform: translate3d(var(--drift), 115vh, 0) rotateX(var(--rx)) rotateY(var(--ry)) rotateZ(var(--rz));
     opacity: 0.9;
+  }
+}
+
+/* Confetti.tsx's two "party popper" corner bursts - launches up-and-inward from a bottom corner
+   (--burst-x/--burst-y, a negative Y so it rises), then arcs back down past the bottom edge under
+   the same falling/tumbling feel as confetti-fall (--land-x/--land-y, --rx/--ry/--rz), instead of
+   only ever raining from the top. Requested directly alongside confetti-fall's own 3D tumble - see
+   that keyframe's comment. */
+@keyframes confetti-cannon {
+  0% {
+    transform: translate3d(0, 0, 0) rotateX(0) rotateY(0) rotateZ(0) scale(0.6);
+    opacity: 1;
+  }
+  30% {
+    transform: translate3d(var(--burst-x), var(--burst-y), 0) rotateX(180deg) rotateY(140deg) rotateZ(200deg) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(var(--land-x), var(--land-y), 0) rotateX(var(--rx)) rotateY(var(--ry)) rotateZ(var(--rz)) scale(0.9);
+    opacity: 0;
   }
 }
 

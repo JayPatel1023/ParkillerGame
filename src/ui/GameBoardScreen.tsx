@@ -651,7 +651,7 @@ export function GameBoardScreen({
         </div>
       )}
 
-      <RewardBurst pendingReward={visiblePendingReward} />
+      <RewardBurst pendingReward={visiblePendingReward} forfeitedReward={visibleForfeitedReward} />
       <RewardToast pendingReward={visiblePendingReward} forfeitedReward={visibleForfeitedReward} />
       <EliminationToast eliminatedPiece={eliminatedByDoubles} reason="doubles" />
       <EliminationToast eliminatedPiece={parkillerVictim} reason="parkiller" />

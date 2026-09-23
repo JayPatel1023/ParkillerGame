@@ -10,7 +10,9 @@ import type { RewardGrant } from '../core/gameFlow/turnManager'
 // particle system - this overlay already lives outside the Canvas, same as RewardToast.
 const CAPTURE_COLORS = ['#ff6a4a', '#ffae42', '#ff3b3b', '#ffd76a']
 const FINISH_COLORS = ['#ffe08a', '#ffd24a', '#fff4c2', '#ffb347']
+const FORFEIT_COLORS = ['#8a7a6a', '#5c5248', '#43392f', '#7a3a2e']
 const SPARK_COUNT = 18
+const SHARD_COUNT = 12
 
 // Requested directly ("...재미난 음악효과와 장식효과를 주어야한다" - a capture should get fun
 // decoration too, not just a notification): capture's own sparks used to be plain circles, same as
@@ -21,6 +23,12 @@ const SPARK_COUNT = 18
 // and the ask here was specifically about captures.
 const STAR_CLIP_PATH = 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)'
 
+// A jagged glass-shard quad, for the forfeited burst below - visually reads as "broken debris",
+// distinct from the star (magic) and circle (glow) shapes the two success reasons already use.
+const SHARD_CLIP_PATH = 'polygon(50% 0%, 100% 38%, 62% 100%, 15% 68%)'
+
+type BurstReason = 'capture' | 'finish' | 'forfeit'
+
 interface Spark {
   angle: number
   distance: number
@@ -29,11 +37,24 @@ interface Spark {
   color: string
 }
 
-function useSparks(reason: 'capture' | 'finish', seed: number): Spark[] {
+function useSparks(reason: BurstReason, seed: number): Spark[] {
   // seed forces a fresh random layout per grant (see toastKeyRef below) without needing a random
   // call outside render, which would break strict-mode double-invoke assumptions - useMemo keyed
   // on the grant identity is enough since a new grant already means a new seed value.
   return useMemo(() => {
+    if (reason === 'forfeit') {
+      // Requested directly ("Perdida" toast reported as unimpressive - see RewardToast.tsx's own
+      // doc comment): unlike capture/finish's full-circle radiating sparks, these fall - angle is
+      // constrained to the downward hemisphere (CSS rotate 0deg = +x/right, 90deg = straight down)
+      // so the shards read as debris dropping away from the broken card, not a celebration.
+      return Array.from({ length: SHARD_COUNT }, (_, i) => ({
+        angle: (140 / SHARD_COUNT) * i + 20 + (Math.random() - 0.5) * 10,
+        distance: 60 + Math.random() * 80,
+        delay: Math.random() * 0.08,
+        size: 6 + Math.random() * 6,
+        color: FORFEIT_COLORS[Math.floor(Math.random() * FORFEIT_COLORS.length)],
+      }))
+    }
     const colors = reason === 'capture' ? CAPTURE_COLORS : FINISH_COLORS
     return Array.from({ length: SPARK_COUNT }, (_, i) => ({
       angle: (360 / SPARK_COUNT) * i + (Math.random() - 0.5) * 14,
@@ -46,13 +67,16 @@ function useSparks(reason: 'capture' | 'finish', seed: number): Spark[] {
   }, [seed])
 }
 
-function Burst({ reason, seed }: { reason: 'capture' | 'finish'; seed: number }) {
+const RING_COLOR: Record<BurstReason, string> = { capture: '#ff6a4a', finish: '#ffd24a', forfeit: '#6b4a3a' }
+
+function Burst({ reason, seed }: { reason: BurstReason; seed: number }) {
   const sparks = useSparks(reason, seed)
+  const isForfeit = reason === 'forfeit'
   return (
     <div style={burstWrapperStyle}>
       {/* Expanding ring shockwave - the "impact" half of the effect, distinct from the sparks'
-          own "scatter" half so a capture reads as a hit, not just a sparkle. */}
-      <div style={{ ...ringStyle, borderColor: reason === 'capture' ? '#ff6a4a' : '#ffd24a' }} />
+          own "scatter" half so a capture (or a broken reward) reads as a hit, not just a sparkle. */}
+      <div style={{ ...ringStyle, borderColor: RING_COLOR[reason] }} />
       {sparks.map((s, i) => (
         <span
           key={i}
@@ -63,14 +87,16 @@ function Burst({ reason, seed }: { reason: 'capture' | 'finish'; seed: number })
               left: '50%',
               width: reason === 'capture' ? s.size * 1.6 : s.size,
               height: reason === 'capture' ? s.size * 1.6 : s.size,
-              borderRadius: reason === 'capture' ? 0 : '50%',
-              clipPath: reason === 'capture' ? STAR_CLIP_PATH : undefined,
+              borderRadius: reason === 'finish' ? '50%' : 0,
+              clipPath: reason === 'capture' ? STAR_CLIP_PATH : isForfeit ? SHARD_CLIP_PATH : undefined,
               background: s.color,
-              boxShadow: reason === 'capture' ? 'none' : `0 0 6px ${s.color}`,
+              boxShadow: reason === 'finish' ? `0 0 6px ${s.color}` : 'none',
               filter: reason === 'capture' ? `drop-shadow(0 0 4px ${s.color})` : undefined,
               '--angle': `${s.angle}deg`,
               '--distance': `${s.distance}px`,
-              animation: `reward-spark 0.6s ease-out ${s.delay}s both`,
+              animation: isForfeit
+                ? `reward-shard-fall 0.85s cubic-bezier(0.55, 0, 0.85, 0.35) ${s.delay}s both`
+                : `reward-spark 0.6s ease-out ${s.delay}s both`,
             } as React.CSSProperties
           }
         />
@@ -79,6 +105,10 @@ function Burst({ reason, seed }: { reason: 'capture' | 'finish'; seed: number })
         @keyframes reward-spark {
           0% { transform: translate(-50%, -50%) rotate(var(--angle)) translateX(0) scale(1); opacity: 1; }
           100% { transform: translate(-50%, -50%) rotate(var(--angle)) translateX(var(--distance)) scale(0.3); opacity: 0; }
+        }
+        @keyframes reward-shard-fall {
+          0% { transform: translate(-50%, -50%) rotate(var(--angle)) translateX(0) rotate(0deg); opacity: 1; }
+          100% { transform: translate(-50%, -50%) rotate(var(--angle)) translateX(var(--distance)) rotate(240deg); opacity: 0; }
         }
         @keyframes reward-ring {
           0% { transform: scale(0.2); opacity: 0.8; border-width: 4px; }
@@ -89,12 +119,23 @@ function Burst({ reason, seed }: { reason: 'capture' | 'finish'; seed: number })
   )
 }
 
-export function RewardBurst({ pendingReward }: { pendingReward: RewardGrant | null }) {
-  // Only a real, claimed grant is worth celebrating - a forfeited reward (RewardToast's own
-  // "Perdida" state) is the opposite of exciting, so it never triggers this.
-  //
+export function RewardBurst({
+  pendingReward,
+  forfeitedReward,
+}: {
+  pendingReward: RewardGrant | null
+  forfeitedReward: RewardGrant | null
+}) {
+  // Used to skip the forfeited case entirely - a lost reward felt like the opposite of exciting, so
+  // it got no burst at all. Reversed on direct request ("Perdida" toast called out as flat/boring,
+  // asked for flashier visuals - see RewardToast.tsx's own doc comment): now fires its own distinct
+  // "falling shards" burst (downward-biased debris, not radiating sparks/stars) instead of reusing
+  // the success reasons' celebratory look, so it reads as dramatic without reading as a win.
+  const shown = pendingReward ?? forfeitedReward
+  const reason: BurstReason = pendingReward ? pendingReward.reason : 'forfeit'
+
   // Incrementing this key *during render* (the first version of this component did) reruns on
-  // every render where pendingReward is truthy, not just when a new grant actually arrives - since
+  // every render where a reward is showing, not just when a new grant actually arrives - since
   // GameBoardScreen re-renders continuously while a reward is pending (piece animations, etc.),
   // that remounted Burst on nearly every frame, permanently resetting its own CSS animation back to
   // its very first, barely-visible instant - confirmed directly via a Playwright capture sequence
@@ -103,11 +144,11 @@ export function RewardBurst({ pendingReward }: { pendingReward: RewardGrant | nu
   // toastKeyRef already uses, only fires once per actual new grant.
   const burstKeyRef = useRef(0)
   useEffect(() => {
-    if (pendingReward) burstKeyRef.current++
-  }, [pendingReward])
+    if (shown) burstKeyRef.current++
+  }, [pendingReward, forfeitedReward])
 
-  if (!pendingReward) return null
-  return <Burst key={burstKeyRef.current} reason={pendingReward.reason} seed={burstKeyRef.current} />
+  if (!shown) return null
+  return <Burst key={burstKeyRef.current} reason={reason} seed={burstKeyRef.current} />
 }
 
 // RewardToast's own wrapper anchors at top:18% as its *top edge*, not its center - its card then
