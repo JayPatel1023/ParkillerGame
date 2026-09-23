@@ -38,8 +38,11 @@ const RETRY_BASE_DELAY_MS = 800
 // runaway loop, while a temporary one clears itself up automatically the next time this fires.
 const MAX_RETRY_DELAY_MS = 15_000
 
-const textureCache = new Map<string, THREE.Texture>()
-const loader = new THREE.TextureLoader()
+// Exported (alongside `inFlight` below and `loadWithRetry` further down) purely so the retry/abort
+// mechanism is directly testable without a React-rendering harness (this project has none - see
+// tests/toastFadeOutHold.test.ts for the same pattern) - production callers only ever use
+// `preloadTexture`/`useRobustTexture`.
+export const textureCache = new Map<string, THREE.Texture>()
 
 // Reported again after the fix above shipped, still persistently blank ("그림이 비루스먹은것처럼
 // 없어지고 흰판이다" - the image vanishes like it's got a virus, it's a white board) - this time on
@@ -53,7 +56,7 @@ const loader = new THREE.TextureLoader()
 // limit and cause the very "images don't load" symptom this hook was meant to fix - likely worse
 // than the original bug for exactly this reason. `inFlight` tracks one real load per url, with every
 // concurrent caller just subscribing to its result instead of starting its own.
-const inFlight = new Map<string, Set<(texture: THREE.Texture) => void>>()
+export const inFlight = new Map<string, Set<(texture: THREE.Texture) => void>>()
 
 // Reported directly again, still blank on Windows after every fix above had already shipped, this
 // time with a DevTools Network-tab screenshot: the board texture wasn't a failed request retrying
@@ -68,7 +71,38 @@ const inFlight = new Map<string, Set<(texture: THREE.Texture) => void>>()
 // so a hung request eventually gets abandoned for a fresh one instead of blocking forever.
 const LOAD_TIMEOUT_MS = 10_000
 
-function loadWithRetry(url: string, attempt: number) {
+// Reported directly, with three DevTools Network-tab screenshots taken a few seconds apart during
+// a real game ("좀빨리 버튼들을 누르면 이렇게 된다" - if you press the buttons a bit fast, this
+// happens): the SAME resource (board_2p.webp, parkiller.stl) showed up as two separate completed
+// log entries - `?retry=2` AND `?retry=3`, both eventually 200 - one of them absurdly slow
+// (12.67s) for a file that loads in well under a second once it gets a clear run. Root cause:
+// `loader.load()` above had no cancellation of its own, and neither does the plain `Image()`/
+// `loader.load()` call the previous round of this hook used - when LOAD_TIMEOUT_MS's watchdog
+// fired and moved on to a fresh attempt, the OLD attempt's real browser request just kept running
+// in the background, uncancelled, competing for one of the browser's small number of per-origin
+// connections. The `settled` guard below already correctly no-ops that old attempt's own
+// load/error handling once it does eventually finish (confirmed: no stale-cache overwrite, no
+// double-notify - `retryAfterFailure` sets this SAME attempt's `settled` before scheduling the
+// next one) - the bug was never a correctness/state bug, only a wasted-connection one: every
+// watchdog-triggered retry added a brand new concurrent request on top of however many earlier
+// abandoned ones were still in flight, rather than replacing them, so one slow/contended moment
+// could snowball instead of recover. (Separately confirmed live, via Playwright: rushing through
+// Start -> local-play -> player-count -> color-select fires up to ~29 concurrent same-origin
+// requests - App.tsx's own mount-time preloads plus GameBoardScreen's whole dev-mode dependency
+// tree - easily enough to push a large file's first attempt past LOAD_TIMEOUT_MS on a real,
+// ordinarily slow/contended connection, even with DevTools "No throttling" set.)
+//
+// Fixed by fetching the image ourselves instead of handing the URL to TextureLoader/ImageLoader:
+// `fetch()` returns a real, abortable promise, so `retryAfterFailure` can now call
+// `controller.abort()` on the attempt it's superseding before starting the next one, which drops
+// that attempt's connection instead of leaving it to run to completion for no reason. The image is
+// then decoded via `createImageBitmap()` - the same fetch+blob+createImageBitmap recipe THREE's
+// own `ImageBitmapLoader` uses internally (see node_modules/three/src/loaders/ImageBitmapLoader.js)
+// - with the same `{ premultiplyAlpha: 'none', colorSpaceConversion: 'none' }` options that loader
+// passes, so the decoded pixels match what TextureLoader would have produced. useBoardColorSampler
+// already type-checks `texture.image` as `HTMLImageElement | ImageBitmap`, so this doesn't disturb
+// that caller either.
+export function loadWithRetry(url: string, attempt: number) {
   // A failed fetch can still be an HTTP 200 (e.g. an SPA history-fallback serving index.html for a
   // path that doesn't exist, which several static hosts - including this app's own preview/deploy
   // setup - do instead of a real 404) with `Cache-Control: no-cache`, which permits the browser to
@@ -83,32 +117,45 @@ function loadWithRetry(url: string, attempt: number) {
   // late success arriving just after the watchdog already moved on to a fresh attempt is simply
   // dropped - the new attempt's own callbacks are what carry the texture through from here).
   let settled = false
+  // One AbortController per attempt, so retiring an attempt can actually cancel its underlying
+  // fetch instead of only gating what happens with its result (see this function's own doc
+  // comment above).
+  const controller = new AbortController()
   const retryAfterFailure = () => {
     if (settled) return
     settled = true
+    controller.abort()
     // See MAX_RETRY_DELAY_MS's own doc comment above - never actually gives up; the fallback
     // stays showing only until whichever attempt finally lands.
     const delay = Math.min(RETRY_BASE_DELAY_MS * attempt, MAX_RETRY_DELAY_MS)
     setTimeout(() => loadWithRetry(url, attempt + 1), delay)
   }
   const watchdog = setTimeout(retryAfterFailure, LOAD_TIMEOUT_MS)
-  loader.load(
-    requestUrl,
-    (texture) => {
+  fetch(requestUrl, { signal: controller.signal })
+    .then((response) => {
+      if (!response.ok) throw new Error(`useRobustTexture: HTTP ${response.status} for ${requestUrl}`)
+      return response.blob()
+    })
+    .then((blob) => createImageBitmap(blob, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' }))
+    .then((imageBitmap) => {
       if (settled) return
       settled = true
       clearTimeout(watchdog)
+      const texture = new THREE.Texture(imageBitmap as unknown as TexImageSource)
+      texture.needsUpdate = true
       textureCache.set(url, texture)
       const subscribers = inFlight.get(url)
       inFlight.delete(url)
       subscribers?.forEach((notify) => notify(texture))
-    },
-    undefined,
-    () => {
+    })
+    .catch(() => {
+      // Also reached when `controller.abort()` above rejects this attempt's own fetch - `settled`
+      // is already true by then (retryAfterFailure sets it before aborting), so this is a no-op:
+      // the attempt that superseded this one is already the one driving things forward.
+      if (settled) return
       clearTimeout(watchdog)
       retryAfterFailure()
-    },
-  )
+    })
 }
 
 // Reported directly, with a video: even a healthy fetch still takes some non-zero real time, so

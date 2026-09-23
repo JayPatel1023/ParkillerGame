@@ -29,29 +29,57 @@ const MAX_RETRY_DELAY_MS = 15_000
 // there directly via a stuck "(pending)" DevTools request).
 const LOAD_TIMEOUT_MS = 10_000
 
-const geometryCache = new Map<string, BufferGeometry>()
+// Exported (alongside `inFlight` below and `loadWithRetry` further down) purely so the retry/abort
+// mechanism is directly testable without a React-rendering harness (this project has none - see
+// tests/toastFadeOutHold.test.ts for the same pattern) - production callers only ever use
+// `preloadSTL`/`useRobustSTL`.
+export const geometryCache = new Map<string, BufferGeometry>()
 const loader = new STLLoader()
-const inFlight = new Map<string, Set<(geometry: BufferGeometry) => void>>()
+export const inFlight = new Map<string, Set<(geometry: BufferGeometry) => void>>()
 
-function loadWithRetry(url: string, attempt: number) {
+// Reported directly, with three DevTools Network-tab screenshots taken a few seconds apart during
+// a real game ("좀빨리 버튼들을 누르면 이렇게 된다" - if you press the buttons a bit fast, this
+// happens): `parkiller.stl?retry=2` AND `parkiller.stl?retry=3` both showed up as separate,
+// eventually-completed (200) log entries for what should be one logical load, one of them taking
+// 12.67s for a file that (per its own sibling entry) loads in a little over a second once it gets
+// a clear run. Same root cause and same fix as useRobustTexture.ts's own matching round of this -
+// see that file's doc comment for the full writeup (confirmed live via Playwright: the watchdog
+// firing a retry never cancelled the attempt it was superseding, so the old attempt's real request
+// just kept running and completing on its own, as a second concurrent connection rather than being
+// replaced; the `settled` guard already correctly no-ops its late result, so this was a wasted-
+// connection bug, not a state-corruption one). `STLLoader.load()`'s own delegate, three's
+// `FileLoader`, has no cancellation hook either (its own source carries a literal "An abort
+// controller could be added within a future PR" comment) - fixed the same way, by fetching the
+// bytes ourselves behind an `AbortController` and handing them to `loader.parse()`, which
+// `STLLoader.load()` already calls internally on whatever `FileLoader` hands it, so this is a
+// faithful substitution, not a new code path.
+export function loadWithRetry(url: string, attempt: number) {
   const requestUrl = attempt === 1 ? url : `${url}${url.includes('?') ? '&' : '?'}retry=${attempt}`
   // See LOAD_TIMEOUT_MS's own doc comment above, and useRobustTexture.ts's matching `settled`
   // guard - stops both the watchdog and a late-arriving real load/error from double-handling the
   // same attempt.
   let settled = false
+  // One AbortController per attempt, so retiring an attempt can actually cancel its underlying
+  // fetch instead of only gating what happens with its result.
+  const controller = new AbortController()
   const retryAfterFailure = () => {
     if (settled) return
     settled = true
+    controller.abort()
     const delay = Math.min(RETRY_BASE_DELAY_MS * attempt, MAX_RETRY_DELAY_MS)
     setTimeout(() => loadWithRetry(url, attempt + 1), delay)
   }
   const watchdog = setTimeout(retryAfterFailure, LOAD_TIMEOUT_MS)
-  loader.load(
-    requestUrl,
-    (geometry) => {
+  fetch(requestUrl, { signal: controller.signal })
+    .then((response) => {
+      if (!response.ok) throw new Error(`useRobustSTL: HTTP ${response.status} for ${requestUrl}`)
+      return response.arrayBuffer()
+    })
+    .then((buffer) => {
       if (settled) return
       settled = true
       clearTimeout(watchdog)
+      const geometry = loader.parse(buffer)
       // The client's own STL scan (etc/'s "FIGURA DEL PARKILLER") was exported Z-up (tallest
       // dimension, hood-tip to base, is its Z axis - 33mm vs 18x18) rather than three.js's own
       // Y-up convention - rendered as-is, the whole figure lay on its side. Baked in once here
@@ -72,13 +100,15 @@ function loadWithRetry(url: string, attempt: number) {
       const subscribers = inFlight.get(url)
       inFlight.delete(url)
       subscribers?.forEach((notify) => notify(geometry))
-    },
-    undefined,
-    () => {
+    })
+    .catch(() => {
+      // Also reached when `controller.abort()` above rejects this attempt's own fetch - `settled`
+      // is already true by then (retryAfterFailure sets it before aborting), so this is a no-op:
+      // the attempt that superseded this one is already the one driving things forward.
+      if (settled) return
       clearTimeout(watchdog)
       retryAfterFailure()
-    },
-  )
+    })
 }
 
 export function preloadSTL(url: string): void {
