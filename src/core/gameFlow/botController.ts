@@ -3,7 +3,7 @@ import type { PieceColor } from '../pieceColor'
 import { isParkillerOnTrack, wouldCapture } from '../rules/parchisRules'
 import type { MoveOption, MoveResult } from '../rules/moveOption'
 import type { Piece } from '../pieces/piece'
-import type { DiceRoll } from './turnManager'
+import type { DiceRoll, ParkillerMoveResult } from './turnManager'
 import type { Listenable } from './turnManagerLike'
 import type { PlayerState } from './playerState'
 
@@ -97,6 +97,24 @@ const HOP_DURATION_MS = 480
 // (that's a bot-pacing-only allowance), so a human capturing with a small amount left the very next
 // bot free to roll while the captured pawn's own bounce was still playing. That listener now also
 // checks result.capturedPiece, not just result.eliminatedByParkiller - see its own doc comment.
+//
+// Reported a THIRD time, still the same underlying symptom, after both of the above had shipped and
+// been verified with passing tests: found by tracing every call site that ever touches busyUntilMs
+// against BoardScene.tsx's own spawnCaptureEffects once more, end to end - the *Parkiller's own
+// automatic move* (session.diceRolled's own subscriber, just below) can *itself* capture an opposing
+// pawn or Parkiller (PK5/PK6 - resolveParkillerMove's own doc comment in turnManager.ts, the exact
+// same rule code as the self-elimination case above, just the other direction: the Parkiller lands
+// on the pawn instead of the pawn landing on the Parkiller). That capture plays the identical
+// captureFlights bounce-home BoardScene spawns for any other capture - but nothing here ever
+// budgeted the extra CAPTURE_RETURN_HOPS*hopDurationMs for it: this class only ever learns the
+// Parkiller's own hop *distance* (roll.blackDie, from the diceRolled event itself), never whether
+// that hop actually captured anything, since BotDrivableSession's own interface never exposed
+// parkillerMoved at all - the exact "narrow interface has no event for that" gap extraBounceMs' own
+// doc comment already calls out for the celebration cue, except it turns out to matter for the
+// underlying *timing* too, not just the missing visual flourish. Fixed by adding parkillerMoved to
+// BotDrivableSession (both LocalVsBotsSession and HostTurnManagerBridge already carry it - see their
+// own doc comments) and extending busyUntilMs from it directly, right where diceRolled's own
+// subscriber sets the Parkiller-hop budget in the first place - see that subscriber's own comment.
 const CAPTURE_RETURN_HOPS = 3
 
 // Requested directly ("EL BOT TIENE QUE HACER ETAPAS EN SUS MOVIMIENTOS PARA QUE QUEDEN BIEN
@@ -162,6 +180,13 @@ export interface BotDrivableSession {
   readonly board: BoardData
   readonly turnStarted: Listenable<PlayerState>
   readonly diceRolled: Listenable<DiceRoll>
+  /** Fires once per roll, right after diceRolled, whenever the current player's Parkiller resolves
+   * its own automatic move (see turnManager.ts's own resolveParkillerMove) - this class's own only
+   * way to learn whether that move captured an opposing pawn or Parkiller (PK5/PK6), which needs its
+   * own extra busyUntilMs budget exactly like any other capture (see CAPTURE_RETURN_HOPS' own doc
+   * comment for the reported bug this fixes). Both real implementations (HostTurnManagerBridge,
+   * LocalVsBotsSession) already forward this straight from their own inner TurnManager. */
+  readonly parkillerMoved: Listenable<ParkillerMoveResult>
   readonly moveChoicesReady: Listenable<MoveOption[]>
   /** Fires for *every* applied move, this bot's own or any other player's (a real TurnManager's
    * own moveApplied, forwarded unchanged by both LocalBotSession and HostTurnManagerBridge) - see
@@ -272,6 +297,16 @@ export class BotController {
         // See PARKI_REVEAL_HOLD_MS's own doc comment - the Parkiller's own hop no longer starts the
         // instant the dice reveal (diceSpinMs) finishes, it waits this much longer first now.
         this.markBusy(this.diceSpinMs + this.parkiRevealHoldMs + roll.blackDie * this.hopDurationMs)
+      }),
+      // See CAPTURE_RETURN_HOPS' own doc comment (the "THIRD time" entry) - parkillerMoved fires
+      // synchronously right after diceRolled, strictly before moveChoicesReady, every single roll
+      // (same ordering the comment just above already relies on), so extending busyUntilMs here
+      // lands before anything else ever reads it for this roll. Additive (extendBusy), not another
+      // markBusy overwrite - diceRolled's own subscriber just above already set the Parkiller-hop's
+      // own budget; this only ever needs to add the extra bounce on top of that, for whichever
+      // opposing pawn or Parkiller (PK5/PK6) this roll's Parkiller move actually captured, if any.
+      session.parkillerMoved.on((result) => {
+        if (result.capturedPawn || result.capturedParkillerColor) this.extendBusy(CAPTURE_RETURN_HOPS * this.hopDurationMs)
       }),
       // Reported directly ("El bot debe esperar a que terminen de moverse los peones antes de
       // lanzar los dados del siguiente jugador" - the bot must wait for the pawns to finish moving
@@ -713,6 +748,15 @@ export class BotController {
 
   private markBusy(durationMs: number): void {
     this.busyUntilMs = Date.now() + durationMs
+  }
+
+  // Adds to whatever busyUntilMs already holds, rather than replacing it like markBusy does - for
+  // extending an *already-set* budget (this roll's own Parkiller-hop time, set by diceRolled's own
+  // subscriber above) with an extra allowance discovered slightly later in the same synchronous
+  // event sequence (parkillerMoved's own subscriber above), not for setting a fresh budget from
+  // scratch.
+  private extendBusy(extraMs: number): void {
+    this.busyUntilMs += extraMs
   }
 
   // See CAPTURE_RETURN_HOPS' own doc comment - the extra wall-clock hop time (beyond this move's

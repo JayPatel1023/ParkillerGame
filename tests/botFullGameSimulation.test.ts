@@ -249,6 +249,7 @@ function checkBoardInvariants(players: readonly PlayerState[], ctx: Ctx) {
 class AuditBotSession implements BotDrivableSession {
   readonly turnStarted: TurnManager['turnStarted']
   readonly diceRolled: TurnManager['diceRolled']
+  readonly parkillerMoved: TurnManager['parkillerMoved']
   readonly moveChoicesReady: TurnManager['moveChoicesReady']
   readonly moveApplied: TurnManager['moveApplied']
   private lastOfferedMoves: MoveOption[] = []
@@ -259,6 +260,7 @@ class AuditBotSession implements BotDrivableSession {
   ) {
     this.turnStarted = inner.turnStarted
     this.diceRolled = inner.diceRolled
+    this.parkillerMoved = inner.parkillerMoved
     this.moveChoicesReady = inner.moveChoicesReady
     this.moveApplied = inner.moveApplied
     this.moveChoicesReady.on((moves) => {

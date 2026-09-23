@@ -1,5 +1,6 @@
 import type { PlayerState } from '../core/gameFlow/playerState'
 import { TurnManager } from '../core/gameFlow/turnManager'
+import type { ParkillerMoveResult } from '../core/gameFlow/turnManager'
 import type { TurnManagerLike } from '../core/gameFlow/turnManagerLike'
 import type { PieceColor } from '../core/pieceColor'
 import type { Piece } from '../core/pieces/piece'
@@ -98,6 +99,28 @@ export class RemoteTurnManager implements TurnManagerLike {
   private readonly pendingMessages: GameMessage[] = []
   private draining = false
   private drainTimeout: ReturnType<typeof setTimeout> | null = null
+  // See applyMessage's own 'diceRolled' branch, and botController.ts's own matching
+  // CAPTURE_RETURN_HOPS doc comment (the "THIRD time" entry) for the full history: the Parkiller's
+  // own automatic move can itself capture an opposing pawn or Parkiller (PK5/PK6 - turnManager.ts's
+  // own resolveParkillerMove doc comment - the same rule as a pawn's own self-elimination this file
+  // already budgets for below, just the other direction), which plays the identical captureFlights
+  // bounce-home BoardScene.tsx spawns for any other capture - but 'diceRolled' used to budget only
+  // msg.blackDie's own hop distance, with no way to know whether that hop actually captured
+  // anything. Set by the constructor's own subscription (parkillerMoved fires synchronously inside
+  // this.inner.requestRoll(), strictly before that call returns - same ordering guarantee
+  // botController.ts's own matching fix relies on), cleared and re-read right around that same call
+  // in applyMessage below - a live PlayerState's own Parkiller has already moved on to wherever its
+  // *next* move takes it by the time a later message is processed, so only this event's own snapshot
+  // says what THIS roll's move actually did.
+  private lastParkillerResult: ParkillerMoveResult | null = null
+  private readonly unsubscribeParkillerMoved: () => void
+
+  // See lastParkillerResult's own doc comment. Indirection exists solely so applyMessage's own read
+  // of it (right after triggering the requestRoll() call that may reassign it) isn't narrowed by
+  // TypeScript's control flow analysis to whatever this field was assigned to just beforehand.
+  private readLastParkillerResult(): ParkillerMoveResult | null {
+    return this.lastParkillerResult
+  }
 
   constructor(
     inner: TurnManager,
@@ -124,6 +147,9 @@ export class RemoteTurnManager implements TurnManagerLike {
     this.rewardForfeited = inner.rewardForfeited
     this.gameWon = inner.gameWon
 
+    this.unsubscribeParkillerMoved = this.parkillerMoved.on((result) => {
+      this.lastParkillerResult = result
+    })
     this.unsubscribeMessage = transport.onMessage((data) => this.handleBroadcast(data))
   }
 
@@ -146,6 +172,7 @@ export class RemoteTurnManager implements TurnManagerLike {
 
   dispose(): void {
     this.unsubscribeMessage()
+    this.unsubscribeParkillerMoved()
     if (this.drainTimeout) clearTimeout(this.drainTimeout)
   }
 
@@ -179,11 +206,25 @@ export class RemoteTurnManager implements TurnManagerLike {
   private applyMessage(msg: GameMessage): number {
     if (msg.type === 'diceRolled') {
       this.diceQueue.push(msg.dieA, msg.dieB, msg.blackDie)
+      this.lastParkillerResult = null
       this.inner.requestRoll()
       // See PARKI_REVEAL_HOLD_MS's own doc comment - the Parkiller's own hop (when it has one this
       // roll) doesn't start until diceSettledAt plus this hold, and then takes its own real hop time
       // on top of that - matches botController.ts's own equivalent budget for the same roll.
-      return REMOTE_MOVE_PACING_MS + PARKI_REVEAL_HOLD_MS + msg.blackDie * HOP_DURATION_MS
+      //
+      // See lastParkillerResult's own doc comment - requestRoll() just above already resolved (and
+      // fired parkillerMoved for) this roll's own Parkiller move synchronously, so this reads its
+      // real outcome instead of just its hop distance: if it captured an opposing pawn or Parkiller
+      // (PK5/PK6), that capture's own captureFlights bounce-home needs the same extra
+      // CAPTURE_RETURN_HOPS*HOP_DURATION_MS budget any other capture gets below.
+      // Read via this method, not `this.lastParkillerResult` directly - TypeScript's own control-flow
+      // narrowing doesn't know the parkillerMoved subscription above can reassign that field as a
+      // *side effect* of the requestRoll() call just above (a plain synchronous EventEmitter, not a
+      // Promise it can see through), so it would otherwise keep treating the field as the literal
+      // `null` this same function just assigned it, moments before that side effect actually runs.
+      const parkillerResult = this.readLastParkillerResult()
+      const parkillerCaptureBounceMs = parkillerResult && (parkillerResult.capturedPawn || parkillerResult.capturedParkillerColor) ? CAPTURE_RETURN_HOPS * HOP_DURATION_MS : 0
+      return REMOTE_MOVE_PACING_MS + PARKI_REVEAL_HOLD_MS + msg.blackDie * HOP_DURATION_MS + parkillerCaptureBounceMs
     }
     if (msg.type === 'moveChosen') {
       const piece = findPiece(this.players, msg.color, msg.pieceIndex)

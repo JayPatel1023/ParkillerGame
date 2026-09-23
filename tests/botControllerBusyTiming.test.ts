@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BoardData } from '../src/core/board/boardData'
 import { BotController, type BotDrivableSession } from '../src/core/gameFlow/botController'
-import type { DiceRoll } from '../src/core/gameFlow/turnManager'
+import type { DiceRoll, ParkillerMoveResult } from '../src/core/gameFlow/turnManager'
 import { createPlayerState } from '../src/core/gameFlow/playerState'
 import type { PieceColor } from '../src/core/pieceColor'
 import type { Piece } from '../src/core/pieces/piece'
@@ -48,12 +48,20 @@ class FakeSession implements BotDrivableSession {
   readonly board: BoardData
   readonly turnStarted = new Emitter<import('../src/core/gameFlow/playerState').PlayerState>()
   readonly diceRolled = new Emitter<DiceRoll>()
+  // Emitted from rollForBot() below, right after diceRolled and strictly before moveChoicesReady -
+  // same ordering a real TurnManager's own requestRoll() guarantees (see botController.ts's own
+  // matching comment). Only the third describe block below (the Parkiller-captures-something case)
+  // ever arms a non-null result for this; the first two are both about a *pawn's* own move (a plain
+  // capture / a self-elimination), never a Parkiller-captures-something roll, so there's nothing for
+  // BotController's own parkillerMoved subscriber to react to there either way.
+  readonly parkillerMoved = new Emitter<ParkillerMoveResult>()
   readonly moveChoicesReady = new Emitter<MoveOption[]>()
   readonly moveApplied = new Emitter<MoveResult>()
 
   private nextMove: MoveOption | null = null
   private nextResult: MoveResult | null = null
   private nextTurnPlayer: import('../src/core/gameFlow/playerState').PlayerState | null = null
+  private nextParkillerResult: ParkillerMoveResult | null = null
 
   constructor(
     players: readonly import('../src/core/gameFlow/playerState').PlayerState[],
@@ -66,11 +74,18 @@ class FakeSession implements BotDrivableSession {
 
   // Test-only setup: what the *next* rollForBot() call should offer, what submitMoveForBot()
   // should resolve to, and which player's turn starts immediately afterward (simulating a real
-  // endTurn() firing synchronously once nothing is left to spend this roll).
-  armRoll(move: MoveOption, result: MoveResult, nextTurnPlayer: import('../src/core/gameFlow/playerState').PlayerState) {
+  // endTurn() firing synchronously once nothing is left to spend this roll). `parkillerResult` is
+  // optional - null (the default) matches a roll whose Parkiller move captured nothing.
+  armRoll(
+    move: MoveOption | null,
+    result: MoveResult | null,
+    nextTurnPlayer: import('../src/core/gameFlow/playerState').PlayerState | null,
+    parkillerResult: ParkillerMoveResult | null = null,
+  ) {
     this.nextMove = move
     this.nextResult = result
     this.nextTurnPlayer = nextTurnPlayer
+    this.nextParkillerResult = parkillerResult
   }
 
   rollForBot(): void {
@@ -78,6 +93,7 @@ class FakeSession implements BotDrivableSession {
     // this test's own busy-window math isolated to exactly the one thing it's checking (the move's
     // own walk-then-bounce time), with no separate Parkiller-hop budget mixed in.
     this.diceRolled.emit({ dieA: 1, dieB: 1, blackDie: 0 })
+    if (this.nextParkillerResult) this.parkillerMoved.emit(this.nextParkillerResult)
     if (this.nextMove) this.moveChoicesReady.emit([this.nextMove])
   }
 
@@ -262,6 +278,106 @@ describe('BotController busy-window timing around a HUMAN move that ordinarily c
     // home = 400ms. Advancing to just short of it must NOT yet have rolled for Blue.
     const captureAnimationMs = amount * hopDurationMs + 3 * hopDurationMs
     vi.advanceTimersByTime(captureAnimationMs - 1)
+    expect(blueRolled).toBe(false)
+
+    // Advancing past the full, correctly-budgeted window does roll for Blue.
+    vi.advanceTimersByTime(2)
+    expect(blueRolled).toBe(true)
+
+    bots.dispose()
+  })
+})
+
+describe("BotController busy-window timing around the Parkiller's own automatic move capturing a pawn", () => {
+  // Reproduces the *third* instance of the same reported symptom class, found by tracing every
+  // remaining call site that ever touches busyUntilMs against BoardScene.tsx's own
+  // spawnCaptureEffects once more, after the two fixes above (and RemoteTurnManager.ts's own two
+  // matching online-replay fixes) had already shipped: the Parkiller's own automatic move - not a
+  // pawn's own move - can itself capture an opposing pawn or Parkiller (PK5/PK6, the same rule as
+  // the self-elimination test above, just the other direction - the Parkiller lands on the pawn
+  // instead of the pawn landing on the Parkiller). That capture plays the identical captureFlights
+  // bounce-home BoardScene spawns for any other capture, but session.diceRolled's own subscriber
+  // only ever budgeted the Parkiller's own hop *distance* (roll.blackDie), with no way to know
+  // whether that hop actually captured anything - BotDrivableSession's own interface never exposed
+  // parkillerMoved at all. Fixed by adding it and extending busyUntilMs from it directly (see
+  // CAPTURE_RETURN_HOPS' own doc comment in botController.ts).
+  it("does not roll for the next player until the Parkiller-eliminated pawn's captureFlight bounce would have finished playing", () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5
+
+    const session = new FakeSession([red, blue], board)
+    const thinkDelayMs = 10
+    const hopDurationMs = 100
+    const diceSpinMs = 10
+    // turnChangeHoldMs=0/parkiRevealHoldMs=0 - isolates the captureFlight bounce timing
+    // (CAPTURE_RETURN_HOPS) from both the separate turn-handoff hold and the Parkiller's own reveal
+    // hold, same reasoning as the tests above.
+    const bots = new BotController(session, new Set<PieceColor>(['Red', 'Blue']), thinkDelayMs, hopDurationMs, diceSpinMs, 0, 0)
+
+    // Red's own pawn move this same roll - deliberately not a capture/self-elimination of its own,
+    // so the only extra bounce time anywhere in this test comes from the Parkiller's own capture.
+    const amount = 2
+    const move: MoveOption = {
+      piece: red.pieces[0],
+      kind: 'TrackMove',
+      resultingTrackPosition: 7,
+      resultingCorridorPosition: -1,
+      amount,
+      diceSource: 'sum',
+    }
+    const result: MoveResult = {
+      movedPiece: { ...red.pieces[0], trackPosition: 7 },
+      amount,
+      capturedPiece: null,
+      capturedParkillerColor: null,
+      pieceFinished: false,
+    }
+    // The Parkiller's own move this roll - before/after/corridor values are irrelevant here
+    // (FakeSession.rollForBot's own diceRolled.emit always uses blackDie: 0, so the Parkiller's own
+    // hop distance is isolated out of this test's math, same as the self-elimination test above);
+    // only capturedPawn matters.
+    const parkillerResult: ParkillerMoveResult = {
+      color: 'Red',
+      before: 3,
+      after: 3,
+      beforeCorridorPosition: 6,
+      afterCorridorPosition: 6,
+      capturedPawn: blue.pieces[0],
+      capturedParkillerColor: null,
+    }
+
+    let blueRolled = false
+    const originalRollForBot = session.rollForBot.bind(session)
+    session.rollForBot = () => {
+      if (session.currentPlayer.color === 'Blue') blueRolled = true
+      originalRollForBot()
+    }
+
+    session.armRoll(move, result, blue, parkillerResult)
+
+    session.turnStarted.emit(red) // Red's turn starts
+    vi.advanceTimersByTime(thinkDelayMs) // Red's think-delay elapses -> rollForBot() -> diceRolled, parkillerMoved, moveChoicesReady
+    // The roll's own busy window - diceSpinMs(10) + the eliminated pawn's own captureFlight bounce
+    // (CAPTURE_RETURN_HOPS(3)*hopDurationMs(100)=300, this fix's own extendBusy call) - must clear
+    // before the chosen piece is even highlighted, via onMoveChoicesReady's own
+    // scheduleRespectingBusy(0, ...). Before this fix, this window was only ever diceSpinMs(10) -
+    // the captureFlight's own 300ms was never budgeted at all.
+    const parkillerCaptureBounceMs = diceSpinMs + 3 * hopDurationMs
+    vi.advanceTimersByTime(parkillerCaptureBounceMs) // the busy window clears -> the piece is highlighted
+    vi.advanceTimersByTime(thinkDelayMs) // Red's own move-decision think-delay elapses -> submitMoveForBot()
+    // -> moveApplied, then (this move ends Red's turn) turnStarted(blue) fires synchronously, exactly
+    // like a real TurnManager's endTurn() would while the captureFlight bounce (if this fix had not
+    // already been waited out above) could otherwise still be playing on screen.
+
+    // Real total animation time for Red's own move: amount(2)*hopDurationMs(100) = 200ms for the
+    // walk (no capture/self-elimination of its own - the only capture in this test is the
+    // Parkiller's, already waited out above). Advancing to just short of it must NOT yet have
+    // rolled for Blue.
+    const redsOwnMoveAnimationMs = amount * hopDurationMs
+    vi.advanceTimersByTime(redsOwnMoveAnimationMs - 1)
     expect(blueRolled).toBe(false)
 
     // Advancing past the full, correctly-budgeted window does roll for Blue.

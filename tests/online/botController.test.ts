@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BoardData } from '../../src/core/board/boardData'
 import type { DiceLike } from '../../src/core/dice'
-import type { DiceRoll } from '../../src/core/gameFlow/turnManager'
+import type { DiceRoll, ParkillerMoveResult } from '../../src/core/gameFlow/turnManager'
 import type { BotDrivableSession } from '../../src/core/gameFlow/botController'
 import type { Listenable } from '../../src/core/gameFlow/turnManagerLike'
 import { createPlayerState } from '../../src/core/gameFlow/playerState'
@@ -1060,6 +1060,10 @@ describe('BotController', () => {
 
     const turnStarted = new FakeChannel<PlayerState>()
     const diceRolled = new FakeChannel<DiceRoll>()
+    // Never emitted by this test - it's about ranking two already-offered pawn moves by risk, not
+    // about a Parkiller's own automatic move. Declared only to satisfy BotDrivableSession's own
+    // interface.
+    const parkillerMoved = new FakeChannel<ParkillerMoveResult>()
     const moveChoicesReady = new FakeChannel<MoveOption[]>()
     const moveApplied = new FakeChannel<MoveResult>()
     let submittedPiece: Piece | null = null
@@ -1070,6 +1074,7 @@ describe('BotController', () => {
       board,
       turnStarted,
       diceRolled,
+      parkillerMoved,
       moveChoicesReady,
       moveApplied,
       rollForBot() {},

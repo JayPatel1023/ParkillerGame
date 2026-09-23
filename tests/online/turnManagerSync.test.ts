@@ -315,6 +315,49 @@ describe('HostTurnManagerBridge + RemoteTurnManager convergence', () => {
     expect(waitMs).toBeGreaterThanOrEqual(6 * HOP_DURATION_MS + CAPTURE_RETURN_HOPS * HOP_DURATION_MS)
   })
 
+  // Reported a third time, still the same "reverts to its start square" symptom, after both fixes
+  // above had already shipped: the *Parkiller's* own automatic move - not a pawn's own move - can
+  // itself capture an opposing pawn or Parkiller (PK5/PK6, the same rule as the self-elimination
+  // case above, just the other direction). That capture plays the identical captureFlights
+  // bounce-home BoardScene.tsx spawns for any other capture, but the 'diceRolled' branch used to
+  // budget only msg.blackDie's own hop distance, with no way to know whether that hop actually
+  // captured anything. Exercises applyMessage directly, same reasoning as the test just above.
+  it("budgets the Parkiller's own automatic capture bounce-home time too, before the next broadcast replays", () => {
+    const board = buildTestBoard()
+    const network = new FakeRoomNetwork(MASTER_ACTOR)
+    const remote = buildRemote(board, network)
+    const capturedPawn = createPiece('Blue', 0)
+
+    // Stubs the inner TurnManager's own requestRoll so the Parkiller's own move outcome is pinned
+    // down exactly (captured a pawn) rather than depending on a real board/rules setup happening to
+    // produce one - requestRoll() itself would normally resolve+emit parkillerMoved synchronously
+    // (see RemoteTurnManager's own doc comment on lastParkillerResult for why this fires it
+    // directly rather than replaying a real roll).
+    const remoteInternals = remote.bridge as unknown as { inner: TurnManager; applyMessage(msg: GameMessage): number }
+    remoteInternals.inner.requestRoll = () => {
+      remote.bridge.parkillerMoved.emit({
+        color: 'Red',
+        before: 3,
+        after: 3,
+        beforeCorridorPosition: 6,
+        afterCorridorPosition: 6,
+        capturedPawn,
+        capturedParkillerColor: null,
+      })
+    }
+
+    const msg: GameMessage = { type: 'diceRolled', dieA: 1, dieB: 1, blackDie: 3 }
+    const waitMs = remoteInternals.applyMessage(msg)
+
+    const REMOTE_MOVE_PACING_MS = 2000
+    const PARKI_REVEAL_HOLD_MS = 2000
+    const HOP_DURATION_MS = 480
+    const CAPTURE_RETURN_HOPS = 3
+    // Not just the Parkiller's own hop distance (blackDie=3) - the fixed budget has to actually
+    // include the captured pawn's own bounce-home time on top of it.
+    expect(waitMs).toBeGreaterThanOrEqual(REMOTE_MOVE_PACING_MS + PARKI_REVEAL_HOLD_MS + 3 * HOP_DURATION_MS + CAPTURE_RETURN_HOPS * HOP_DURATION_MS)
+  })
+
   it("the Master rejects a roll intent from an actor whose seat isn't the current turn", () => {
     const board = buildTestBoard()
     const network = new FakeRoomNetwork(MASTER_ACTOR)
