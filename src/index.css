@@ -79,28 +79,6 @@ button {
   }
 }
 
-/* MoveLog's own entries (src/ui/MoveLog.tsx) - a fresh entry pops in with a small rise+fade
-   instead of just appearing, so a new line landing at the top of the stack reads as "something
-   just happened" rather than blending into the ones already there. Only plays once per mounted
-   row (a re-render that just shifts an existing entry's opacity down the stack doesn't remount it,
-   so this never replays on every tick). */
-@keyframes move-log-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .move-log-row {
-    animation: move-log-in 0.35s ease-out;
-  }
-}
-
 /* Candy-button family (PlayerCountSelector.tsx, OnlineLobbyScreen.tsx's own count picker) -
    reported directly, asking for a fully distinct, playful/children's shape and feel instead of the
    app's usual premium-tabletop chunky button. A gentle, continuous side-to-side wobble (each button

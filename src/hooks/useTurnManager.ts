@@ -2,9 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import type { PlayerState } from '../core/gameFlow/playerState'
 import type { DiceRoll, MoveAnimationInfo, MoveNotPossibleReason, ParkillerMoveResult, RewardGrant } from '../core/gameFlow/turnManager'
 import type { TurnManagerLike } from '../core/gameFlow/turnManagerLike'
-import type { PieceColor } from '../core/pieceColor'
 import type { Piece } from '../core/pieces/piece'
-import type { MoveOption, MoveResult } from '../core/rules/moveOption'
+import type { MoveOption } from '../core/rules/moveOption'
 import { playDiceRollSound } from '../ui/diceSound'
 import { CaptureFlightHoldTracker } from './captureFlightHold'
 
@@ -78,52 +77,6 @@ const TURN_CHANGE_HOLD_MS = 3000
 // shipped and the exact same reported symptom kept recurring anyway.
 const HOP_DURATION_MS = 480
 const CAPTURE_RETURN_HOPS = 3
-
-export interface MoveLogEntry {
-  id: number
-  color: PieceColor
-  text: string
-}
-
-const MOVE_LOG_LIMIT = 50
-
-// Every branch here reads a real, distinguishing field already on MoveResult - no separate
-// "what kind of move was this" flag needed. Order matters: a landing square that both captures
-// and (implausibly) finishes a piece describes the rarer/more specific outcome first.
-function describeMove(result: MoveResult): string {
-  const color = result.movedPiece.color
-  if (result.eliminatedByParkiller && result.eliminatedByParkillerColor) {
-    return `${color}'s pawn was sent home by ${result.eliminatedByParkillerColor}'s Parki`
-  }
-  if (result.capturedParkillerColor) {
-    return `${color} eliminated ${result.capturedParkillerColor}'s Parki`
-  }
-  if (result.capturedPiece) {
-    return `${color} captured ${result.capturedPiece.color}'s pawn`
-  }
-  if (result.pieceFinished) {
-    return `${color}'s pawn reached home`
-  }
-  return `${color} moved a pawn`
-}
-
-// The Parkiller moves automatically every single roll (PK1-8 - never a player choice), so logging
-// every plain move would flood the log with one near-identical, uninformative entry per turn,
-// pushing rarer entries (captures) straight out of MoveLog's own short visible window. Only the
-// two outcomes that are actually news - a Parki eliminating another Parki, or sending a pawn home -
-// produce an entry; a plain hop returns null and is skipped entirely.
-function describeParkillerMove(result: ParkillerMoveResult): string | null {
-  if (result.capturedParkillerColor && result.secondCapturedParkillerColor) {
-    return `${result.color}'s Parki eliminated ${result.capturedParkillerColor}'s and ${result.secondCapturedParkillerColor}'s Parkis`
-  }
-  if (result.capturedParkillerColor) {
-    return `${result.color}'s Parki eliminated ${result.capturedParkillerColor}'s Parki`
-  }
-  if (result.capturedPawn) {
-    return `${result.color}'s Parki sent ${result.capturedPawn.color}'s pawn home`
-  }
-  return null
-}
 
 export function useTurnManager(turnManager: TurnManagerLike) {
   const [currentPlayer, setCurrentPlayer] = useState<PlayerState>(turnManager.currentPlayer)
@@ -207,14 +160,7 @@ export function useTurnManager(turnManager: TurnManagerLike) {
     prevParkillerAnimationForCaptureRef.current = parkillerAnimation
   }, [parkillerAnimation])
   useEffect(() => () => captureFlightHoldRef.current?.dispose(), [])
-  const [moveLog, setMoveLog] = useState<MoveLogEntry[]>([])
-  const moveLogIdRef = useRef(0)
   useEffect(() => {
-    const pushLogEntry = (color: PieceColor, text: string) => {
-      moveLogIdRef.current += 1
-      setMoveLog((prev) => [{ id: moveLogIdRef.current, color, text }, ...prev].slice(0, MOVE_LOG_LIMIT))
-    }
-
     const unsubscribers = [
       turnManager.turnStarted.on((player) => {
         // Reported directly ("Salió doble 1 y no dejó repetir el lanzamiento de los dados" - a
@@ -288,8 +234,6 @@ export function useTurnManager(turnManager: TurnManagerLike) {
       // see its own hopStartDelay comment for why that's the layer this belongs in instead.
       turnManager.parkillerMoved.on((result) => {
         setParkillerAnimation(result)
-        const text = describeParkillerMove(result)
-        if (text) pushLogEntry(result.color, text)
       }),
       turnManager.moveChoicesReady.on((moves) => {
         setPendingMoves(moves)
@@ -299,7 +243,7 @@ export function useTurnManager(turnManager: TurnManagerLike) {
         setPendingMoves([])
         setNoMoveReason(reason)
       }),
-      turnManager.moveApplied.on((result) => {
+      turnManager.moveApplied.on(() => {
         setPendingMoves([])
         // Cleared here and re-set by rewardOffered/rewardForfeited if this move earned another one -
         // both happen synchronously within the same submitMove call, so React batches them together.
@@ -321,7 +265,6 @@ export function useTurnManager(turnManager: TurnManagerLike) {
         // and React batches the re-set on top of this clear).
         setForfeitedReward(null)
         setEliminatedByDoubles(null)
-        pushLogEntry(result.movedPiece.color, describeMove(result))
       }),
       // Fires from inside TurnManager.submitMove() itself, not built here around a UI-triggered
       // call to it (as this used to be) - see MoveAnimationInfo's own comment for why that missed
@@ -329,28 +272,17 @@ export function useTurnManager(turnManager: TurnManagerLike) {
       turnManager.moveAnimationReady.on((info) => setMoveAnimation(info)),
       turnManager.pieceEliminatedByDoubles.on((piece) => {
         setEliminatedByDoubles(piece)
-        pushLogEntry(piece.color, `${piece.color}'s pawn was sent home (third double)`)
       }),
       turnManager.rewardOffered.on((grant) => {
         setPendingReward(grant)
         setForfeitedReward(null)
       }),
-      // setForfeitedReward still drives its own transient RewardToast (auto-hides on its own,
-      // ALERT_HOLD_MS in GameBoardScreen.tsx) - reported directly, with a screenshot: a *permanent*
-      // MoveLog entry for every single forfeit piled up into a wall of repeated "X's bonus reward
-      // went unused" pills, crowding out every other, more useful entry once a game reached its
-      // endgame (most pieces already Finished, so a fresh capture's own reward has nowhere left to
-      // go and gets forfeited on nearly every roll from then on - a real, correctly-computed
-      // outcome each time, just not one worth a permanent line in the history once it starts
-      // recurring this often). No log entry pushed here anymore; the toast alone still tells the
-      // player it happened, in the moment, without piling up.
       turnManager.rewardForfeited.on((grant) => {
         setPendingReward(null)
         setForfeitedReward(grant)
       }),
       turnManager.gameWon.on((player) => {
         setWinner(player)
-        pushLogEntry(player.color, `${player.color} wins!`)
       }),
     ]
     return () => {
@@ -392,7 +324,6 @@ export function useTurnManager(turnManager: TurnManagerLike) {
     forfeitedReward,
     noMoveReason,
     turnEndingSoon,
-    moveLog,
     rollDice,
     chooseMove,
     clearMoveAnimation,

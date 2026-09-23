@@ -16,7 +16,6 @@ import { Confetti } from './Confetti'
 import { EliminationToast } from './EliminationToast'
 import { HelpModal } from './HelpModal'
 import { getSelectedTrackIndex, getTrackLabel, isMusicMuted, nextMusicTrack, toggleMusicMuted } from './introMusic'
-import { MoveLog } from './MoveLog'
 import { RewardBurst } from './RewardBurst'
 import { RewardToast } from './RewardToast'
 import { StartingPlayerModal } from './StartingPlayerModal'
@@ -221,7 +220,6 @@ export function GameBoardScreen({
     forfeitedReward,
     noMoveReason,
     turnEndingSoon,
-    moveLog,
     rollDice,
     chooseMove,
     clearMoveAnimation,
@@ -625,7 +623,6 @@ export function GameBoardScreen({
       <RewardToast pendingReward={visiblePendingReward} forfeitedReward={visibleForfeitedReward} />
       <EliminationToast eliminatedPiece={eliminatedByDoubles} reason="doubles" />
       <EliminationToast eliminatedPiece={parkillerVictim} reason="parkiller" />
-      <MoveLog entries={moveLog} />
 
       <div style={turnCardStyle}>
         <div style={turnCardHeaderStyle}>
