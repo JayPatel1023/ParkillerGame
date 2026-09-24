@@ -136,7 +136,26 @@ export function loadWithRetry(url: string, attempt: number) {
       if (!response.ok) throw new Error(`useRobustTexture: HTTP ${response.status} for ${requestUrl}`)
       return response.blob()
     })
-    .then((blob) => createImageBitmap(blob, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' }))
+    // Found by close review after a real client report the board's own colored quadrants (and
+    // every piece's own yard) no longer lined up with each other at all - not a missing texture
+    // this time, a genuinely vertically-flipped one: every board with 4+ lanes visibly swapped
+    // top-row/bottom-row colors (2-3 lane boards happened to look almost right by coincidence -
+    // their own "wrong" position landed on plain background or another similarly-toned area, not
+    // a strongly-contrasting different color, so the flip was there too but far less obvious).
+    // Root cause: `THREE.Texture.flipY` (the setting that makes a normal top-down image decode
+    // right-side-up on a WebGL texture) is documented to have NO effect when the texture's image
+    // source is an ImageBitmap - three.js's own `_gl.pixelStorei(UNPACK_FLIP_Y_WEBGL, texture.flipY)`
+    // call still runs, but WebGL's spec-defined behavior for that pixel-store flag only applies to
+    // texImage2D calls fed raw pixel arrays, not an already-GPU-uploadable ImageBitmap - browsers
+    // upload an ImageBitmap's own pixels as-is regardless. `TextureLoader.load()` (what this file
+    // used before switching to a manually-abortable fetch, see loadWithRetry's own doc comment
+    // above) never hit this: it decodes into a plain `Image()`/HTMLImageElement, which flipY *does*
+    // apply to. The fix has to happen at decode time instead: `imageOrientation: 'flipY'` flips the
+    // pixels while createImageBitmap decodes them, so the bitmap itself already sits right-side-up
+    // before flipY (ignored or not) even enters the picture - verified directly, by reverting to
+    // the pre-fix TextureLoader-based code as an oracle: same board, same 5-lane layout, every
+    // piece landed on its own matching-colored yard exactly once this option is set.
+    .then((blob) => createImageBitmap(blob, { premultiplyAlpha: 'none', colorSpaceConversion: 'none', imageOrientation: 'flipY' }))
     .then((imageBitmap) => {
       if (settled) return
       settled = true
