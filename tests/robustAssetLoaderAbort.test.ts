@@ -54,10 +54,20 @@ describe('useRobustTexture - watchdog-triggered retries abort the attempt they s
   beforeEach(() => {
     vi.resetModules()
     vi.useFakeTimers()
-    vi.stubGlobal(
-      'createImageBitmap',
-      vi.fn().mockResolvedValue({ width: 4, height: 4 } as unknown as ImageBitmap),
-    )
+    // The decode step builds a plain HTMLImageElement from an object URL (see decodeBlobToImage) -
+    // there's no DOM in this test environment, so stand in a minimal Image that "loads" as soon as
+    // its src is set, plus the two URL calls it makes.
+    class FakeImage {
+      onload: (() => void) | null = null
+      onerror: (() => void) | null = null
+      set src(_value: string) {
+        queueMicrotask(() => this.onload?.())
+      }
+    }
+    vi.stubGlobal('Image', FakeImage)
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake')
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+    vi.stubGlobal('createImageBitmap', vi.fn())
   })
 
   afterEach(() => {
@@ -129,22 +139,26 @@ describe('useRobustTexture - watchdog-triggered retries abort the attempt they s
 
   // Reported directly, with a screenshot ("현재 보드의 그림이 반전되였다" - the board's picture is
   // currently flipped): after the fetch()+createImageBitmap() switch above, every board rendered
-  // vertically upside-down relative to where each piece sits (each color's pieces landed on the
-  // wrong-colored yard). `THREE.Texture.flipY` has no effect on an ImageBitmap-sourced texture, so
-  // the vertical flip a plain Image()/TextureLoader texture gets for free has to be requested at
-  // decode time instead. This pins that option - a future "simplification" that drops it would put
-  // the art back upside-down again with no other test noticing, since nothing here renders pixels.
-  it("decodes the image with imageOrientation 'flipY' so the board art isn't vertically inverted", async () => {
+  // vertically upside-down relative to where each piece sits. `THREE.Texture.flipY` has no effect on
+  // an ImageBitmap-sourced texture, and createImageBitmap's options (the obvious workaround) aren't
+  // reliably supported across browsers - so the texture must be built from a plain Image element, the
+  // same kind TextureLoader always produced. This pins that: a future "simplification" back to
+  // createImageBitmap would put the art upside-down again (or break it on Safari) with no other test
+  // noticing, since nothing here renders pixels.
+  it('builds the texture from a plain Image element (so flipY applies), never an ImageBitmap', async () => {
     const { pending } = installFetchMock()
-    const { loadWithRetry } = await import('../src/scene/useRobustTexture')
+    const { loadWithRetry, textureCache } = await import('../src/scene/useRobustTexture')
 
     loadWithRetry('/board.webp', 1)
     pending[0].resolve({ ok: true, blob: () => Promise.resolve('blob-1') })
     await flush()
 
-    const createImageBitmapMock = globalThis.createImageBitmap as unknown as ReturnType<typeof vi.fn>
-    expect(createImageBitmapMock).toHaveBeenCalledTimes(1)
-    expect(createImageBitmapMock.mock.calls[0][1]).toMatchObject({ imageOrientation: 'flipY' })
+    const texture = textureCache.get('/board.webp')
+    expect(texture).toBeDefined()
+    expect(texture!.image).toBeInstanceOf(globalThis.Image)
+    expect(texture!.flipY).toBe(true)
+    expect(globalThis.createImageBitmap).not.toHaveBeenCalled()
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:fake')
   })
 
   it('a genuine HTTP failure (not just a hung watchdog) still retries with a cache-busting URL, same as before this fix', async () => {

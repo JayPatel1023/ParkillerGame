@@ -71,6 +71,26 @@ export const inFlight = new Map<string, Set<(texture: THREE.Texture) => void>>()
 // so a hung request eventually gets abandoned for a fresh one instead of blocking forever.
 const LOAD_TIMEOUT_MS = 10_000
 
+// Decodes fetched bytes into a plain HTMLImageElement via a temporary object URL - what
+// TextureLoader/ImageLoader hand three.js, so flipY and texture.image behave exactly as they always
+// did. The URL is revoked as soon as the image has loaded (or failed); the loaded image keeps its
+// own decoded data (GLTFLoader revokes blob URLs the same way).
+export function decodeBlobToImage(blob: Blob): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(blob)
+    const image = new Image()
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl)
+      resolve(image)
+    }
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl)
+      reject(new Error('useRobustTexture: image decode failed'))
+    }
+    image.src = objectUrl
+  })
+}
+
 // Reported directly, with three DevTools Network-tab screenshots taken a few seconds apart during
 // a real game ("좀빨리 버튼들을 누르면 이렇게 된다" - if you press the buttons a bit fast, this
 // happens): the SAME resource (board_2p.webp, parkiller.stl) showed up as two separate completed
@@ -95,13 +115,18 @@ const LOAD_TIMEOUT_MS = 10_000
 // Fixed by fetching the image ourselves instead of handing the URL to TextureLoader/ImageLoader:
 // `fetch()` returns a real, abortable promise, so `retryAfterFailure` can now call
 // `controller.abort()` on the attempt it's superseding before starting the next one, which drops
-// that attempt's connection instead of leaving it to run to completion for no reason. The image is
-// then decoded via `createImageBitmap()` - the same fetch+blob+createImageBitmap recipe THREE's
-// own `ImageBitmapLoader` uses internally (see node_modules/three/src/loaders/ImageBitmapLoader.js)
-// - with the same `{ premultiplyAlpha: 'none', colorSpaceConversion: 'none' }` options that loader
-// passes, so the decoded pixels match what TextureLoader would have produced. useBoardColorSampler
-// already type-checks `texture.image` as `HTMLImageElement | ImageBitmap`, so this doesn't disturb
-// that caller either.
+// that attempt's connection instead of leaving it to run to completion for no reason. The fetched
+// bytes are then decoded into a plain HTMLImageElement (see decodeBlobToImage above) - the exact
+// kind of image THREE.TextureLoader always produced - NOT an ImageBitmap. An earlier version of
+// this used createImageBitmap(), which turned out wrong twice over: `THREE.Texture.flipY` has no
+// effect on an ImageBitmap source, so every board rendered vertically inverted (each color's pieces
+// sat on another color's yard); and createImageBitmap's `options` argument (imageOrientation,
+// premultiplyAlpha, ...) is not reliably supported across browsers - Safari/iOS in particular - so
+// any workaround built on it risked a flipped or never-loading board on a tester's phone. A plain
+// Image element gets flipY applied by three.js like it always did and is decoded by every browser,
+// so this keeps the abortable fetch and changes nothing else about what the texture is.
+// useBoardColorSampler reads pixels straight off `texture.image`, and gets the same unflipped
+// HTMLImageElement it always did.
 export function loadWithRetry(url: string, attempt: number) {
   // A failed fetch can still be an HTTP 200 (e.g. an SPA history-fallback serving index.html for a
   // path that doesn't exist, which several static hosts - including this app's own preview/deploy
@@ -136,31 +161,12 @@ export function loadWithRetry(url: string, attempt: number) {
       if (!response.ok) throw new Error(`useRobustTexture: HTTP ${response.status} for ${requestUrl}`)
       return response.blob()
     })
-    // Found by close review after a real client report the board's own colored quadrants (and
-    // every piece's own yard) no longer lined up with each other at all - not a missing texture
-    // this time, a genuinely vertically-flipped one: every board with 4+ lanes visibly swapped
-    // top-row/bottom-row colors (2-3 lane boards happened to look almost right by coincidence -
-    // their own "wrong" position landed on plain background or another similarly-toned area, not
-    // a strongly-contrasting different color, so the flip was there too but far less obvious).
-    // Root cause: `THREE.Texture.flipY` (the setting that makes a normal top-down image decode
-    // right-side-up on a WebGL texture) is documented to have NO effect when the texture's image
-    // source is an ImageBitmap - three.js's own `_gl.pixelStorei(UNPACK_FLIP_Y_WEBGL, texture.flipY)`
-    // call still runs, but WebGL's spec-defined behavior for that pixel-store flag only applies to
-    // texImage2D calls fed raw pixel arrays, not an already-GPU-uploadable ImageBitmap - browsers
-    // upload an ImageBitmap's own pixels as-is regardless. `TextureLoader.load()` (what this file
-    // used before switching to a manually-abortable fetch, see loadWithRetry's own doc comment
-    // above) never hit this: it decodes into a plain `Image()`/HTMLImageElement, which flipY *does*
-    // apply to. The fix has to happen at decode time instead: `imageOrientation: 'flipY'` flips the
-    // pixels while createImageBitmap decodes them, so the bitmap itself already sits right-side-up
-    // before flipY (ignored or not) even enters the picture - verified directly, by reverting to
-    // the pre-fix TextureLoader-based code as an oracle: same board, same 5-lane layout, every
-    // piece landed on its own matching-colored yard exactly once this option is set.
-    .then((blob) => createImageBitmap(blob, { premultiplyAlpha: 'none', colorSpaceConversion: 'none', imageOrientation: 'flipY' }))
-    .then((imageBitmap) => {
+    .then((blob) => decodeBlobToImage(blob))
+    .then((image) => {
       if (settled) return
       settled = true
       clearTimeout(watchdog)
-      const texture = new THREE.Texture(imageBitmap as unknown as TexImageSource)
+      const texture = new THREE.Texture(image)
       texture.needsUpdate = true
       textureCache.set(url, texture)
       const subscribers = inFlight.get(url)
