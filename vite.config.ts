@@ -64,7 +64,19 @@ export default defineConfig({
         // board textures' own jpg -> webp conversion (see boards/board_*.jpg's own globIgnores
         // entry below) - without this, the smaller files this precache exists to serve wouldn't
         // even match the pattern.
-        globPatterns: ['**/*.{js,css,html,jpg,png,webp,svg,ico,mp3}'],
+        //
+        // stl added after a real "board still blank at the start" report kept recurring even after
+        // useRobustTexture.ts/useRobustSTL.ts's own retry/abort fixes: parkiller.stl (~300KB) was
+        // never in this list at all, so unlike every board webp above - which gets precached once
+        // and then loads instantly from the service worker on every visit after the first -
+        // Parkiller's own model had to make a genuine live network fetch on literally every single
+        // game, forever, even with the service worker fully installed. That leaves it permanently
+        // exposed to exactly the kind of real-world contention/latency (a slow connection, several
+        // requests firing at once at game start) that useRobustSTL.ts's own 10s watchdog exists to
+        // recover from - recoverable, but still a multi-second blank/incomplete board on every
+        // single load rather than only the first. Precaching it removes that exposure the same way
+        // it's already removed for the board art.
+        globPatterns: ['**/*.{js,css,html,jpg,png,webp,svg,ico,mp3,stl}'],
         // public/music/ holds the intro/background music track (introMusic.ts) - several MB,
         // unlike every other mp3 here (a few KB to ~70KB apiece). Unlike hop/capture/finish
         // sounds, nothing about actually playing the game depends on it - same "don't force every
