@@ -382,7 +382,10 @@ describe('TurnManager - mandatory departure (PC2.1)', () => {
   // directly at the parchisRules level instead - see "two *different-colored* opponents on the
   // entry square..." in parchisRules.test.ts.
 
-  it('a double matching the exit roll forces both yard pieces out across the two dice, not just one', () => {
+  // Reported directly ("Si sale un doble 5 y quedan dos peones en el refugio. Ambos salen a la vez
+  // salvo que ya haya otro en la casilla de salida. NO uno detrás de otro"): the two exits used to
+  // be two separate clicks with two separate hops. Now the first click plays both.
+  it('a double matching the exit roll brings two yard pieces out together, from a single choice', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)
     const blue = createPlayerState('Blue', board)
@@ -391,23 +394,131 @@ describe('TurnManager - mandatory departure (PC2.1)', () => {
     const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
 
     let latestMoves: import('../src/core/rules/moveOption').MoveOption[] = []
-    manager.moveChoicesReady.on((m) => (latestMoves = m))
+    let offers = 0
+    manager.moveChoicesReady.on((m) => {
+      latestMoves = m
+      offers++
+    })
+    const applied: import('../src/core/rules/moveOption').MoveResult[] = []
+    manager.moveApplied.on((r) => applied.push(r))
+    const animations: import('../src/core/gameFlow/turnManager').MoveAnimationInfo[] = []
+    manager.moveAnimationReady.on((a) => animations.push(a))
     manager.requestRoll()
 
     expect(latestMoves.length).toBeGreaterThan(0)
     expect(latestMoves.every((m) => m.kind === 'ExitYard')).toBe(true)
+    expect(offers).toBe(1)
 
     manager.submitMove(red.pieces[0])
+
+    // Both dice spent by that one choice: two pieces on the entry square, two still in the yard, and
+    // nothing further was offered for the second die.
+    expect(offers).toBe(1)
     expect(red.pieces[0].state).toBe('OnTrack')
-
-    // the second die is still locked to exiting one of the remaining yard pieces
-    expect(latestMoves.length).toBeGreaterThan(0)
-    expect(latestMoves.every((m) => m.kind === 'ExitYard')).toBe(true)
-
-    manager.submitMove(red.pieces[1])
-    expect(red.pieces[1].state).toBe('OnTrack')
     expect(red.pieces[0].trackPosition).toBe(0)
+    expect(red.pieces[1].state).toBe('OnTrack')
     expect(red.pieces[1].trackPosition).toBe(0)
+    expect(red.pieces[2].state).toBe('InYard')
+    expect(red.pieces[3].state).toBe('InYard')
+    expect(applied.map((r) => r.movedPiece)).toEqual([red.pieces[0], red.pieces[1]])
+    // One animation per piece, the second flagged so the scene plays it alongside the first.
+    expect(animations.map((a) => a.piece)).toEqual([red.pieces[0], red.pieces[1]])
+    expect(animations[0].simultaneousWithPrevious).toBeUndefined()
+    expect(animations[1].simultaneousWithPrevious).toBe(true)
+    // A double still grants its bonus roll to the same player.
+    expect(manager.currentPlayer.color).toBe('Red')
+  })
+
+  it('a double exit-roll with only one piece left in the yard still exits just that one and leaves the other die free', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    for (const i of [0, 1, 2]) {
+      red.pieces[i].state = 'OnTrack'
+      red.pieces[i].trackPosition = 7 + i * 2
+    }
+
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), new ScriptedDice([5, 5, 1]))
+    let latestMoves: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((m) => (latestMoves = m))
+    const animations: import('../src/core/gameFlow/turnManager').MoveAnimationInfo[] = []
+    manager.moveAnimationReady.on((a) => animations.push(a))
+    manager.requestRoll()
+    manager.submitMove(red.pieces[3])
+
+    expect(red.pieces[3].state).toBe('OnTrack')
+    expect(red.pieces[3].trackPosition).toBe(0)
+    expect(animations).toHaveLength(1)
+    // The second 5 is an ordinary move now - offered as a choice, not played for the player.
+    expect(latestMoves.length).toBeGreaterThan(0)
+    expect(latestMoves.every((m) => m.kind !== 'ExitYard')).toBe(true)
+  })
+
+  it('does not bring a second piece out when an own pawn is already on the entry square (it would make a barrier of three)', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 0 // already on the entry square
+
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), new ScriptedDice([5, 5, 1]))
+    let latestMoves: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((m) => (latestMoves = m))
+    const animations: import('../src/core/gameFlow/turnManager').MoveAnimationInfo[] = []
+    manager.moveAnimationReady.on((a) => animations.push(a))
+    manager.requestRoll()
+    manager.submitMove(red.pieces[1])
+
+    expect(red.pieces.filter((p) => p.state === 'OnTrack' && p.trackPosition === 0)).toHaveLength(2)
+    expect(red.pieces[2].state).toBe('InYard')
+    expect(red.pieces[3].state).toBe('InYard')
+    expect(animations).toHaveLength(1)
+    expect(latestMoves.every((m) => m.kind !== 'ExitYard')).toBe(true)
+  })
+
+  // The client's own exception ("salvo que ya haya otro en la casilla de salida"): with another
+  // piece already on the entry square, the two exits stay one after the other (the second one is
+  // what captures the piece that was there - see the special-starting-square test below).
+  it('keeps the two exits separate when another player\'s pawn is already on the entry square', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 0 // a foreign pawn already on Red's entry square
+
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), new ScriptedDice([5, 5, 1]))
+    let latestMoves: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((m) => (latestMoves = m))
+    const animations: import('../src/core/gameFlow/turnManager').MoveAnimationInfo[] = []
+    manager.moveAnimationReady.on((a) => animations.push(a))
+    manager.requestRoll()
+    manager.submitMove(red.pieces[0])
+
+    expect(animations).toHaveLength(1)
+    expect(red.pieces[0].state).toBe('OnTrack')
+    expect(red.pieces[1].state).toBe('InYard')
+    expect(blue.pieces[0].state).toBe('OnTrack')
+    // The second exit is still the player's to make.
+    expect(latestMoves.some((m) => m.kind === 'ExitYard')).toBe(true)
+    const second = manager.submitMove(latestMoves.find((m) => m.kind === 'ExitYard')!.piece)
+    expect(second?.capturedPiece).toBe(blue.pieces[0])
+    expect(animations).toHaveLength(2)
+    expect(animations[1].simultaneousWithPrevious).toBeUndefined()
+  })
+
+  it('a non-double 5 brings out one piece, never two', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), new ScriptedDice([5, 3, 1]))
+    const animations: import('../src/core/gameFlow/turnManager').MoveAnimationInfo[] = []
+    manager.moveAnimationReady.on((a) => animations.push(a))
+    manager.requestRoll()
+    manager.submitMove(red.pieces[0])
+
+    expect(animations).toHaveLength(1)
+    expect(red.pieces.filter((p) => p.state === 'InYard')).toHaveLength(3)
   })
 
   // Reported directly ("si sale 5 y quedan peones en el refugio deben salir" - if a 5 comes up and

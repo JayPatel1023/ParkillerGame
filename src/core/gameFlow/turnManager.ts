@@ -86,6 +86,10 @@ export interface MoveAnimationInfo {
    * on its own. The scene layer walks the piece here first, in order, before sending it home. */
   eliminatedByParkillerAt?: number
   eliminatedByParkillerColor?: PieceColor
+  /** Set on the second exit of a double exit-roll that TurnManager played out for the player in the
+   * same call as the first (see doubleExitPairable) - the scene layer plays both hops together
+   * instead of one after the other. Always immediately follows the first move's own event. */
+  simultaneousWithPrevious?: boolean
 }
 
 // 'parkillerCapture' split off from the plain 'capture' reason - reported directly ("¿ELIMINAR UN
@@ -279,6 +283,17 @@ export class TurnManager {
   // "bounces the joining pawn home" resolution (the sibling "3-stack" test). Reset at the start of
   // every roll, same as brokenBarrierThisRoll just above.
   private openedEntryPairThisRoll: number | null = null
+  // Reported directly ("Si sale un doble 5 y quedan dos peones en el refugio. Ambos salen a la vez
+  // salvo que ya haya otro en la casilla de salida. NO uno detrás de otro" - on a double 5 with two
+  // pawns still in the shelter, both come out at once unless another pawn is already on the exit
+  // square; not one after the other): the two exits used to be two separate clicks and two separate
+  // hops. Set by playMove() after a plain, uneventful exit made with one half of a double exit-roll
+  // onto an empty square (anything already there - the "already another one there" the client
+  // excepts - keeps the two exits one at a time, as does a capture, which owes its own reward first),
+  // and consumed by the very next offerMoves(): if all that's left for the other die is another exit,
+  // it is played out right there for the player - the shelter pawns are interchangeable, so there is
+  // nothing to choose. Cleared at every requestRoll() and by any move that isn't such an exit.
+  private doubleExitPairable = false
 
   // `dice` accepts anything roll()-shaped, not just the real Dice class - tests inject an exact
   // roll queue instead of a seed, since a seed's resulting face values aren't hand-pickable.
@@ -415,6 +430,7 @@ export class TurnManager {
     this.diceState = { dieA, dieB, dieAUsed: false, dieBUsed: false }
     this.brokenBarrierThisRoll = null
     this.openedEntryPairThisRoll = null
+    this.doubleExitPairable = false
 
     // PC 6.2: collecting a reward takes priority over any dice still unspent - if the Parkiller's
     // own move just eliminated an opposing Parkiller, its PK7 reward is offered ahead of the
@@ -867,6 +883,18 @@ export class TurnManager {
       return capturing.length > 0 ? capturing : pieceOptions
     })
 
+    // See doubleExitPairable's own doc comment. Only ever true right after the first exit of a
+    // double exit-roll, with the other die still unspent; every option left is then one more exit
+    // (the exit lock above already restricted it to that). When the entry square is already full
+    // (an own pawn there, or a capture owing a reward first) no exit is offered here and this
+    // simply doesn't apply.
+    const playSecondExitNow = this.doubleExitPairable && state.dieAUsed !== state.dieBUsed && options.length > 0 && options.every((m) => m.kind === 'ExitYard')
+    this.doubleExitPairable = false
+    if (playSecondExitNow) {
+      this.playMove(options[0], true)
+      return
+    }
+
     this.pendingMoves = options
 
     if (this.pendingMoves.length === 0) {
@@ -892,10 +920,28 @@ export class TurnManager {
   submitMove(chosenPiece: Piece, amount?: number): MoveResult | null {
     const move = this.pendingMoves?.find((m) => m.piece === chosenPiece && (amount === undefined || m.amount === amount))
     if (!move) return null
+    return this.playMove(move, false)
+  }
+
+  // Everything submitMove() does once the move itself is known. `simultaneousWithPrevious` marks
+  // the exit offerMoves() plays on the player's behalf right after the first one (see
+  // doubleExitPairable) - only the animation event cares.
+  private playMove(move: MoveOption, simultaneousWithPrevious: boolean): MoveResult {
+    const chosenPiece = move.piece
     const isRewardMove = move.diceSource === 'reward'
     const before = snapshotPiece(chosenPiece)
 
     const isDoubleRoll = this.diceState ? this.diceState.dieA === this.diceState.dieB : false
+    // Read before applyMove() - see doubleExitPairable's own doc comment for why any other piece
+    // (pawn or Parkiller, own or foreign) already on the exit square rules out playing both exits
+    // together.
+    const exitSquareWasOccupied =
+      move.kind === 'ExitYard' &&
+      this.players.some(
+        (p) =>
+          p.pieces.some((piece) => piece.state === 'OnTrack' && piece.trackPosition === move.resultingTrackPosition) ||
+          (isParkillerOnTrack(p.parkiller) && p.parkiller.trackPosition === move.resultingTrackPosition),
+      )
     const result = applyMove(
       this.board,
       move,
@@ -959,6 +1005,17 @@ export class TurnManager {
     // chance at it.
     this.lastMovedPiece = chosenPiece
     this.pendingMoves = null
+    this.doubleExitPairable =
+      !isRewardMove &&
+      !simultaneousWithPrevious &&
+      move.kind === 'ExitYard' &&
+      !exitSquareWasOccupied &&
+      isDoubleRoll &&
+      move.amount === this.settings.exitRoll &&
+      chosenPiece.state === 'OnTrack' &&
+      !result.capturedPiece &&
+      !result.capturedParkillerColor &&
+      !result.eliminatedByParkiller
 
     if (!isRewardMove && this.diceState) {
       if (move.diceSource === 'sum') {
@@ -980,6 +1037,7 @@ export class TurnManager {
       capturedParkillerColor: result.capturedParkillerColor,
       eliminatedByParkillerAt: result.eliminatedByParkillerAt,
       eliminatedByParkillerColor: result.eliminatedByParkillerColor,
+      ...(simultaneousWithPrevious ? { simultaneousWithPrevious: true } : {}),
     })
 
     if (hasWon(this.currentPlayer)) {

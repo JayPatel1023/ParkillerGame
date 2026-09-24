@@ -4,7 +4,7 @@ import { Line, OrbitControls, PerspectiveCamera, Text } from '@react-three/drei'
 import * as THREE from 'three'
 import type { BoardDefinition } from '../core/board/boardDefinition'
 import type { PlayerState } from '../core/gameFlow/playerState'
-import type { ParkillerMoveResult } from '../core/gameFlow/turnManager'
+import type { MoveAnimationInfo, ParkillerMoveResult } from '../core/gameFlow/turnManager'
 import type { MoveOption } from '../core/rules/moveOption'
 import type { Piece } from '../core/pieces/piece'
 import type { PieceColor } from '../core/pieceColor'
@@ -616,6 +616,46 @@ interface BoardSceneProps {
   botHighlightedPiece: Piece | null
 }
 
+// The 200ms a simultaneous pair's slower piece gets to report its own landing after the first one
+// has (both use the same hop timing, so in practice they are a frame apart).
+const SIMULTANEOUS_HOP_GRACE_MS = 200
+
+/** The square-by-square hop path one move animation walks - see BoardScene's own comments on
+ * animatingHopData for the history behind each branch. */
+function computeMoveHopData(
+  animation: MoveAnimationInfo,
+  definition: BoardDefinition,
+): { hopFrom: [number, number, number]; hops: [number, number, number][] } | null {
+  const { piece, before, after, eliminatedByParkillerAt } = animation
+  const lane = definition.playerLanes.find((l) => l.color === piece.color)
+  const beforeWaypoint =
+    before.state === 'InYard'
+      ? lane?.yardWaypoints[piece.pieceIndex]
+      : before.state === 'OnTrack'
+        ? definition.trackWaypoints[before.trackPosition]
+        : lane?.homeCorridorWaypoints[before.corridorPosition]
+  if (!beforeWaypoint) return null
+  // PK5, reported directly ("도착하기전에 이미 먹히울걸 타산해서 가기도전에 갑자기 먼저
+  // 사라지는" - it vanishes before even arriving, as if pre-calculated): `after` is already back
+  // to InYard by the time this fires (rules apply instantly - see MoveResult's own doc comment),
+  // so getHopWaypoints(before, after) has no square to walk toward at all. Synthesizes the
+  // "arrived, still on the track" snapshot getHopWaypoints actually needs to walk there first, in
+  // order, then appends the same "flung home" arc a captured opponent's piece already gets
+  // (getCaptureReturnWaypoints) - one continuous hop sequence, walk then bounce, not two separate
+  // animations to coordinate.
+  const hops =
+    eliminatedByParkillerAt !== undefined
+      ? [
+          ...getHopWaypoints(piece.color, before, { state: 'OnTrack', trackPosition: eliminatedByParkillerAt, corridorPosition: -1 }, definition),
+          ...getCaptureReturnWaypoints(piece.color, eliminatedByParkillerAt, piece.pieceIndex, definition),
+        ]
+      : getHopWaypoints(piece.color, before, after, definition)
+  return {
+    hopFrom: toWorldPosition(beforeWaypoint),
+    hops: hops.map(toWorldPosition),
+  }
+}
+
 export function BoardScene({
   definition,
   players,
@@ -714,48 +754,62 @@ export function BoardScene({
   // smooth when nothing else re-rendered during that particular move, stuttering/zipping when it
   // did. Memoized on moveAnimation's own primitive fields so the array is only rebuilt when the
   // move itself actually changes.
-  const animatingHopData = useMemo(() => {
-    if (!moveAnimation) return null
-    const { piece, before, after, eliminatedByParkillerAt } = moveAnimation
-    const lane = definition.playerLanes.find((l) => l.color === piece.color)
-    const beforeWaypoint =
-      before.state === 'InYard'
-        ? lane?.yardWaypoints[piece.pieceIndex]
-        : before.state === 'OnTrack'
-          ? definition.trackWaypoints[before.trackPosition]
-          : lane?.homeCorridorWaypoints[before.corridorPosition]
-    if (!beforeWaypoint) return null
-    // PK5, reported directly ("도착하기전에 이미 먹히울걸 타산해서 가기도전에 갑자기 먼저
-    // 사라지는" - it vanishes before even arriving, as if pre-calculated): `after` is already back
-    // to InYard by the time this fires (rules apply instantly - see MoveResult's own doc comment),
-    // so getHopWaypoints(before, after) has no square to walk toward at all. Synthesizes the
-    // "arrived, still on the track" snapshot getHopWaypoints actually needs to walk there first, in
-    // order, then appends the same "flung home" arc a captured opponent's piece already gets
-    // (getCaptureReturnWaypoints) - one continuous hop sequence, walk then bounce, not two separate
-    // animations to coordinate.
-    const hops =
-      eliminatedByParkillerAt !== undefined
-        ? [
-            ...getHopWaypoints(piece.color, before, { state: 'OnTrack', trackPosition: eliminatedByParkillerAt, corridorPosition: -1 }, definition),
-            ...getCaptureReturnWaypoints(piece.color, eliminatedByParkillerAt, piece.pieceIndex, definition),
-          ]
-        : getHopWaypoints(piece.color, before, after, definition)
-    return {
-      hopFrom: toWorldPosition(beforeWaypoint),
-      hops: hops.map(toWorldPosition),
-    }
+  const animatingHopData = useMemo(
+    () => (moveAnimation ? computeMoveHopData(moveAnimation, definition) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    moveAnimation?.piece,
-    moveAnimation?.before.state,
-    moveAnimation?.before.trackPosition,
-    moveAnimation?.before.corridorPosition,
-    moveAnimation?.after.state,
-    moveAnimation?.after.trackPosition,
-    moveAnimation?.after.corridorPosition,
-    moveAnimation?.eliminatedByParkillerAt,
-    definition,
-  ])
+    [
+      moveAnimation?.piece,
+      moveAnimation?.before.state,
+      moveAnimation?.before.trackPosition,
+      moveAnimation?.before.corridorPosition,
+      moveAnimation?.after.state,
+      moveAnimation?.after.trackPosition,
+      moveAnimation?.after.corridorPosition,
+      moveAnimation?.eliminatedByParkillerAt,
+      definition,
+    ],
+  )
+  // The other exit of a double 5, hopping at the same time (see MoveAnimationRequest.simultaneousWith).
+  const companionAnimation = moveAnimation?.simultaneousWith ?? null
+  const companionHopData = useMemo(
+    () => (companionAnimation ? computeMoveHopData(companionAnimation, definition) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      companionAnimation?.piece,
+      companionAnimation?.before.state,
+      companionAnimation?.before.trackPosition,
+      companionAnimation?.before.corridorPosition,
+      companionAnimation?.after.state,
+      companionAnimation?.after.trackPosition,
+      companionAnimation?.after.corridorPosition,
+      companionAnimation?.eliminatedByParkillerAt,
+      definition,
+    ],
+  )
+
+  // Both pieces of a simultaneous pair report their own hop completion; the move animation is only
+  // cleared once both have landed (a piece still mid-hop would otherwise snap to its resting spot).
+  // The grace timer is a safety net, not the normal path: if one of the two never reports, the game
+  // must not stay locked behind an animation that will never finish.
+  const hopsPendingRef = useRef(0)
+  const hopsGraceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    hopsPendingRef.current = moveAnimation ? (moveAnimation.simultaneousWith ? 2 : 1) : 0
+    return () => {
+      if (hopsGraceTimerRef.current) clearTimeout(hopsGraceTimerRef.current)
+      hopsGraceTimerRef.current = null
+    }
+  }, [moveAnimation])
+  const onMoveHopsComplete = () => {
+    hopsPendingRef.current -= 1
+    if (hopsPendingRef.current <= 0) {
+      if (hopsGraceTimerRef.current) clearTimeout(hopsGraceTimerRef.current)
+      hopsGraceTimerRef.current = null
+      onAnimationComplete()
+    } else if (!hopsGraceTimerRef.current) {
+      hopsGraceTimerRef.current = setTimeout(onAnimationComplete, SIMULTANEOUS_HOP_GRACE_MS)
+    }
+  }
 
   // Same memoization reasoning as animatingHopData above, for the Parkiller's own auto-resolved
   // move - parkillerAnimation is a stable object for one move's whole duration (see useTurnManager),
@@ -826,8 +880,19 @@ export function BoardScene({
   const nextFinishIdRef = useRef(0)
 
   useEffect(() => {
-    const prevMove = prevMoveAnimationRef.current
-    if (!moveAnimation && prevMove && (prevMove.capturedPiece || prevMove.capturedParkillerColor)) {
+    const prevRequest = prevMoveAnimationRef.current
+    prevMoveAnimationRef.current = moveAnimation
+    if (moveAnimation || !prevRequest) return
+    // A simultaneous pair (see MoveAnimationRequest.simultaneousWith) finishes as one - each of its
+    // two moves gets the same trailing-edge treatment a lone move does.
+    for (const prevMove of prevRequest.simultaneousWith ? [prevRequest, prevRequest.simultaneousWith] : [prevRequest]) {
+      playTrailingMoveEffects(prevMove)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moveAnimation, definition])
+
+  function playTrailingMoveEffects(prevMove: MoveAnimationInfo) {
+    if (prevMove.capturedPiece || prevMove.capturedParkillerColor) {
       spawnCaptureEffects(prevMove.after.trackPosition, prevMove.capturedPiece, prevMove.capturedParkillerColor)
     }
     // PK5, reported directly - a distinct impact flash at the square the pawn actually walked to,
@@ -838,7 +903,7 @@ export function BoardScene({
     // own color rather than the mover's, so the flash reads as "that Parkiller got you" - the same
     // "something happened here" language a capture's own impact already uses, just themed to the
     // opposite outcome.
-    if (!moveAnimation && prevMove && prevMove.eliminatedByParkillerAt !== undefined && prevMove.eliminatedByParkillerColor) {
+    if (prevMove.eliminatedByParkillerAt !== undefined && prevMove.eliminatedByParkillerColor) {
       const fromWaypoint = definition.trackWaypoints[prevMove.eliminatedByParkillerAt]
       if (fromWaypoint) {
         setImpacts((prev) => [
@@ -847,7 +912,7 @@ export function BoardScene({
         ])
       }
     }
-    if (!moveAnimation && prevMove && prevMove.after.state === 'Finished') {
+    if (prevMove.after.state === 'Finished') {
       const lane = definition.playerLanes.find((l) => l.color === prevMove.piece.color)
       const waypoint = lane?.homeCorridorWaypoints[prevMove.after.corridorPosition]
       if (waypoint) {
@@ -857,9 +922,7 @@ export function BoardScene({
         ])
       }
     }
-    prevMoveAnimationRef.current = moveAnimation
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [moveAnimation, definition])
+  }
 
   useEffect(() => {
     const prevParkiller = prevParkillerAnimationRef.current
@@ -982,10 +1045,11 @@ export function BoardScene({
         // captured by another pawn's move (moveAnimation) or by an opposing Parkiller's own move
         // (parkillerAnimation, PK5) - reported directly that the latter was missing this treatment
         // entirely, so the eaten piece vanished before the Parkiller's hop visually arrived.
-        const capturedByPawnMove = moveAnimation?.capturedPiece === piece
+        const capturingMove = moveAnimation?.capturedPiece === piece ? moveAnimation : companionAnimation?.capturedPiece === piece ? companionAnimation : null
+        const capturedByPawnMove = capturingMove !== null
         const capturedByParkiller = parkillerAnimation?.capturedPawn === piece
         const isBeingCaptured = capturedByPawnMove || capturedByParkiller
-        const captureTrackPosition = capturedByPawnMove ? moveAnimation!.after.trackPosition : parkillerAnimation?.after
+        const captureTrackPosition = capturingMove ? capturingMove.after.trackPosition : parkillerAnimation?.after
         const waypoint = isBeingCaptured
           ? (definition.trackWaypoints[captureTrackPosition!] ?? null)
           : getPieceWaypoint(piece, definition)
@@ -1019,15 +1083,17 @@ export function BoardScene({
           restPosition[0] += ox
           restPosition[2] += oz
         }
-        const isAnimating = moveAnimation?.piece === piece
+        const isPrimaryAnimating = moveAnimation?.piece === piece
+        const isAnimating = isPrimaryAnimating || companionAnimation?.piece === piece
+        const moveHopData = isPrimaryAnimating ? animatingHopData : companionHopData
         // Once the freeze above ends, a piece just captured plays its own short "flung home" hop
         // animation (see spawnCaptureEffects) instead of snapping straight to restPosition - which
         // by now is already its real yard slot, so the flight's own hops lead there directly.
         const captureFlight = captureFlights.get(piece)
-        const hopFrom = isAnimating ? (animatingHopData?.hopFrom ?? null) : (captureFlight?.hopFrom ?? null)
-        const hops = isAnimating ? (animatingHopData?.hops ?? []) : (captureFlight?.hops ?? [])
+        const hopFrom = isAnimating ? (moveHopData?.hopFrom ?? null) : (captureFlight?.hopFrom ?? null)
+        const hops = isAnimating ? (moveHopData?.hops ?? []) : (captureFlight?.hops ?? [])
         const onHopsComplete = isAnimating
-          ? onAnimationComplete
+          ? onMoveHopsComplete
           : captureFlight
             ? () =>
                 setCaptureFlights((prev) => {

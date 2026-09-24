@@ -20,7 +20,13 @@ import { turnHandoffDelayMs } from './turnHandoffDelay'
  * Shape comes straight from TurnManager's own moveAnimationReady event (see MoveAnimationInfo) -
  * re-exported under this name since BoardScene/GameBoardScreen already import it from here.
  */
-export type MoveAnimationRequest = MoveAnimationInfo
+export type MoveAnimationRequest = MoveAnimationInfo & {
+  /** A second piece hopping at the same time as `piece` - the other exit of a double 5 (see
+   * TurnManager's own doubleExitPairable). The engine emits it as its own moveAnimationReady event
+   * right after the first, flagged simultaneousWithPrevious; it's folded in here because the scene
+   * animates a single slot. */
+  simultaneousWith?: MoveAnimationInfo
+}
 
 // Reported directly: pieces sometimes hopped at a normal, readable pace and sometimes moved "at
 // light speed" - worst with an online bot, but really any roll this client didn't itself trigger
@@ -187,7 +193,7 @@ export function useTurnManager(turnManager: TurnManagerLike) {
   const prevMoveAnimationForCaptureRef = useRef<MoveAnimationRequest | null>(null)
   useEffect(() => {
     const prevMove = prevMoveAnimationForCaptureRef.current
-    if (!moveAnimation && prevMove?.capturedPiece) captureFlightHoldRef.current?.trigger()
+    if (!moveAnimation && (prevMove?.capturedPiece || prevMove?.simultaneousWith?.capturedPiece)) captureFlightHoldRef.current?.trigger()
     prevMoveAnimationForCaptureRef.current = moveAnimation
   }, [moveAnimation])
   const prevParkillerAnimationForCaptureRef = useRef<ParkillerMoveResult | null>(null)
@@ -322,7 +328,9 @@ export function useTurnManager(turnManager: TurnManagerLike) {
       // Fires from inside TurnManager.submitMove() itself, not built here around a UI-triggered
       // call to it (as this used to be) - see MoveAnimationInfo's own comment for why that missed
       // bot moves and remote clients' own moves entirely.
-      turnManager.moveAnimationReady.on((info) => setMoveAnimation(info)),
+      turnManager.moveAnimationReady.on((info) =>
+        setMoveAnimation((prev) => (info.simultaneousWithPrevious && prev ? { ...prev, simultaneousWith: info } : info)),
+      ),
       turnManager.pieceEliminatedByDoubles.on((piece) => {
         setEliminatedByDoubles(piece)
       }),

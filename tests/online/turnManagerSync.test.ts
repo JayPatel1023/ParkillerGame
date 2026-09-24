@@ -168,6 +168,33 @@ describe('HostTurnManagerBridge + RemoteTurnManager convergence', () => {
     expect(snapshot(remote.players)).toEqual(snapshot(host.players))
   })
 
+  // A double 5 brings two shelter pieces out from a single choice (see TurnManager's own
+  // doubleExitPairable). Only ONE moveChosen is ever broadcast for it - both sides' own engines
+  // play the second exit themselves - so a replay must land on the identical state, not one exit
+  // short (the Remote would otherwise wait for a second broadcast that never comes).
+  it('a double-5 pair of exits converges on both sides from a single broadcast move', () => {
+    const board = buildTestBoard()
+    const network = new FakeRoomNetwork(MASTER_ACTOR)
+    const actorColors = new Map<number, PieceColor>([
+      [MASTER_ACTOR, 'Red'],
+      [REMOTE_ACTOR, 'Blue'],
+    ])
+    const host = buildHost(board, network, actorColors, [5, 5, 1])
+    const remote = buildRemote(board, network)
+    host.bridge.start()
+    remote.bridge.start()
+
+    let moves: import('../../src/core/rules/moveOption').MoveOption[] = []
+    host.bridge.moveChoicesReady.on((m) => (moves = m))
+    host.bridge.requestRoll()
+    host.bridge.submitMove(moves[0].piece)
+
+    expect(host.players[0].pieces.filter((p) => p.state === 'OnTrack')).toHaveLength(2)
+    vi.advanceTimersByTime(20000)
+    expect(remote.players[0].pieces.filter((p) => p.state === 'OnTrack')).toHaveLength(2)
+    expect(snapshot(remote.players)).toEqual(snapshot(host.players))
+  })
+
   it('a Remote-initiated roll and move converge on both sides', () => {
     const board = buildTestBoard()
     const network = new FakeRoomNetwork(MASTER_ACTOR)
