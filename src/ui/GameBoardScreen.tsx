@@ -15,6 +15,7 @@ import { playCaptureFanfare, playCaptureSound, playFinishSound, playGameWonSound
 import { ColorDrawModal, type ColorDrawEntry } from './ColorDrawModal'
 import { Confetti } from './Confetti'
 import { EliminationToast } from './EliminationToast'
+import { heldAlertClearDelayMs } from './heldAlertTiming'
 import { HelpModal } from './HelpModal'
 import { getSelectedTrackIndex, getTrackLabel, isMusicMuted, nextMusicTrack, toggleMusicMuted } from './introMusic'
 import { PlayerLeftToast } from './PlayerLeftToast'
@@ -62,9 +63,29 @@ function shade(hex: string, percent: number): string {
 // just at the top of it instead of the bottom.
 const ALERT_HOLD_MS = 3000
 
-function useHeldAlert<T>(value: T | null, holdMs: number = ALERT_HOLD_MS): T | null {
+// ceiling/blockClear/lingerMs are all opt-in for the dice display only - see heldAlertTiming.ts for
+// why (the dice's source value stays live for a whole roll, unlike a toast's). Every other caller
+// keeps the exact behavior it had: max-hold ceiling on, never blocked, no linger.
+interface HeldAlertOptions {
+  ceiling?: boolean
+  blockClear?: boolean
+  lingerMs?: number
+}
+
+function useHeldAlert<T>(value: T | null, holdMs: number = ALERT_HOLD_MS, options: HeldAlertOptions = {}): T | null {
+  const { ceiling = true, blockClear = false, lingerMs = 0 } = options
   const [held, setHeld] = useState<T | null>(value)
   const shownAtRef = useRef(0)
+  // When blockClear last went false (animations just finished) - the linger is measured from that
+  // moment, so a value whose animations settled long ago (a turn handoff, which already waits for
+  // them) isn't held any longer than it used to be. Declared before the main effect on purpose:
+  // effects run in declaration order, and that effect reads this on the same commit.
+  const unblockedAtRef = useRef(Date.now())
+  const prevBlockedRef = useRef(blockClear)
+  useEffect(() => {
+    if (prevBlockedRef.current && !blockClear) unblockedAtRef.current = Date.now()
+    prevBlockedRef.current = blockClear
+  }, [blockClear])
   // Requested directly - see HUMAN_REVEAL_HOLD_MS's own doc comment: a human's own turn now holds
   // its dice/reward reveals far longer than a bot's, so callers pass a `holdMs` that changes from
   // render to render (whoever's turn is currently live), not the fixed constant this hook
@@ -102,20 +123,29 @@ function useHeldAlert<T>(value: T | null, holdMs: number = ALERT_HOLD_MS): T | n
       // the clear timer here too closes that gap: it lands on the exact same shownAt+holdMs
       // deadline the value===null branch already computes below, so a fast-following event still
       // gets its full minimum hold unchanged - this just also guarantees the alert self-clears by
-      // holdMs even if the source value never goes back to null on its own.
-      clearTimerRef.current = setTimeout(() => setHeld(null), holdMs)
+      // holdMs even if the source value never goes back to null on its own. The dice display opts
+      // out (ceiling: false): its source stays live for the whole roll, so a ceiling wiped the
+      // numbers mid-move - see heldAlertTiming.ts.
+      if (ceiling) clearTimerRef.current = setTimeout(() => setHeld(null), holdMs)
       return () => {
         if (clearTimerRef.current) clearTimeout(clearTimerRef.current)
       }
     }
-    const elapsed = Date.now() - shownAtRef.current
-    const remaining = Math.max(0, holdMsRef.current - elapsed)
-    clearTimerRef.current = setTimeout(() => setHeld(null), remaining)
+    const delay = heldAlertClearDelayMs({
+      elapsedMs: Date.now() - shownAtRef.current,
+      holdMs: holdMsRef.current,
+      lingerMs,
+      msSinceUnblocked: Date.now() - unblockedAtRef.current,
+      blocked: blockClear,
+    })
+    // Blocked: keep what's held and wait - this effect re-runs the moment blockClear flips false.
+    if (delay === null) return
+    clearTimerRef.current = setTimeout(() => setHeld(null), delay)
     return () => {
       if (clearTimerRef.current) clearTimeout(clearTimerRef.current)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, holdMs])
+  }, [value, holdMs, blockClear])
 
   return held
 }
@@ -346,6 +376,11 @@ export function computeAnimationsSettledForPendingMoves<T>(
 // register than a single toast message. Bumped by the same amount ALERT_HOLD_MS just was, so that
 // gap between the two stays what it was rather than shrinking to a fraction of itself.
 const DICE_DISPLAY_HOLD_MS = 3800
+
+// How long the dice numbers stay up after the last piece involved in this roll has landed - see
+// heldAlertTiming.ts. Long enough to read the final numbers against where the piece ended up, short
+// enough not to drag the next roll.
+const DICE_POST_MOVE_LINGER_MS = 1500
 
 // Reported directly ("hay que dejar 20 segundos de espacio de tiempo entre cada movimiento de cada
 // peón... para poder contar donde caen los dados y las recompensas. Al bot déjale 2 o 3 segundos
@@ -681,7 +716,16 @@ export function GameBoardScreen({
   // See DICE_DISPLAY_HOLD_MS's own doc comment above - holds the last roll's numbers on screen for
   // a minimum viewing window instead of blanking the instant the turn moves on. Shows a fresh roll
   // immediately once its own spin/reveal actually completes, same as the reward/elimination toasts.
-  const visibleRoll = useHeldAlert(lastRoll, holdMsFor(DICE_DISPLAY_HOLD_MS, currentPlayer.color))
+  //
+  // Reported directly ("아직 다 이동하지도 않고 이동하려고 하는 참인데 왜 벌써 주사위는 제자리로
+  // 돌아가..." - the dice reset before the piece has even finished moving): held for the whole
+  // roll, not just a fixed window after the reveal, and never cleared while a piece is still
+  // hopping - see heldAlertTiming.ts for both causes.
+  const visibleRoll = useHeldAlert(lastRoll, holdMsFor(DICE_DISPLAY_HOLD_MS, currentPlayer.color), {
+    ceiling: false,
+    blockClear: !animationsSettled,
+    lingerMs: DICE_POST_MOVE_LINGER_MS,
+  })
   const diceValues: [number | null, number | null, number | null] = [
     visibleRoll?.dieA ?? null,
     visibleRoll?.dieB ?? null,
