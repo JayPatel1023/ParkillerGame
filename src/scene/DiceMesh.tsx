@@ -44,18 +44,41 @@ declare global {
 // tightest boards (confirmed directly, in-browser, on 2p/4p/6p: the white dice's own near corner
 // was overlapping the last blue/red track square before this). Moved further toward the Parkiller
 // badge, away from the fleur-de-lis, re-verified clear of the track on all three checked boards.
-const CORNER_X = 2.1 * DICE_SCALE
-const CORNER_Z = 1.75 * DICE_SCALE
-const DIE_SPACING = 0.55 * DICE_SCALE
-// The black die sits on its own row behind the two white ones (see `row` below) - a taller row
-// gap than the plain column spacing, since the black die is now physically bigger and would
-// otherwise overlap the white dice's row.
-const ROW_SPACING = 0.55 * DICE_SCALE
+//
+// Moved again, reported directly, with a screenshot on the 4-player board: the dice take up part of
+// the track, move them down so the track isn't covered (a pawn walking that stretch can also end up
+// hidden behind them - part of the "pawns keep disappearing" report).
+// The last tuning was by eye on three boards; measured properly this time instead: distance from each
+// die's footprint to every track and home-corridor square on ALL five boards (tile half-width from
+// the board's own estimateSquareSize, protected squares at their full 1.8x width). The old position
+// overlapped tiles on the 4-player board (about -3.1 world units of clearance), the 6-player board
+// (-1.8) and grazed the 5-player one.
+//
+// "Just move it further down/right" isn't available: two first attempts pushed dice off the visible
+// area (the black die's lower half below a 16:9 viewport, then the right-hand dice past the right
+// edge on 1.5:1 windows) - the camera crops the near corners differently per window shape, and the
+// nearer a die sits to the camera (larger z) the less far right it can go (perspective). So every
+// candidate was held to the frontier the *old* layout already proved visible - right edge no further
+// than 23.4 - 0.51 * (z - 16) world units, bottom edge no further than 22.7 - and searched on all
+// five boards. The only arrangement with real clearance is an L: the two white dice side by side
+// along the bottom, the black (Parkiller) die stacked above and just right of the right-hand white
+// one (column 0.75, row -1 in BoardScene) instead of behind the pair, with the dice a touch smaller
+// (0.34 -> 0.32) - dice were reported as too large twice before, so this goes the same direction.
+// Checked by screenshot on all five boards at 16:9, 1.5:1, 4:3 and phone-portrait windows: the tray
+// clears every track square (it overlapped them on the 4-, 5- and 6-player boards before) and is no
+// more cropped at the window edge than the old layout was.
+const CORNER_X = 1.898 * DICE_SCALE
+const CORNER_Z = 2.28 * DICE_SCALE
+const DIE_SPACING = 0.409 * DICE_SCALE
+// The black die sits one row above the white pair (see `row` in BoardScene).
+const ROW_SPACING = 0.409 * DICE_SCALE
 // Reported directly, twice now: the dice read as too large on the board - not by a lot, just
 // enough to feel oversized next to the pieces. Trimmed about a sixth off (0.5 -> 0.42) the first
 // time, then further (0.42 -> 0.34) the second - keeping DIE_SPACING/ROW_SPACING as-is (smaller
 // dice only means more clearance between them, never less).
-const DIE_SIZE = 0.34 * DICE_SCALE
+// Trimmed a third time (0.34 -> 0.32) - see CORNER_X/CORNER_Z above for why: a slightly smaller die is
+// part of what lets the tray clear the track inside the already-proven-visible corner.
+const DIE_SIZE = 0.32 * DICE_SCALE
 // Reference photos had previously shown the black die - the one that moves the Parkiller -
 // noticeably bigger than the two white dice, so it was scaled up 30% to match. Reported directly
 // since, in the shipped game itself rather than those reference photos: make it the same size as
