@@ -376,7 +376,17 @@ const STAR_CENTER_Y = PAWN_TOTAL_HEIGHT * 1.3
 const STAR_SIZE = PIECE_BASE_RADIUS * 0.6
 const STAR_TWINKLE_SPEED = 2.1
 
-const IDLE_SCALE = 1
+// Reported directly ("Los peones deben ser más grandes" - the pawns should be bigger), on top of the
+// sixteen rounds of PIECE_BASE_RADIUS tuning above: applied as a plain uniform scale on the pawn's
+// own mesh, deliberately NOT by raising PIECE_BASE_RADIUS - the Parkiller's size is derived from that
+// constant (see ParkillerMesh.tsx's PAWN_HEIGHT), and a Parkiller that also grew would spill further
+// past its tile and crowd the shared squares this request is also about. Pawns stay clearly smaller
+// than the Parkiller (its footprint radius is ~0.77 against 0.55 here, its height about 1.8x the
+// pawn's). Everything that reasons about how much room a pawn takes on a square (BoardScene's
+// stacking offsets) reads PAWN_FOOTPRINT_RADIUS, not PIECE_BASE_RADIUS.
+export const PAWN_SIZE_BOOST = 1.25
+export const PAWN_FOOTPRINT_RADIUS = PIECE_BASE_RADIUS * PAWN_SIZE_BOOST
+const IDLE_SCALE = PAWN_SIZE_BOOST
 // Reported directly ("차례가되였을때 말들의 크기를 더크게하지말고 색갈을 좀더 밝고 두드러지게한다거나
 // 다른 새효과를 넣는다던가" - when it's your turn, instead of making the pieces bigger, make the
 // color brighter/more prominent, or add some other new effect instead): a selectable piece's own

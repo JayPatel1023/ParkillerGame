@@ -10,7 +10,8 @@ import type { Piece } from '../core/pieces/piece'
 import type { PieceColor } from '../core/pieceColor'
 import type { MoveAnimationRequest } from '../hooks/useTurnManager'
 import { BoardMesh, BOARD_THICKNESS } from './BoardMesh'
-import { PieceMesh, PIECE_BASE_RADIUS } from './PieceMesh'
+import { PieceMesh, PAWN_FOOTPRINT_RADIUS } from './PieceMesh'
+import { screenStackOffset } from './stackLayout'
 import { ParkillerMesh, PARKILLER_FOOTPRINT_RADIUS } from './ParkillerMesh'
 import { DiceMesh } from './DiceMesh'
 import { PieceChoiceMarkers } from './PieceChoiceMarkers'
@@ -338,6 +339,8 @@ const INTRO_STAGGER = 0.09 // seconds between each piece's drop-in entrance, for
 // SAFE_TILE_WIDTH_MULTIPLIER's own matching trim just below - trimmed again here too (±0.13 ->
 // ±0.10) so the *plain*, non-safe case also comes down a further, real amount rather than relying
 // on the widened-tile trim alone.
+// Only used for the square compositions stackLayout.ts's screenStackOffset doesn't cover (it handles
+// every pawn/Parkiller mix the rules can actually produce); kept as the fallback for anything else.
 export const STACK_OFFSETS: [number, number][] = [
   [-0.1, -0.1],
   [0.1, 0.1],
@@ -358,6 +361,9 @@ export const STACK_OFFSETS: [number, number][] = [
 // the plumbing stays in place if a future board's own proportions ever need it again, but 1 means
 // it's a no-op today).
 const CROWDED_SCALE = 1
+
+// The two footprint radii screenStackOffset (stackLayout.ts) spaces a shared square's occupants by.
+const STACK_RADII = { pawn: PAWN_FOOTPRINT_RADIUS, parkiller: PARKILLER_FOOTPRINT_RADIUS }
 
 // Unit tangent (along the path) and normal (across it) at a given waypoint index, from its
 // immediate neighbors - same direction-only math as computeTileCorners' own dirOf, reused here so
@@ -405,7 +411,7 @@ export const STACK_CLEARANCE_FACTOR = 0.7
 // A stack group's own occupant ids are prefixed 'pawn-'/'parkiller-' (see pawnOccupantId/
 // parkillerOccupantId) - cheaper and more direct than re-deriving piece types from state.
 export function maxRadiusForGroup(group: string[]): number {
-  return group.some((id) => id.startsWith('parkiller-')) ? PARKILLER_FOOTPRINT_RADIUS : PIECE_BASE_RADIUS
+  return group.some((id) => id.startsWith('parkiller-')) ? PARKILLER_FOOTPRINT_RADIUS : PAWN_FOOTPRINT_RADIUS
 }
 
 export function localStackOffset(
@@ -1060,7 +1066,11 @@ export function BoardScene({
         const group = stackKey ? stackGroups.get(stackKey) : undefined
         const restPosition: [number, number, number] = worldPos
         const crowded = Boolean(group && group.length > 1)
-        if (group && group.length > 1) {
+        const pawnScreenOffset = group && group.length > 1 ? screenStackOffset(group, pawnOccupantId(piece), STACK_RADII) : null
+        if (pawnScreenOffset) {
+          restPosition[0] += pawnScreenOffset[0]
+          restPosition[2] += pawnScreenOffset[1]
+        } else if (group && group.length > 1) {
           const [along, across] = STACK_OFFSETS[group.indexOf(pawnOccupantId(piece)) % STACK_OFFSETS.length]
           const stackWp = stackWaypointsFor(piece, definition)
           // See SAFE_TILE_WIDTH_MULTIPLIER's own doc comment - only the shared track has real
@@ -1156,7 +1166,12 @@ export function BoardScene({
         const parkillerStackGroupKey = parkillerStackKey(player.parkiller)
         const parkillerGroup = parkillerStackGroupKey ? stackGroups.get(parkillerStackGroupKey) : undefined
         const parkillerCrowded = Boolean(parkillerGroup && parkillerGroup.length > 1)
-        if (parkillerGroup && parkillerGroup.length > 1) {
+        const parkillerScreenOffset =
+          parkillerGroup && parkillerGroup.length > 1 ? screenStackOffset(parkillerGroup, parkillerOccupantId(player.color), STACK_RADII) : null
+        if (parkillerScreenOffset) {
+          restPosition[0] += parkillerScreenOffset[0]
+          restPosition[2] += parkillerScreenOffset[1]
+        } else if (parkillerGroup && parkillerGroup.length > 1) {
           const [along, across] = STACK_OFFSETS[parkillerGroup.indexOf(parkillerOccupantId(player.color)) % STACK_OFFSETS.length]
           // parkillerStackKey (above) only ever returns non-null once the Parkiller has genuinely
           // crossed onto the shared track, so trackPosition here is always a real track index.
