@@ -365,6 +365,12 @@ const CROWDED_SCALE = 1
 // The two footprint radii screenStackOffset (stackLayout.ts) spaces a shared square's occupants by.
 const STACK_RADII = { pawn: PAWN_FOOTPRINT_RADIUS, parkiller: PARKILLER_FOOTPRINT_RADIUS }
 
+// See trackTiles' own doc comment - the same plain cream tone BoardMesh.tsx already falls back to
+// (its own material-2 color prop) while the shared board texture hasn't resolved, kept as one
+// literal in each file rather than a shared import since a future retune of one is not necessarily
+// meant to retune the other.
+const FALLBACK_TILE_COLOR = '#dccdaa'
+
 // Unit tangent (along the path) and normal (across it) at a given waypoint index, from its
 // immediate neighbors - same direction-only math as computeTileCorners' own dirOf, reused here so
 // a stacking offset lands relative to the tile's actual orientation instead of the world's fixed
@@ -567,6 +573,15 @@ function emphasizeSafeColor(hex: string): string {
   return `#${color.getHexString()}`
 }
 
+// See trackTiles' own doc comment for the report this addresses - pulled out as its own pure
+// function (this project's established pattern for logic worth testing without a rendering
+// harness) so the fallback path can be pinned directly: every tile gets a real color regardless of
+// whether the board's own texture has resolved yet.
+export function tileColorFor(sampleColor: ((u: number, v: number) => string) | null, waypoint: [number, number], isSafe: boolean): string {
+  const baseColor = sampleColor ? sampleColor(waypoint[0], waypoint[1]) : FALLBACK_TILE_COLOR
+  return isSafe ? emphasizeSafeColor(baseColor) : baseColor
+}
+
 function parkillerStackKey(parkiller: PlayerState['parkiller']): string | null {
   if (parkiller.state !== 'InPlay') return null
   if (parkiller.corridorPosition < parkiller.corridorLength) return null
@@ -731,8 +746,27 @@ export function BoardScene({
   // list keyed on the board/sampler (both stable for the lifetime of one game) means the same
   // `corners` array reference survives every other re-render, so TrackTile's own geometry memo
   // only ever recomputes when the board itself actually changes.
+  // Reported directly, repeatedly, over a real tester session ("sigue sin aparecer el tablero" /
+  // "en mi ordenador no sale el tablero" - the board still doesn't appear, on my own computer the
+  // board doesn't show up), with a screenshot showing pieces and dice rendering completely normally
+  // while the board itself was just a blank, featureless surface: this used to `return []` outright
+  // whenever `sampleColor` was still null - and useBoardColorSampler's own doc comment already
+  // documented exactly this risk ("zero track tiles ever rendering... explaining a board that shows
+  // its plain fallback color with nothing on top") as a known, only partially-addressed failure mode
+  // - the fix that comment describes (sharing BoardMesh's own robust texture loader instead of a
+  // second, fragile fetch) removed one way to reach a permanently-null sampler, but never touched
+  // this early-return itself, so a load that's merely slow (an ordinary window on a real network) or
+  // that genuinely never resolves (the retry/watchdog in useRobustTexture.ts documents this as a
+  // real, previously-confirmed Windows failure mode) still means zero TrackTiles ever mount - not
+  // just missing their real per-square color, but their entire geometry, border art and all, even
+  // though TrackTile's own texture (tile-fill.png/tile-border.png) is a separate, small, unrelated
+  // file with no dependency on the board's own big image at all. Every tile now always mounts, with
+  // BoardMesh's own already-established plain fallback tone (#dccdaa) standing in for the real
+  // sampled color until sampleColor resolves - the board keeps its own real, recognizable shape
+  // (and TrackTile's own border art) from the very first frame, upgrading to the real per-square
+  // colors the moment the shared texture is ready, exactly like BoardMesh's own material already
+  // does for the board's surface art.
   const trackTiles = useMemo(() => {
-    if (!sampleColor) return []
     const worldPoints: [number, number][] = definition.trackWaypoints.map((wp) => {
       const w = toWorldPosition(wp)
       return [w[0], w[2]]
@@ -740,11 +774,10 @@ export function BoardScene({
     return definition.trackWaypoints.map((wp, i) => {
       const isSafe = safeTrackIndexSet.has(i)
       const halfWidth = isSafe ? (tileSize / 2) * SAFE_TILE_WIDTH_MULTIPLIER : tileSize / 2
-      const baseColor = sampleColor(wp[0], wp[1])
       return {
         key: `tile-${i}`,
         corners: computeTileCorners(worldPoints, i, halfWidth),
-        color: isSafe ? emphasizeSafeColor(baseColor) : baseColor,
+        color: tileColorFor(sampleColor, wp, isSafe),
       }
     })
   }, [definition, sampleColor, tileSize, safeTrackIndexSet])

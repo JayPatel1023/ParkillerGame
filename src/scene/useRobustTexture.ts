@@ -127,7 +127,30 @@ export function decodeBlobToImage(blob: Blob): Promise<HTMLImageElement> {
 // so this keeps the abortable fetch and changes nothing else about what the texture is.
 // useBoardColorSampler reads pixels straight off `texture.image`, and gets the same unflipped
 // HTMLImageElement it always did.
+// Reported directly, over a real tester session, still unresolved after everything above:
+// "sigue sin aparecer el tablero" / "en mi ordenador no sale el tablero" - persisting across ~2
+// hours on the reporter's own machine, matching this project's own separately-recorded "blank
+// board" as one of 2 confirmed-unresolved Windows bugs. Every fix above targets a load that fails
+// or hangs and then *retries the same file* - none of them help if that one specific file just
+// can't make it through on that machine at all (a stricter proxy/antivirus content filter that's
+// more permissive of a plain .jpg than a .webp, or a decode-support gap) - retrying the identical
+// request forever would just fail forever right along with it. Every board ships a real .jpg
+// sibling already (see public/boards/) purely as a leftover from before .webp was chosen, never
+// wired up as a fallback. After enough failed attempts on a .webp URL specifically to rule out an
+// ordinary transient hiccup (those clear up within the first attempt or two - see
+// MAX_RETRY_DELAY_MS's own doc comment), further attempts try that same board's own .jpg instead.
+const WEBP_FALLBACK_AFTER_ATTEMPT = 4
+
+function effectiveUrlForAttempt(url: string, attempt: number): string {
+  return attempt >= WEBP_FALLBACK_AFTER_ATTEMPT && url.endsWith('.webp') ? `${url.slice(0, -'.webp'.length)}.jpg` : url
+}
+
 export function loadWithRetry(url: string, attempt: number) {
+  // See effectiveUrlForAttempt's own doc comment just above for the .webp -> .jpg swap on a
+  // persistently-failing load. `url` itself - the textureCache/inFlight key every caller and
+  // subscriber shares - never changes; only which actual file gets fetched does, so nothing
+  // downstream needs to know the difference.
+  const baseUrl = effectiveUrlForAttempt(url, attempt)
   // A failed fetch can still be an HTTP 200 (e.g. an SPA history-fallback serving index.html for a
   // path that doesn't exist, which several static hosts - including this app's own preview/deploy
   // setup - do instead of a real 404) with `Cache-Control: no-cache`, which permits the browser to
@@ -137,7 +160,7 @@ export function loadWithRetry(url: string, attempt: number) {
   // hard reload did - a cache-busting query param on every retry after the first guarantees each
   // one is a genuinely fresh request, sidestepping the browser's own cache/revalidation behavior
   // for `Image()`-triggered loads entirely rather than depending on it working correctly.
-  const requestUrl = attempt === 1 ? url : `${url}${url.includes('?') ? '&' : '?'}retry=${attempt}`
+  const requestUrl = attempt === 1 ? baseUrl : `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}retry=${attempt}`
   // Guards against both the watchdog and the real onload/onerror firing for the same attempt (a
   // late success arriving just after the watchdog already moved on to a fresh attempt is simply
   // dropped - the new attempt's own callbacks are what carry the texture through from here).

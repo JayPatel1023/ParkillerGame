@@ -429,6 +429,65 @@ describe('TurnManager - mandatory departure (PC2.1)', () => {
     expect(manager.currentPlayer.color).toBe('Red')
   })
 
+  // Investigated directly after a client report ("lanzo otra vez el mismo color gold sin poder
+  // mover ni salir" - I roll again, same color gold, without being able to move or exit) that
+  // arrived the same day this auto-pairing shipped: the paired exit above puts BOTH pawns on the
+  // entry square at once - a same-color barrier PK9's own rules already recognize - immediately,
+  // on the very roll that also grants the bonus turn, instead of only after a second, separate
+  // choice. Confirmed by reading offerMoves()/getValidMoves() that a barrier only ever blocks
+  // *other* pieces from landing there (PC2.4) - never its own occupants from leaving voluntarily,
+  // on any kind of move, double or not (see ownBarrierTrackPosition's own doc comment) - so this
+  // pins that the immediately-following bonus roll can still move both paired pawns normally, not
+  // silently stuck, on an ordinary (non-double) roll.
+  it('the two just-paired pawns on the entry square can still move normally on the very next (bonus) roll', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), new ScriptedDice([5, 5, 1, 3, 2, 1]))
+    let latestMoves: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((m) => (latestMoves = m))
+    manager.requestRoll()
+    manager.submitMove(red.pieces[0]) // plays both exits at once - see the test above
+
+    expect(manager.currentPlayer.color).toBe('Red') // bonus turn from the double
+    manager.requestRoll() // dieA=3, dieB=2, blackDie=1 - an ordinary, non-double bonus roll
+
+    // Both entry-square pawns (now a barrier) are freely offered by either die, exactly like any
+    // other roll - a barrier never restricts its own occupants' voluntary moves.
+    const forPiece0 = latestMoves.filter((m) => m.piece === red.pieces[0])
+    const forPiece1 = latestMoves.filter((m) => m.piece === red.pieces[1])
+    expect(forPiece0.length).toBeGreaterThan(0)
+    expect(forPiece1.length).toBeGreaterThan(0)
+
+    manager.submitMove(red.pieces[0], 3)
+    expect(red.pieces[0].trackPosition).toBe(3)
+  })
+
+  // Companion to the test above: when the bonus roll's OWN die happens to also be the exit roll,
+  // PC2.1's own documented exception ("the entry square already full of the player's own two
+  // pawns") correctly withholds that exit rather than offering an impossible move - this is the
+  // rules-correct, narrow case where a yard pawn genuinely stays put a roll longer, not a bug.
+  it("a bonus roll's own exit die stays withheld while the entry square is still held by the just-paired barrier", () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), new ScriptedDice([5, 5, 1, 5, 6, 1]))
+    let latestMoves: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((m) => (latestMoves = m))
+    manager.requestRoll()
+    manager.submitMove(red.pieces[0])
+    expect(manager.currentPlayer.color).toBe('Red')
+
+    manager.requestRoll() // dieA=5 (the exit roll, but the entry square already holds 2 own pawns)
+    expect(latestMoves.some((m) => m.kind === 'ExitYard')).toBe(false)
+    expect(red.pieces[2].state).toBe('InYard')
+    expect(red.pieces[3].state).toBe('InYard')
+    // The two barrier pawns are still free to move normally with either die.
+    expect(latestMoves.some((m) => m.piece === red.pieces[0] || m.piece === red.pieces[1])).toBe(true)
+  })
+
   it('a double exit-roll with only one piece left in the yard still exits just that one and leaves the other die free', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)

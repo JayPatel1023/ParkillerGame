@@ -174,4 +174,50 @@ describe('useRobustTexture - watchdog-triggered retries abort the attempt they s
     expect(calls).toHaveLength(2)
     expect(calls[1].url).toBe('/board.webp?retry=2')
   })
+
+  // Reported directly, still unresolved after every fix above ("sigue sin aparecer el tablero" /
+  // "en mi ordenador no sale el tablero", persisting across a real ~2 hour tester session): a file
+  // that can't get through AT ALL on some specific machine (a stricter proxy/antivirus content
+  // filter, or a decode-support gap) just keeps failing every retry, forever - every board ships a
+  // real .jpg sibling already (public/boards/), never wired up as a fallback. After enough failed
+  // attempts to rule out an ordinary transient blip, further retries try the .jpg instead.
+  it("after several failed attempts on a .webp URL, retries switch to that board's own .jpg instead - and the cache is still keyed by the original .webp url", async () => {
+    const { calls, pending } = installFetchMock()
+    const { loadWithRetry, textureCache } = await import('../src/scene/useRobustTexture')
+
+    loadWithRetry('/boards/board_3p.webp', 1)
+    // Fail attempts 1-3 with a genuine HTTP error each time - still plain retries of the same
+    // .webp url, same as any other transient failure.
+    for (let i = 0; i < 3; i++) {
+      pending[i].resolve({ ok: false, status: 404, blob: () => Promise.resolve('never') })
+      await flush()
+      await vi.advanceTimersByTimeAsync(RETRY_BASE_DELAY_MS * (i + 1))
+      await flush()
+    }
+    expect(calls).toHaveLength(4)
+    expect(calls[0].url).toBe('/boards/board_3p.webp')
+    expect(calls[1].url).toBe('/boards/board_3p.webp?retry=2')
+    expect(calls[2].url).toBe('/boards/board_3p.webp?retry=3')
+    // Attempt 4 - the switch to .jpg, with the same cache-busting retry suffix as any other attempt.
+    expect(calls[3].url).toBe('/boards/board_3p.jpg?retry=4')
+
+    // That jpg attempt succeeding still resolves under the ORIGINAL .webp key - nothing downstream
+    // (BoardMesh/useBoardColorSampler, both keyed by the url they themselves passed in) needs to
+    // know a different file was actually fetched.
+    pending[3].resolve({ ok: true, blob: () => Promise.resolve('jpg-blob') })
+    await flush()
+    expect(textureCache.get('/boards/board_3p.webp')).toBeDefined()
+    expect(textureCache.get('/boards/board_3p.jpg')).toBeUndefined()
+  })
+
+  it('never switches to .jpg while attempts are still succeeding, or for a url that is not .webp at all', async () => {
+    const { calls, pending } = installFetchMock()
+    const { loadWithRetry } = await import('../src/scene/useRobustTexture')
+
+    loadWithRetry('/tiles/tile-fill.png', 1)
+    pending[0].resolve({ ok: true, blob: () => Promise.resolve('blob-1') })
+    await flush()
+    expect(calls).toHaveLength(1)
+    expect(calls[0].url).toBe('/tiles/tile-fill.png')
+  })
 })

@@ -3,7 +3,7 @@ import { BOARD_DEFINITIONS } from '../src/data/boards'
 import { estimateSquareSize } from '../src/scene/boardGeometry'
 import { PIECE_BASE_RADIUS } from '../src/scene/PieceMesh'
 import { PARKILLER_FOOTPRINT_RADIUS } from '../src/scene/ParkillerMesh'
-import { localStackOffset, PARKILLER_SHARED_SQUARE_WIDTH_MULTIPLIER, STACK_OFFSETS, STACK_SAFE_WIDTH_MULTIPLIER } from '../src/scene/BoardScene'
+import { localStackOffset, PARKILLER_SHARED_SQUARE_WIDTH_MULTIPLIER, STACK_OFFSETS, STACK_SAFE_WIDTH_MULTIPLIER, tileColorFor } from '../src/scene/BoardScene'
 
 // Reported directly, with screenshots: 2 barrier pawns and the opposing Parki they legally
 // coexist with on a safe square (PK4) rendered piled together with no visible separation, read as
@@ -44,5 +44,30 @@ describe('BoardScene stacking - a Parki sharing a safe square with pawns', () =>
       const pawnDistanceFromCenter = Math.hypot(0.1 * tileSize, 0.1 * tileSize)
       expect(fixDistance, `board_${playerCount}p`).toBeGreaterThan(pawnDistanceFromCenter + PIECE_BASE_RADIUS)
     }
+  })
+})
+
+// Reported directly, over a real tester session ("sigue sin aparecer el tablero" / "en mi
+// ordenador no sale el tablero"), with a screenshot showing pieces and dice rendering normally
+// over a completely blank board: trackTiles (BoardScene.tsx) used to `return []` outright whenever
+// the board's own color sampler hadn't resolved yet - useBoardColorSampler.ts's own doc comment
+// already flagged this exact risk. Every tile now gets a real fallback color instead, via this
+// pulled-out pure function - pinned directly here so a future change can't quietly reintroduce the
+// empty-array path without a rendering harness ever catching it.
+describe('tileColorFor', () => {
+  it('falls back to a real color (not sampled from the board art) while the sampler is not ready', () => {
+    const color = tileColorFor(null, [0.3, 0.4], false)
+    expect(color).toMatch(/^#[0-9a-f]{6}$/i)
+  })
+
+  it('still emphasizes a safe square even on the fallback color, same as a real sampled one', () => {
+    const plain = tileColorFor(null, [0.3, 0.4], false)
+    const safe = tileColorFor(null, [0.3, 0.4], true)
+    expect(safe).not.toBe(plain)
+  })
+
+  it('uses the real sampled color once the sampler is ready, not the fallback', () => {
+    const sampler = () => '#123456'
+    expect(tileColorFor(sampler, [0.1, 0.9], false)).toBe('#123456')
   })
 })
