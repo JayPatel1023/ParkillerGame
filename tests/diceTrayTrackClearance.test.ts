@@ -19,8 +19,8 @@ import { CORNER_X, CORNER_Z, DIE_SIZE, DIE_SPACING, ROW_SPACING } from '../src/s
 //
 // column/row mirror the exact <DiceMesh black column={...} row={...}> props in BoardScene.tsx -
 // keep these in sync if that JSX ever changes, or this test is checking a stale position.
-const BLACK_DIE_COLUMN = -0.8
-const BLACK_DIE_ROW = 0.45
+const BLACK_DIE_COLUMN = -1.6
+const BLACK_DIE_ROW = 0.85
 // A comfortable floor, not the bare minimum that would technically clear - see this file's own
 // doc comment above for why "technically positive" (0.78 world units, measured directly against
 // the very column/row this replaced) still read as touching once actually rendered.

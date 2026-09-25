@@ -122,17 +122,38 @@ declare global {
 // only 0.78 world units on the tightest board (4-player) - positive, but thin enough to read as
 // touching once rendered. Moving right (a less negative column) increases that clearance steadily -
 // confirmed by computing it across a whole sweep of columns, not by eye - but also reopens the
-// window-crop risk row=0.6 was chosen specifically to avoid. column -0.8/row 0.45 is the balance:
-// re-measured clearance is 1.73 world units on that same tightest board (more than double the old
-// "gap >= 0.6" bar this tray has otherwise held to) while re-verified, the same tight-zoom way as
-// every round above, to still clear every window edge on all five boards at all four window shapes.
+// window-crop risk row=0.6 was chosen specifically to avoid. column -0.8/row 0.45 was tried as the
+// balance: re-measured clearance was 1.73 world units on that same tightest board (more than
+// double the old "gap >= 0.6" bar this tray had otherwise held to) while re-verified, the same
+// tight-zoom way as every round above, to still clear every window edge on all five boards at all
+// four window shapes.
+//
+// Reported a seventh time, with a screenshot: -0.8/0.45 read as overlapping the white pair again.
+// Every round above (this one included) had been checking "clear of the track" and "clear of the
+// window edge" by real measurement, but never "clear of the *white dice*" the same way - that check
+// had stayed an eyeballed one since the very first L-shape layout, and its own rule of thumb (needs
+// >= DIE_SIZE/DIE_SPACING columns of separation, derived assuming row=0) silently stopped applying
+// once row became a second, real degree of freedom rather than a minor per-die offset - two boxes
+// this size only clear each other if EITHER axis alone has a full DIE_SIZE of separation between
+// their centers, not some combination of a partial column gap and a partial row gap. Checked
+// directly this time (dx/dz between the black die and each white one against DIE_SIZE, not a single
+// combined "distance"): -0.8/0.45 had neither axis clear (dx=1.12, dz=1.69, both under DIE_SIZE=
+// 2.93) - a real overlap, not just a tight read. column -1.6/row 0.6 (two rounds back) DOES clear on
+// the column axis alone (dx=4.12) regardless of row - the dice-overlap bug and the track-touching bug
+// were never actually in conflict at that spot, only the track clearance was short. Re-swept row at
+// that same column against the real per-board waypoint data: row 0.8 is the first value clearing
+// every board's track by a full 1.5 units again (board_4p, the tightest, goes from 0.76 at row=0.6
+// to 1.50 at row=0.8); landed on row=0.85 for a touch more margin (1.68). Re-verified by screenshot
+// on all five boards at 16:9, 1.5:1, 4:3 and phone-portrait windows - still no window-edge crop at
+// this larger row, since (per the sixth round's own finding) the crop ceiling for a given row eases
+// substantially at this column's own -1.6, not the tighter ceiling that applies closer to 0.
 export const CORNER_X = 1.898 * DICE_SCALE
 export const CORNER_Z = 2.28 * DICE_SCALE
 export const DIE_SPACING = 0.409 * DICE_SCALE
-// The black die sits a real step closer to the camera than the white pair (`row=0.45` in
+// The black die sits a real step closer to the camera than the white pair (`row=0.85` in
 // BoardScene - see CORNER_X/CORNER_Z's own comment for why this needed to be paired with a
-// leftward column, not tried alone, and for the real per-tile clearance numbers behind both this
-// and `column=-0.8`) and to their *left*.
+// leftward column, not tried alone, and for the real per-tile/per-die clearance numbers behind both
+// this and `column=-1.6`) and to their *left*.
 export const ROW_SPACING = 0.409 * DICE_SCALE
 // Reported directly, twice now: the dice read as too large on the board - not by a lot, just
 // enough to feel oversized next to the pieces. Trimmed about a sixth off (0.5 -> 0.42) the first
