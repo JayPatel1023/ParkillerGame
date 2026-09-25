@@ -94,19 +94,32 @@ declare global {
 // screenshot, as STILL overlapping: -0.9 is only 0.4 columns left of the left-hand white die's own
 // -0.5, and clearing a die of this size needs DIE_SIZE/DIE_SPACING ≈ 0.78 columns of separation
 // (checked directly this time, not estimated by eye) - -0.9 was still under half that, actually
-// overlapping by close to half the die's own width, the exact bug reported. Column -1.6 gives
-// ~1.2 columns of separation - comfortably past that 0.78 minimum, with a real, visible gap left
-// over on top, not just barely clearing. Re-verified against full, uncropped screenshots (not
-// corner crops), zoomed in tight enough to actually see whether the dice touch, on all five boards
-// at 16:9, 1.5:1, 4:3 and phone-portrait windows.
+// overlapping by close to half the die's own width, the exact bug reported. Corrected to column
+// -1.6 (~1.2 columns of separation) - fixed the overlap, but reported a fifth time, with two
+// screenshots and a marked target spot: the ask was never "separate to the side" at all - it's
+// "underneath the two white dice", a die sitting lower on screen and in front of the pair, not
+// beside them.
+//
+// Getting there needs real forward motion (a much bigger `row`, not the 0.3ish step tried so far),
+// and that is exactly what this frontier has been fighting the whole time - a naive column=0 (dead
+// center under both) still crops at almost any row above ~0.1 on a 4:3 window. The missing piece:
+// this frontier's own tightness is NOT purely a function of row - it eases substantially the
+// further left the column already is. At column -1.6 (the same spot that already cleared the
+// overlap above), row can go all the way to 0.6 - double the previous ceiling - before any board
+// or window crops it; at less-negative columns (-0.5 to -1.1), that same row=0.6 already does.
+// column -1.6/row 0.6 is exactly that: a large step both left and toward the camera, so the black
+// die now reads clearly as sitting lower than and in front of the white pair (true "underneath"),
+// with real clearance on every side, not just barely fitting one dimension at a time. Verified
+// against full, uncropped screenshots, zoomed in tight enough to actually see whether the dice
+// touch, on all five boards at 16:9, 1.5:1, 4:3 and phone-portrait windows - and bisected the
+// row-vs-column crop relationship directly (not assumed) before landing here, after this exact kind
+// of assumption produced the wrong answer twice already in this same tuning history.
 const CORNER_X = 1.898 * DICE_SCALE
 const CORNER_Z = 2.28 * DICE_SCALE
 const DIE_SPACING = 0.409 * DICE_SCALE
-// The black die sits a modest step closer to the camera than the white pair (`row=0.3` in
-// BoardScene, not a full 1) and to their *left* (`column=-1.6`, past the left-hand white die's own
-// -0.5 by roughly double the ~0.78-column gap a die this size actually needs to clear it) - see
-// CORNER_X/CORNER_Z's own comment for the several rounds of overlap/crop reports that ruled out
-// sitting to the right, directly between them, or too close to their left instead.
+// The black die sits a real step closer to the camera than the white pair (`row=0.6` in
+// BoardScene - see CORNER_X/CORNER_Z's own comment for why this needed to be paired with a large
+// leftward column, not tried alone) and to their *left* (`column=-1.6`).
 const ROW_SPACING = 0.409 * DICE_SCALE
 // Reported directly, twice now: the dice read as too large on the board - not by a lot, just
 // enough to feel oversized next to the pieces. Trimmed about a sixth off (0.5 -> 0.42) the first

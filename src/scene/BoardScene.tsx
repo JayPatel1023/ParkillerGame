@@ -1271,7 +1271,7 @@ export function BoardScene({
 
       <DiceMesh value={diceValues[0]} rolling={rolling} nudge={nudgeDice} onClick={onRollDice} interactive={canRollDice} column={-0.5} />
       <DiceMesh value={diceValues[1]} rolling={rolling} nudge={nudgeDice} onClick={onRollDice} interactive={canRollDice} column={0.5} />
-      <DiceMesh value={diceValues[2]} rolling={rolling} nudge={nudgeDice} onClick={onRollDice} interactive={canRollDice} column={-1.6} row={0.3} black />
+      <DiceMesh value={diceValues[2]} rolling={rolling} nudge={nudgeDice} onClick={onRollDice} interactive={canRollDice} column={-1.6} row={0.6} black />
       {TRACK_DEBUG_PLAYER_COUNTS.has(definition.playerCount) && (
         <TrackDebugPath trackWaypoints={definition.trackWaypoints} safeTrackIndices={definition.safeTrackIndices} />
       )}
