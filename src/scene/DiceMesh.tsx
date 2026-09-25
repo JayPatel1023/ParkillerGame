@@ -61,16 +61,27 @@ declare global {
 // candidate was held to the frontier the *old* layout already proved visible - right edge no further
 // than 23.4 - 0.51 * (z - 16) world units, bottom edge no further than 22.7 - and searched on all
 // five boards. The only arrangement with real clearance is an L: the two white dice side by side
-// along the bottom, the black (Parkiller) die stacked above and just right of the right-hand white
-// one (column 0.75, row -1 in BoardScene) instead of behind the pair, with the dice a touch smaller
-// (0.34 -> 0.32) - dice were reported as too large twice before, so this goes the same direction.
+// along the bottom, the black (Parkiller) die nested in front of and slightly right of the
+// right-hand white one (column 0.62, row 0.35 in BoardScene - a positive row sits *closer* to the
+// camera than the white pair, i.e. lower on screen/in front of them, not further away) instead of
+// behind the pair, with the dice a touch smaller (0.34 -> 0.32) - dice were reported as too large
+// twice before, so this goes the same direction.
 // Checked by screenshot on all five boards at 16:9, 1.5:1, 4:3 and phone-portrait windows: the tray
 // clears every track square (it overlapped them on the 4-, 5- and 6-player boards before) and is no
 // more cropped at the window edge than the old layout was.
+//
+// Reported directly again, with a screenshot: the very first version of this L-shape (row=-1) put
+// the black die *behind* the white pair instead - further from the camera, reading as stacked above
+// them near the board's own corner decoration, not "underneath" as asked. row flipped from -1 to a
+// smaller +0.35 (not a full +1 - that would push it past the same bottom-edge frontier described
+// above, right back into crop territory) - re-verified clear of the track and un-cropped on all
+// five boards at all four window shapes again, same method as before.
 const CORNER_X = 1.898 * DICE_SCALE
 const CORNER_Z = 2.28 * DICE_SCALE
 const DIE_SPACING = 0.409 * DICE_SCALE
-// The black die sits one row above the white pair (see `row` in BoardScene).
+// The black die sits just in front of the white pair, at a fraction of one row (`row=0.35` in
+// BoardScene, not a full 1) - a full row's worth of extra z would fight the same tightening
+// visible-frontier a larger z runs into (see CORNER_X/CORNER_Z's own comment) and risk cropping.
 const ROW_SPACING = 0.409 * DICE_SCALE
 // Reported directly, twice now: the dice read as too large on the board - not by a lot, just
 // enough to feel oversized next to the pieces. Trimmed about a sixth off (0.5 -> 0.42) the first
