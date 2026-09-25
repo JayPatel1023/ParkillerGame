@@ -89,18 +89,24 @@ declare global {
 // apart without covering most of one or both, regardless of depth.
 //
 // The frontier constraint above is specifically about the *right* edge tightening as z grows - it
-// says nothing about going further left, which has no such limit. The black die now sits to the
-// *left* of the white pair instead (column -0.9, same row 0.3) - past the left-hand white die's own
-// column (-0.5) by enough to leave a real, clearly-visible gap between them, with the whole cluster
-// still comfortably inside the board's own footprint. Re-verified against full, uncropped
-// screenshots (not corner crops) on all five boards at 16:9, 1.5:1, 4:3 and phone-portrait windows.
+// says nothing about going further left, which has no such limit. Moved the black die to the
+// *left* of the white pair instead (column -0.9, same row 0.3) - reported a fourth time, with a
+// screenshot, as STILL overlapping: -0.9 is only 0.4 columns left of the left-hand white die's own
+// -0.5, and clearing a die of this size needs DIE_SIZE/DIE_SPACING ≈ 0.78 columns of separation
+// (checked directly this time, not estimated by eye) - -0.9 was still under half that, actually
+// overlapping by close to half the die's own width, the exact bug reported. Column -1.6 gives
+// ~1.2 columns of separation - comfortably past that 0.78 minimum, with a real, visible gap left
+// over on top, not just barely clearing. Re-verified against full, uncropped screenshots (not
+// corner crops), zoomed in tight enough to actually see whether the dice touch, on all five boards
+// at 16:9, 1.5:1, 4:3 and phone-portrait windows.
 const CORNER_X = 1.898 * DICE_SCALE
 const CORNER_Z = 2.28 * DICE_SCALE
 const DIE_SPACING = 0.409 * DICE_SCALE
 // The black die sits a modest step closer to the camera than the white pair (`row=0.3` in
-// BoardScene, not a full 1) and to their *left* (`column=-0.9`, past the left-hand white die's own
-// -0.5) - see CORNER_X/CORNER_Z's own comment for the two rounds of overlap/crop reports that ruled
-// out sitting to the right or directly between them instead.
+// BoardScene, not a full 1) and to their *left* (`column=-1.6`, past the left-hand white die's own
+// -0.5 by roughly double the ~0.78-column gap a die this size actually needs to clear it) - see
+// CORNER_X/CORNER_Z's own comment for the several rounds of overlap/crop reports that ruled out
+// sitting to the right, directly between them, or too close to their left instead.
 const ROW_SPACING = 0.409 * DICE_SCALE
 // Reported directly, twice now: the dice read as too large on the board - not by a lot, just
 // enough to feel oversized next to the pieces. Trimmed about a sixth off (0.5 -> 0.42) the first
