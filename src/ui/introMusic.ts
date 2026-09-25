@@ -71,12 +71,34 @@ function claimPlayback(): void {
   getClaimChannel()?.postMessage({ tabId: TAB_ID })
 }
 
+// Reported directly, via a full audit: this used to call playIntroMusic() completely
+// unconditionally, with no idea which route App.tsx currently has music paused for (online play,
+// or any of the dev-only tools - see App.tsx's own "Still off for ... via the hash === '' check").
+// Switching to another tab/app and back while on one of those routes silently resumed music App.tsx
+// had explicitly paused, and because a successful resume also calls claimPlayback() (below), it
+// could pause a genuinely-playing *different* tab's own local game over a route where this tab's
+// own music was never supposed to be on at all. setRouteAllowsMusic is App.tsx's own single point
+// of truth for this - called from the same screen/hash-driven effect that already calls
+// playIntroMusic()/pauseIntroMusic() directly, so both always agree.
+let routeAllowsMusic = true
+
+export function setRouteAllowsMusic(allowed: boolean): void {
+  routeAllowsMusic = allowed
+}
+
+// Pulled out as its own pure function (this project's established pattern for logic worth testing
+// without a browser/rendering harness) so the gating itself has a direct test - see
+// tests/introMusicReclaim.test.ts.
+export function shouldReclaimPlayback(visibilityState: DocumentVisibilityState, routeAllowsMusic: boolean): boolean {
+  return visibilityState === 'visible' && routeAllowsMusic
+}
+
 // Re-claims the moment this tab becomes the one the player is actually looking at - covers both
 // switching browser tabs (visibilitychange) and switching back from another app/window entirely
 // (focus, which visibilitychange alone doesn't always catch consistently across browsers).
 if (typeof window !== 'undefined') {
   const reclaimIfVisible = () => {
-    if (document.visibilityState !== 'visible') return
+    if (!shouldReclaimPlayback(document.visibilityState, routeAllowsMusic)) return
     playIntroMusic()
   }
   document.addEventListener('visibilitychange', reclaimIfVisible)

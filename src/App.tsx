@@ -5,7 +5,7 @@ import { TURN_ORDER_BY_COUNT } from './core/turnOrder'
 import type { PieceColor } from './core/pieceColor'
 import { BOARD_DEFINITIONS } from './data/boards'
 import { ColorSelector } from './ui/ColorSelector'
-import { pauseIntroMusic, playIntroMusic } from './ui/introMusic'
+import { pauseIntroMusic, playIntroMusic, setRouteAllowsMusic } from './ui/introMusic'
 import { PlayerCountSelector } from './ui/PlayerCountSelector'
 import { StartScreen } from './ui/StartScreen'
 
@@ -256,6 +256,10 @@ export default function App() {
   // despite every call site looking correct. play()/pause() are both safe to call repeatedly - an
   // already-playing/-paused element just no-ops.
   useEffect(() => {
+    // See introMusic.ts's own setRouteAllowsMusic doc comment - this is the one place that decides
+    // whether music belongs on the current route at all; its own tab-refocus reclaim listener reads
+    // this instead of assuming the answer is always yes.
+    setRouteAllowsMusic(hash === '')
     if (hash === '') playIntroMusic()
     else pauseIntroMusic()
   }, [screen, hash])
