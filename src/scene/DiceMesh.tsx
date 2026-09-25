@@ -107,27 +107,40 @@ declare global {
 // further left the column already is. At column -1.6 (the same spot that already cleared the
 // overlap above), row can go all the way to 0.6 - double the previous ceiling - before any board
 // or window crops it; at less-negative columns (-0.5 to -1.1), that same row=0.6 already does.
-// column -1.6/row 0.6 is exactly that: a large step both left and toward the camera, so the black
-// die now reads clearly as sitting lower than and in front of the white pair (true "underneath"),
-// with real clearance on every side, not just barely fitting one dimension at a time. Verified
-// against full, uncropped screenshots, zoomed in tight enough to actually see whether the dice
-// touch, on all five boards at 16:9, 1.5:1, 4:3 and phone-portrait windows - and bisected the
-// row-vs-column crop relationship directly (not assumed) before landing here, after this exact kind
-// of assumption produced the wrong answer twice already in this same tuning history.
-const CORNER_X = 1.898 * DICE_SCALE
-const CORNER_Z = 2.28 * DICE_SCALE
-const DIE_SPACING = 0.409 * DICE_SCALE
-// The black die sits a real step closer to the camera than the white pair (`row=0.6` in
-// BoardScene - see CORNER_X/CORNER_Z's own comment for why this needed to be paired with a large
-// leftward column, not tried alone) and to their *left* (`column=-1.6`).
-const ROW_SPACING = 0.409 * DICE_SCALE
+// column -1.6/row 0.6 landed there: a large step both left and toward the camera, so the black die
+// read clearly as sitting lower than and in front of the white pair (true "underneath"), verified
+// clear of the window edge on all five boards at 16:9, 1.5:1, 4:3 and phone-portrait windows.
+//
+// Reported a sixth time, directly ("자리길을 차지하고있다" - it's occupying the track squares):
+// clear of the *window* edge is a different thing from clear of the *track*, and this file's own
+// history of measuring window-crop by eye (twice wrong already) had crept into measuring track
+// clearance by eye too - "clear of the track" hadn't actually been checked against the real
+// per-board waypoint data since row/column moved this far from the original L-shape's own tuned
+// spot. Measured properly this time (a script against the real generated-boards.json, the same
+// per-tile clearance math BoardScene.tsx itself uses - tile half-width, protected squares at their
+// full 1.8x width, minus the die's own half-width): column -1.6/row 0.6 actually clears the track by
+// only 0.78 world units on the tightest board (4-player) - positive, but thin enough to read as
+// touching once rendered. Moving right (a less negative column) increases that clearance steadily -
+// confirmed by computing it across a whole sweep of columns, not by eye - but also reopens the
+// window-crop risk row=0.6 was chosen specifically to avoid. column -0.8/row 0.45 is the balance:
+// re-measured clearance is 1.73 world units on that same tightest board (more than double the old
+// "gap >= 0.6" bar this tray has otherwise held to) while re-verified, the same tight-zoom way as
+// every round above, to still clear every window edge on all five boards at all four window shapes.
+export const CORNER_X = 1.898 * DICE_SCALE
+export const CORNER_Z = 2.28 * DICE_SCALE
+export const DIE_SPACING = 0.409 * DICE_SCALE
+// The black die sits a real step closer to the camera than the white pair (`row=0.45` in
+// BoardScene - see CORNER_X/CORNER_Z's own comment for why this needed to be paired with a
+// leftward column, not tried alone, and for the real per-tile clearance numbers behind both this
+// and `column=-0.8`) and to their *left*.
+export const ROW_SPACING = 0.409 * DICE_SCALE
 // Reported directly, twice now: the dice read as too large on the board - not by a lot, just
 // enough to feel oversized next to the pieces. Trimmed about a sixth off (0.5 -> 0.42) the first
 // time, then further (0.42 -> 0.34) the second - keeping DIE_SPACING/ROW_SPACING as-is (smaller
 // dice only means more clearance between them, never less).
 // Trimmed a third time (0.34 -> 0.32) - see CORNER_X/CORNER_Z above for why: a slightly smaller die is
 // part of what lets the tray clear the track inside the already-proven-visible corner.
-const DIE_SIZE = 0.32 * DICE_SCALE
+export const DIE_SIZE = 0.32 * DICE_SCALE
 // Reference photos had previously shown the black die - the one that moves the Parkiller -
 // noticeably bigger than the two white dice, so it was scaled up 30% to match. Reported directly
 // since, in the shipped game itself rather than those reference photos: make it the same size as
