@@ -129,4 +129,82 @@ describe('online master promotion (a surviving Remote takes over authority)', ()
     expect(moved).not.toBeNull()
     expect(remotePlayers[0].pieces[0].trackPosition).toBe(3)
   })
+
+  // Reported directly, via a full audit: OnlineLobbyScreen.tsx's own promoteToMaster() builds the
+  // new HostTurnManagerBridge and swaps it into `session.turnManager` but never calls the outgoing
+  // RemoteTurnManager's own dispose() first - unlike the two OTHER teardown paths in that same file,
+  // which do. Since transport.broadcast() reaches every actor's transport INCLUDING the sender's
+  // own (real Photon's ReceiverGroup.All - confirmed directly against photonClient.ts's own comment;
+  // FakeRoomTransport.broadcast/broadcastFrom mirrors this on purpose, see its own doc comment), the
+  // still-subscribed old RemoteTurnManager keeps receiving every message the newly-promoted client's
+  // own bridge broadcasts - including this client's own - and, after its own pacing delay, replays
+  // each one by calling requestRoll()/submitMove() a SECOND time directly on the exact same shared
+  // `remoteInner` the new bridge is also driving, corrupting its turn state. This locks in the fix
+  // (dispose the outgoing turnManager before swapping in the new bridge) at the level this project's
+  // own tests can actually exercise - the underlying RemoteTurnManager/transport mechanism - since
+  // promoteToMaster() itself is a local function inside the OnlineLobbyScreen component, not
+  // exported for direct testing.
+  it("without disposing the outgoing RemoteTurnManager, its own broadcast echo replays into the shared TurnManager a second time", () => {
+    const board = buildTestBoard()
+    const network = new FakeRoomNetwork(MASTER_ACTOR)
+    const remotePlayers = [createPlayerState('Red', board), createPlayerState('Blue', board)]
+    const remoteDiceQueue = new QueueDice()
+    const remoteInner = new TurnManager(board, remotePlayers, defaultRuleSettings(), remoteDiceQueue)
+    const remoteTransport = network.createTransport(REMOTE_ACTOR)
+    // The outgoing side - built exactly like startAsRemote() - deliberately never disposed here,
+    // reproducing the bug as it currently ships. Both seats are this same local actor's own color,
+    // 'Red' - matching remoteInner's own default current player (players[0], since
+    // determineStartingPlayer() is never called here) - what color is on seat is irrelevant to
+    // the mechanism under test (the self-broadcast echo).
+    const remoteBridge = new RemoteTurnManager(remoteInner, remoteDiceQueue, remotePlayers, remoteTransport, 'Red')
+    remoteBridge.start()
+
+    let diceRolledCount = 0
+    remoteInner.diceRolled.on(() => diceRolledCount++)
+
+    // Promotion, reusing the same transport (the real promoteToMaster() also reuses the same
+    // connection) - the bug under test is specifically the missing `remoteBridge.dispose()` here.
+    // An unlimited (not finite-queue) dice source, unlike every other online test's own
+    // ScriptedDice - a real promoted Master uses a genuine RecordingDice(new Dice()), which never
+    // runs out; this proves the *duplicate roll* itself, not an artifact of a finite test queue
+    // (which the un-disposed listener's own second, unplanned requestRoll() call would otherwise
+    // just exhaust and throw on, masking the actual bug behind a confusing crash).
+    const newDice = new RecordingDice()
+    remoteInner.replaceDice(newDice)
+    const actorColors = new Map<number, PieceColor>([[REMOTE_ACTOR, 'Red']])
+    const promotedBridge = new HostTurnManagerBridge(remoteInner, newDice, remotePlayers, remoteTransport, actorColors, 'Red')
+
+    promotedBridge.requestRoll()
+    vi.advanceTimersByTime(20000) // drains the still-subscribed old remoteBridge's own paced replay queue
+
+    // A single requestRoll() call should fire diceRolled exactly once - it fires twice instead:
+    // the un-disposed remoteBridge received its own broadcast back and replayed requestRoll() a
+    // second time directly on the same shared remoteInner, exactly the reported bug's mechanism.
+    expect(diceRolledCount).toBe(2)
+  })
+
+  it('disposing the outgoing RemoteTurnManager before promotion (the fix) prevents that echo replay', () => {
+    const board = buildTestBoard()
+    const network = new FakeRoomNetwork(MASTER_ACTOR)
+    const remotePlayers = [createPlayerState('Red', board), createPlayerState('Blue', board)]
+    const remoteDiceQueue = new QueueDice()
+    const remoteInner = new TurnManager(board, remotePlayers, defaultRuleSettings(), remoteDiceQueue)
+    const remoteTransport = network.createTransport(REMOTE_ACTOR)
+    const remoteBridge = new RemoteTurnManager(remoteInner, remoteDiceQueue, remotePlayers, remoteTransport, 'Red')
+    remoteBridge.start()
+
+    let diceRolledCount = 0
+    remoteInner.diceRolled.on(() => diceRolledCount++)
+
+    remoteBridge.dispose() // the fix - see promoteToMaster()'s own matching call in OnlineLobbyScreen.tsx
+    const newDice = new RecordingDice()
+    remoteInner.replaceDice(newDice)
+    const actorColors = new Map<number, PieceColor>([[REMOTE_ACTOR, 'Red']])
+    const promotedBridge = new HostTurnManagerBridge(remoteInner, newDice, remotePlayers, remoteTransport, actorColors, 'Red')
+
+    promotedBridge.requestRoll()
+    vi.advanceTimersByTime(20000)
+
+    expect(diceRolledCount).toBe(1)
+  })
 })

@@ -599,6 +599,18 @@ export default function OnlineLobbyScreen() {
       setPhase('stopped')
       return
     }
+    // Reported directly, via a full audit: the outgoing side here is always the RemoteTurnManager
+    // built in startAsRemote() - if it isn't disposed before this client's own broadcasts start
+    // going out on the same connection, it stays subscribed forever (dispose() is the only thing
+    // that ever calls its own unsubscribeMessage()) and keeps receiving every message this client
+    // itself now sends - Photon's own broadcast() reaches every actor including the sender (see
+    // PhotonConnection.broadcast's own comment) - and replays each one via requestRoll()/
+    // submitMove() a SECOND time directly on this same shared `inner`, corrupting its turn state.
+    // See tests/online/masterPromotion.test.ts's own pair of tests for the exact mechanism this
+    // prevents. The other two teardown paths in this file (the `!inner || !session` branch just
+    // above, and the onConnectionLost handler) already call this same dispose - only this, the
+    // actually-taken promotion path, was missing it.
+    session.turnManager.dispose?.()
     const newDice = new RecordingDice()
     inner.replaceDice(newDice)
     const actorColors = new Map<number, PieceColor>(Object.entries(realSeatsRef.current).map(([actorNr, color]) => [Number(actorNr), color]))
