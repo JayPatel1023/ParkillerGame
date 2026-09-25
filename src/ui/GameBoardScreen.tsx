@@ -209,6 +209,22 @@ export function computeAwaitingMoveChoice<T>(params: {
   return isMyTurn && !rolling && !paused ? pendingMoves : []
 }
 
+// See idleTriggerActive's own doc comment (where this is called) for the report this fixes -
+// opening Help/Sound-Settings/the exit-confirm dialog and leaving it open used to let the idle
+// nudge/warning/auto-play sequence keep running (and, once its own countdown hit 0, actually play
+// the player's turn for them) right underneath it, since none of those three were ever checked
+// here before, only `paused` was.
+export function computeIdleTriggerActive(params: {
+  canRoll: boolean
+  awaitingPieceChoice: boolean
+  showingHelp: boolean
+  showingSoundSettings: boolean
+  confirmingExit: boolean
+}): boolean {
+  const { canRoll, awaitingPieceChoice, showingHelp, showingSoundSettings, confirmingExit } = params
+  return (canRoll || awaitingPieceChoice) && !showingHelp && !showingSoundSettings && !confirmingExit
+}
+
 // Bug found by close video review of a real local recording (b2_0353.jpg vs b2_0355.jpg, ~2s
 // apart): right as a turn hands off to a *different* player after a long move (any capture/finish
 // reward - REWARD_UNIT*2=20 or a split 10, see turnManager.ts - or a plain sum-dice move of 7+),
@@ -661,7 +677,23 @@ export function GameBoardScreen({
   const [idleWarningSecondsLeft, setIdleWarningSecondsLeft] = useState<number | null>(null)
   const [idleResetToken, setIdleResetToken] = useState(0)
 
-  const idleTriggerActive = canRoll || awaitingPieceChoice
+  // Reported directly, via a full audit: neither canRoll/awaitingPieceChoice above nor this flag
+  // ever checked showingHelp/showingSoundSettings/confirmingExit - only !paused - so opening any of
+  // those three dialogs and leaving it open (perfectly normal: reading the rules, picking a song,
+  // deciding whether to exit) let the idle nudge/warning/auto-play sequence keep running right
+  // underneath it. The warning overlay's own z-index (40) sits above all three dialogs, so once it
+  // appeared it visually covered whichever one was open and swallowed clicks meant for it; worse,
+  // once the countdown reached 0, autoPlayIdleTurn() actually rolled the dice/picked a move on the
+  // player's behalf while they were still reading. Unlike the Pause button (which deliberately
+  // freezes everything - see its own doc comment on why Help/exit-confirm do NOT pause anything),
+  // a player who just opened one of these dialogs is plainly still there; gating on all three here
+  // means opening one always fully clears any in-progress warning (the effect below resets it
+  // whenever idleTriggerActive itself changes) and gives a completely fresh idle window once it's
+  // closed, rather than the countdown continuing to run - or firing - underneath it. Pulled out as
+  // its own pure function (see computeAwaitingMoveChoice's own doc comment just above for this
+  // file's established reasoning) so this exact gating has a test - see
+  // tests/gameBoardIdleTriggerActive.test.ts.
+  const idleTriggerActive = computeIdleTriggerActive({ canRoll, awaitingPieceChoice, showingHelp, showingSoundSettings, confirmingExit })
 
   useEffect(() => {
     setNudgeDice(false)
@@ -1033,7 +1065,7 @@ export function GameBoardScreen({
 
       <div style={frameOverlayStyle} />
 
-      {idleWarningSecondsLeft !== null && !paused && (
+      {idleWarningSecondsLeft !== null && !paused && !showingHelp && !showingSoundSettings && !confirmingExit && (
         <div style={idleWarningOverlayStyle} onClick={dismissIdleWarning}>
           <div style={idleWarningCountdownStyle}>{idleWarningSecondsLeft}</div>
           <div style={idleWarningTitleStyle}>¿Sigue ahí?</div>
