@@ -10,7 +10,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // the safety net itself: `armStuckRetryWatchdog` (pulled out of the hook's effect purely so it's
 // testable without a rendering harness, matching robustAssetLoaderAbort.test.ts's own pattern).
 
-const STUCK_RETRY_MS = 20_000
+const LOAD_TIMEOUT_MS = 10_000
+const STUCK_RETRY_MS = LOAD_TIMEOUT_MS * 1.5
 
 type FetchCall = { url: string; signal: AbortSignal }
 

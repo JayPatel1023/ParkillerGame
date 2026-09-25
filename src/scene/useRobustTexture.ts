@@ -245,7 +245,21 @@ export function preloadTexture(url: string): void {
 // watchdog-timeout-plus-first-retry cycle) that it never fires against an ordinarily slow but
 // genuinely still-progressing load, so the only real cost is an occasional harmless duplicate
 // fetch, never a board that's silently given up for the rest of the session.
-const STUCK_RETRY_MS = 20_000
+//
+// Confirmed live via a client-supplied DevTools screenshot of the deployed site: board_4p.webp's
+// own request showed a completed 200 well within a second, yet the board stayed blank for a real,
+// visible stretch before a *second* request for the exact same url - initiated from inside this
+// module, not from App.tsx's own preload call site - appeared as freshly pending, meaning this
+// safety net is exactly what eventually recovered it. So the fetch itself was never the problem
+// here - something after it (decodeBlobToImage's own Image().onload, most likely a backgrounded/
+// throttled tab delaying image decode) never settled, the same "nothing to react to" shape this
+// hook's own LOAD_TIMEOUT_MS watchdog exists for, just past that watchdog's own retry chain too.
+// A fixed 20s wall was more conservative than it needed to be now that a real stuck case is
+// confirmed to cost the *entire* wait every time - shortened to a value still derived from (and
+// safely clear of) LOAD_TIMEOUT_MS's own single watchdog-timeout-plus-first-retry cycle, rather
+// than a second unrelated magic number, so a genuinely stuck load now recovers noticeably sooner
+// without reopening the false-positive risk the original margin was sized to avoid.
+const STUCK_RETRY_MS = LOAD_TIMEOUT_MS * 1.5
 
 // Pulled out of the hook's effect (which a rendering harness this project doesn't have would
 // otherwise be needed to exercise) purely so this specific timer is directly testable, matching

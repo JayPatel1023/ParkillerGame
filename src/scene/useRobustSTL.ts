@@ -127,7 +127,14 @@ export function preloadSTL(url: string): void {
 // `inFlight` still claiming a load is in progress). Same fix, same reasoning: each mounted consumer
 // arms its own independent safety net that starts a fresh attempt if this url still has neither a
 // cached geometry nor a resolved load within STUCK_RETRY_MS of THIS mount.
-const STUCK_RETRY_MS = 20_000
+//
+// Shortened the same way and for the same reason as useRobustTexture.ts's own STUCK_RETRY_MS - see
+// that constant's own doc comment for the real DevTools evidence (a stuck load recovering only
+// once this exact safety net fired a fresh request, well after the raw fetch itself had already
+// completed) that this margin's original 20s was more conservative than a genuinely stuck load
+// needs to cost every time. Derived from this file's own LOAD_TIMEOUT_MS rather than a second,
+// disconnected magic number.
+const STUCK_RETRY_MS = LOAD_TIMEOUT_MS * 1.5
 
 // Pulled out of the hook's effect (which a rendering harness this project doesn't have would
 // otherwise be needed to exercise) purely so this specific timer is directly testable - same
