@@ -193,16 +193,29 @@ export default function App() {
   // "Jugar todos los colores" option. Non-null means vs-bots: the human plays only this color,
   // every other color in this count's own TURN_ORDER_BY_COUNT is bot-driven.
   const [humanColor, setHumanColor] = useState<PieceColor | null>(null)
+  // Reported directly, via a full audit: starting a new local game with the same player count and
+  // color choice as the previous one - always true for hotseat, since ColorSelector's own "todos
+  // los colores" button always calls onConfirm(null), and just as easily true for a vs-bots replay
+  // - used to silently reuse the *previous* game's already-played localSession below, because
+  // useMemo only recomputes when one of its own dependencies actually changes, and neither
+  // `playerCount` nor `humanColor` necessarily do between two separate games. The symptom: the new
+  // GameBoardScreen mount showed leftover piece positions and picked up wherever the old game's
+  // turn order was left off, and if the old game had already been won, its one-shot `gameWon`
+  // event had already fired before this new mount's own listener ever subscribed, so the win
+  // screen silently never appeared. This counter's only job is to give useMemo a dependency that
+  // is *guaranteed* to change every time ColorSelector's own onConfirm below actually starts a new
+  // game, regardless of whether the player picked the exact same count/color as last time.
+  const [gameGeneration, setGameGeneration] = useState(0)
   // Only actually used once screen === 'game', but built unconditionally here (not inside that
   // conditional branch below) since hooks can't be called conditionally - cheap to construct
   // early, and beginLocalGame's own turnStarted emit is harmless before anything's listening.
-  // Rebuilt whenever playerCount OR humanColor changes - a stale session (and, in vs-bots mode,
-  // its own still-running BotController) must never survive into the next game; see the cleanup
-  // effect just below for why that needs its own explicit disposal, not just letting it be
-  // garbage-collected.
+  // Rebuilt whenever playerCount, humanColor, or gameGeneration changes - a stale session (and, in
+  // vs-bots mode, its own still-running BotController) must never survive into the next game; see
+  // the cleanup effect just below for why that needs its own explicit disposal, not just letting it
+  // be garbage-collected.
   const localSession = useMemo(
     () => beginLocalGame(BOARD_DEFINITIONS[playerCount], TURN_ORDER_BY_COUNT[playerCount], humanColor ?? undefined),
-    [playerCount, humanColor],
+    [playerCount, humanColor, gameGeneration],
   )
   // vs-bots mode's own BotController holds pending setTimeouts (see botController.ts) that must be
   // cleared before the next session replaces this one, or a bot from a *previous* game could still
@@ -301,6 +314,7 @@ export default function App() {
               colors={TURN_ORDER_BY_COUNT[playerCount]}
               onConfirm={(color) => {
                 setHumanColor(color)
+                setGameGeneration((g) => g + 1)
                 setScreen('game')
               }}
             />
