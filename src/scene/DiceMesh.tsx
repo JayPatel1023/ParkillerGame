@@ -61,27 +61,42 @@ declare global {
 // candidate was held to the frontier the *old* layout already proved visible - right edge no further
 // than 23.4 - 0.51 * (z - 16) world units, bottom edge no further than 22.7 - and searched on all
 // five boards. The only arrangement with real clearance is an L: the two white dice side by side
-// along the bottom, the black (Parkiller) die nested in front of and slightly right of the
-// right-hand white one (column 0.62, row 0.35 in BoardScene - a positive row sits *closer* to the
-// camera than the white pair, i.e. lower on screen/in front of them, not further away) instead of
-// behind the pair, with the dice a touch smaller (0.34 -> 0.32) - dice were reported as too large
-// twice before, so this goes the same direction.
+// along the bottom, the black (Parkiller) die behind and slightly right of the right-hand white one
+// (column 0.75, row -1 in BoardScene - a negative row sits *further* from the camera than the white
+// pair, i.e. higher on screen/behind them), with the dice a touch smaller (0.34 -> 0.32) - dice were
+// reported as too large twice before, so this goes the same direction.
 // Checked by screenshot on all five boards at 16:9, 1.5:1, 4:3 and phone-portrait windows: the tray
 // clears every track square (it overlapped them on the 4-, 5- and 6-player boards before) and is no
 // more cropped at the window edge than the old layout was.
 //
-// Reported directly again, with a screenshot: the very first version of this L-shape (row=-1) put
-// the black die *behind* the white pair instead - further from the camera, reading as stacked above
-// them near the board's own corner decoration, not "underneath" as asked. row flipped from -1 to a
-// smaller +0.35 (not a full +1 - that would push it past the same bottom-edge frontier described
-// above, right back into crop territory) - re-verified clear of the track and un-cropped on all
-// five boards at all four window shapes again, same method as before.
+// Reported directly again, with a screenshot: that row=-1 read as sitting way up near the board's
+// own corner decoration, not "underneath" the white pair as asked. A first correction moved it to
+// row=0.35 (closer to the camera than the white pair, column still 0.62, roughly where the old
+// row=-1 spot's own column had been) - checked at the time only against arbitrary tight corner
+// crops, which turned out to mask a real crop: on a 4:3 window specifically, the visible-frontier's
+// right edge is far tighter than this file's own reference formula above ever accounted for once z
+// increases at all - even column 0.75 at row 0 (the white pair's own z, no forward push whatsoever)
+// already crops on a 4:3 window, a case never actually screenshotted head-on before shipping. Bisected
+// directly against full, uncropped screenshots (not corner crops) this time: at row 0 the safe column
+// ceiling on a 4:3 window is only about 0.5 - almost exactly the right-hand white die's own column,
+// leaving no real room to its right at all without cropping.
+//
+// Reported a second time, with a screenshot: that row=0.35/column=0.62 spot also read as overlapping
+// the white pair too heavily (confirmed - only ~1.4 world units between die centers there, well
+// under the ~2.9 that would clear them). Given the column budget to the *right* of the white pair is
+// this tight, the black die instead sits centered *between* the two white dice (column 0) and a
+// modest step closer to the camera (row 0.3, comfortably inside the row-0 column-0.5 ceiling found
+// above, since column 0 has far more headroom than column 0.5 does) - it peeks out from between and
+// just in front of the pair rather than mostly hiding behind either one. Re-verified against full,
+// uncropped screenshots (not corner crops) on all five boards at 16:9, 1.5:1, 4:3 and phone-portrait
+// windows.
 const CORNER_X = 1.898 * DICE_SCALE
 const CORNER_Z = 2.28 * DICE_SCALE
 const DIE_SPACING = 0.409 * DICE_SCALE
-// The black die sits just in front of the white pair, at a fraction of one row (`row=0.35` in
-// BoardScene, not a full 1) - a full row's worth of extra z would fight the same tightening
-// visible-frontier a larger z runs into (see CORNER_X/CORNER_Z's own comment) and risk cropping.
+// The black die sits a modest step closer to the camera than the white pair (`row=0.3` in
+// BoardScene, not a full 1) - see CORNER_X/CORNER_Z's own comment for why even a small positive row
+// leaves very little safe room to the *right*, which is exactly why the black die's own column is 0
+// (centered between the two white dice) rather than off to either side.
 const ROW_SPACING = 0.409 * DICE_SCALE
 // Reported directly, twice now: the dice read as too large on the board - not by a lot, just
 // enough to feel oversized next to the pieces. Trimmed about a sixth off (0.5 -> 0.42) the first
