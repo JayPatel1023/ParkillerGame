@@ -225,6 +225,37 @@ export function preloadTexture(url: string): void {
   loadWithRetry(url, 1)
 }
 
+// Reported directly, still blank ("아직보드가 없어지는문제가 발생하고있다" - the board-disappearing
+// problem is still happening), reproducing specifically when clicking through the setup screens
+// very fast right after the app loads: DevTools screenshots showed board_4p.webp/tile-fill.png/
+// tile-border.png/parkiller.stl requests sitting as `(canceled)` with nothing after them - a
+// retry that got aborted (loadWithRetry's own watchdog does this deliberately, to supersede a
+// hung attempt) but then genuinely never got a next attempt going, unlike the ordinary case where
+// `retryAfterFailure`'s own `setTimeout(() => loadWithRetry(...), delay)` always keeps the chain
+// alive. That gap between one attempt aborting and the *next* one actually starting is a bare,
+// uncancellable `setTimeout` with nothing watching it - if anything at all stops that timer from
+// firing (this file's own history already documents one browser real enough to matter: a stalled
+// connection with no error, no timeout, nothing to react to, until the watchdog above was added
+// for exactly that case), the whole chain quietly stops advancing forever, with `inFlight` still
+// reporting a load in progress (nothing ever clears it on this path) and `textureCache` never
+// getting the real texture - a permanently blank board with no further sign of life. Each mounted
+// consumer now also arms its own independent safety net: if this exact url still has neither a
+// cached texture nor a *fresh* attempt within STUCK_RETRY_MS of THIS mount, it starts one itself,
+// regardless of what the shared inFlight bookkeeping claims - generous enough (well past a single
+// watchdog-timeout-plus-first-retry cycle) that it never fires against an ordinarily slow but
+// genuinely still-progressing load, so the only real cost is an occasional harmless duplicate
+// fetch, never a board that's silently given up for the rest of the session.
+const STUCK_RETRY_MS = 20_000
+
+// Pulled out of the hook's effect (which a rendering harness this project doesn't have would
+// otherwise be needed to exercise) purely so this specific timer is directly testable, matching
+// `loadWithRetry`/`textureCache`/`inFlight` above's own reason for being exported.
+export function armStuckRetryWatchdog(url: string): ReturnType<typeof setTimeout> {
+  return setTimeout(() => {
+    if (!textureCache.has(url)) loadWithRetry(url, 1)
+  }, STUCK_RETRY_MS)
+}
+
 export function useRobustTexture(url: string): THREE.Texture | null {
   const [texture, setTexture] = useState<THREE.Texture | null>(() => textureCache.get(url) ?? null)
 
@@ -243,7 +274,9 @@ export function useRobustTexture(url: string): THREE.Texture | null {
     }
     subscribers.add(setTexture)
     if (isFirstSubscriber) loadWithRetry(url, 1)
+    const stuckTimer = armStuckRetryWatchdog(url)
     return () => {
+      clearTimeout(stuckTimer)
       inFlight.get(url)?.delete(setTexture)
     }
   }, [url])

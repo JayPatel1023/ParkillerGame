@@ -117,6 +117,27 @@ export function preloadSTL(url: string): void {
   loadWithRetry(url, 1)
 }
 
+// Reported directly, still missing ("아직보드가 없어지는문제가 발생하고있다" - the board-disappearing
+// problem is still happening), reproducing when clicking through the setup screens very fast right
+// after the app loads - the same report's own screenshot showed parkiller.stl sitting as
+// `(canceled)` with nothing after it, same shape as useRobustTexture.ts's own matching bug (see
+// that file's STUCK_RETRY_MS doc comment for the full root-cause writeup: the gap between one
+// attempt aborting and the next one actually starting is a bare, uncancellable `setTimeout` with
+// nothing watching it, and if that timer ever fails to fire, the chain quietly stops forever with
+// `inFlight` still claiming a load is in progress). Same fix, same reasoning: each mounted consumer
+// arms its own independent safety net that starts a fresh attempt if this url still has neither a
+// cached geometry nor a resolved load within STUCK_RETRY_MS of THIS mount.
+const STUCK_RETRY_MS = 20_000
+
+// Pulled out of the hook's effect (which a rendering harness this project doesn't have would
+// otherwise be needed to exercise) purely so this specific timer is directly testable - same
+// reasoning as useRobustTexture.ts's own armStuckRetryWatchdog.
+export function armStuckRetryWatchdog(url: string): ReturnType<typeof setTimeout> {
+  return setTimeout(() => {
+    if (!geometryCache.has(url)) loadWithRetry(url, 1)
+  }, STUCK_RETRY_MS)
+}
+
 export function useRobustSTL(url: string): BufferGeometry | null {
   const [geometry, setGeometry] = useState<BufferGeometry | null>(() => geometryCache.get(url) ?? null)
 
@@ -135,7 +156,9 @@ export function useRobustSTL(url: string): BufferGeometry | null {
     }
     subscribers.add(setGeometry)
     if (isFirstSubscriber) loadWithRetry(url, 1)
+    const stuckTimer = armStuckRetryWatchdog(url)
     return () => {
+      clearTimeout(stuckTimer)
       inFlight.get(url)?.delete(setGeometry)
     }
   }, [url])
