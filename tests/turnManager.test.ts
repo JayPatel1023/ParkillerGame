@@ -612,6 +612,33 @@ describe('TurnManager - mandatory departure (PC2.1)', () => {
     expect(red.pieces[1].trackPosition).toBe(0)
   })
 
+  // Reported directly ("5+4 con una dentro debe salir. No puede avanzar con los 9 con otro peón" -
+  // with a 5+4 and one pawn still in the shelter, it must exit; you can't advance 9 with another
+  // pawn): verified directly against the running engine rather than assumed - a *single* die's own
+  // exit lock (dieAHasExit, unlike the sum-only case above) only ever ties up that one die; the
+  // sum itself is never computed at all once either individual die already carries the lock (see
+  // offerMoves' own `dieAMoves && dieBMoves && !dieAHasExit && !dieBHasExit` guard around the sum),
+  // so a 9 (4+5) was never actually reachable here in the first place - already correct, not a bug.
+  it('a single-die exit roll (5+4) locks only the 5 - the other die (4) stays free, but the sum (9) is never offered at all', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 2 // an already-in-play piece, movable by the free die (4)
+
+    const dice = new ScriptedDice([5, 4, 1])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+    let latestMoves: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((m) => (latestMoves = m))
+    manager.requestRoll()
+
+    expect(latestMoves.every((m) => m.diceSource !== 'sum')).toBe(true)
+    expect(latestMoves.some((m) => m.kind === 'ExitYard' && m.diceSource === 'dieA')).toBe(true)
+    const forInPlayPiece = latestMoves.filter((m) => m.piece === red.pieces[0])
+    expect(forInPlayPiece).toHaveLength(1)
+    expect(forInPlayPiece[0]).toMatchObject({ diceSource: 'dieB', amount: 4 })
+  })
+
   // Client's own "SPECIAL STARTING SQUARE RULE" infographic: two pawns of different colors already
   // on the entry square, neither a real barrier (PC2.1's own "exposed foreign pair" exception,
   // already covered in isolation by parchisRules.test.ts's own sibling test) - a plain single 5
@@ -1495,6 +1522,38 @@ describe('TurnManager - mandatory barrier removal on doubles (PK9.1)', () => {
     expect(offered.every((m) => m.piece === red.pieces[0])).toBe(true)
     expect(offered.some((m) => m.kind === 'ExitYard')).toBe(false)
     expect(offered.some((m) => m.piece === red.pieces[0] && m.kind === 'TrackMove')).toBe(true)
+  })
+
+  // Reported directly (colleague, relayed): "Tiene que abrir las barreras con dobles antes de
+  // otros movimientos. Es obligatorio" / "Se [quedan] bloqueadas" (you have to open barriers with
+  // doubles before other moves, it's mandatory / they stay blocked). The sibling test just above
+  // covers a pawn+own-Parkiller pairing specifically - this locks in the same priority for the much
+  // more common case, a *plain* two-pawn own barrier, verified directly against the running engine
+  // (not reproduced live in-browser either, despite trying) before concluding there was nothing to
+  // fix here.
+  it('a double matching the exit roll still prioritizes breaking a plain two-pawn own barrier over forcing a yard exit', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 7
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 7 // a pre-existing plain barrier, nothing to do with this roll
+    // pieces[2..3] stay InYard - a plain exit-lock would otherwise force one of them out on this 5.
+
+    const dice = new ScriptedDice([5, 5, 1])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+    let offered: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((moves) => (offered = moves))
+    manager.requestRoll()
+
+    expect(offered.some((m) => m.kind === 'ExitYard')).toBe(false)
+    expect(offered.every((m) => m.piece === red.pieces[0] || m.piece === red.pieces[1])).toBe(true)
+    expect(offered.every((m) => m.kind === 'TrackMove' && m.amount === 5)).toBe(true)
+
+    manager.submitMove(red.pieces[0])
+    expect(red.pieces[0].trackPosition).toBe(12)
+    expect(red.pieces[1].trackPosition).toBe(7) // the barrier is broken - not still stuck together
   })
 })
 

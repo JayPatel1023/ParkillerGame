@@ -71,11 +71,17 @@ const DICE_SPIN_MS = 2000
 // said): 10 seconds was this session's own guess, never something Carlos asked for. His own
 // consistently repeated number, across three separate reports, is 2-3 seconds ("Tienes que dejar
 // una latencia de dos segundos entre movimientos", "una latencia de 2-3 segundos bastaría", "al bot
-// dejale 2 o 3 segundos nada mas") - matching the upper end of that same range. Kept in sync with
-// botController.ts's own TURN_CHANGE_HOLD_MS, which must change together with this one (see its
-// own matching comment) - otherwise a bot could roll for its own turn before this hook's own hold
-// here finishes revealing it, desyncing the dice/board from what the screen still shows.
-const TURN_CHANGE_HOLD_MS = 3000
+// dejale 2 o 3 segundos nada mas") - matching the upper end of that same range.
+//
+// Corrected again, directly, to exactly 2000 ("Vamos a ponerle 2 segundos entre movimientos. Ahora
+// es demasiado largo el tiempo" - let's set it to 2 seconds between movements, right now the time
+// is too long): the *same* "2-3 segundos" quote above was already read generously as its own upper
+// end (3000) rather than literally 2000 - this report picks the lower end explicitly instead, this
+// time with no ambiguity to round from. Kept in sync with botController.ts's own TURN_CHANGE_HOLD_MS,
+// which must change together with this one (see its own matching comment) - otherwise a bot could
+// roll for its own turn before this hook's own hold here finishes revealing it, desyncing the
+// dice/board from what the screen still shows.
+const TURN_CHANGE_HOLD_MS = 2000
 
 // Kept in sync with piecePosition.ts's own CAPTURE_RETURN_HOPS (3) and PieceMesh.tsx's own
 // HOP_DURATION (0.48s, *1000 here) - same "duplicated across layers" reasoning as
