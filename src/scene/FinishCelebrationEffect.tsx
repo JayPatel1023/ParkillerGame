@@ -41,12 +41,70 @@ const SPARKLE_COUNT = 22
 const SPARKLE_RISE_HEIGHT = PIECE_BASE_RADIUS * 14
 const SPARKLE_COLORS = ['#ffe08a', '#ffd24a', '#fff4c2', '#ffb347']
 
+// Reported directly, again ("alert를 띄워주는 형식이 멋이없다... 좀 생큼하게" - the current version
+// reads like a plain alert popping up, make it feel fresher/livelier): the octahedron gems above
+// still read as solid confetti rather than anything magical next to how far CaptureImpactEffect's
+// and WinCelebrationEffect's own sparkle layers have come since (real five-pointed stars plus soft
+// additive glints). Layers that same star+glint pair on top of the existing gems here too, rather
+// than replacing them, for the same reason CaptureImpactEffect's own comment gives - the "arrival"
+// read the gems already carry stays intact, this only adds the sparkle a solid gem can't give on
+// its own.
+const STAR_COUNT = 10
+const DOT_COUNT = 16
+// A little longer than the gems' own CELEBRATION_DURATION-driven rise, so the sparkle dust is still
+// twinkling out for a beat after the gems have already finished - the same "don't let every
+// element finish in lockstep" reasoning CaptureImpactEffect's own SPARK_LIFETIME comment gives.
+const SPARK_LIFETIME = CELEBRATION_DURATION * 1.3
+
 interface Sparkle {
   angle: number
   radius: number
   riseSpeed: number
   spin: THREE.Vector3
   scale: number
+}
+
+interface Spark {
+  angle: number
+  radius: number
+  riseSpeed: number
+  size: number
+  twinkleSpeed: number
+  twinklePhase: number
+}
+
+function createStarGeometry(): THREE.ShapeGeometry {
+  const shape = new THREE.Shape()
+  const points = 5
+  const outerRadius = 1
+  const innerRadius = 0.42
+  for (let i = 0; i < points * 2; i++) {
+    const r = i % 2 === 0 ? outerRadius : innerRadius
+    const angle = (i * Math.PI) / points - Math.PI / 2
+    const x = Math.cos(angle) * r
+    const y = Math.sin(angle) * r
+    if (i === 0) shape.moveTo(x, y)
+    else shape.lineTo(x, y)
+  }
+  shape.closePath()
+  return new THREE.ShapeGeometry(shape)
+}
+
+// A soft round glint - fades to transparent at its own edge, so it reads as a glowing point of
+// light rather than a hard-edged disc once additive-blended over the burst.
+function createSoftDotTexture(): THREE.Texture {
+  const size = 64
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')!
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
+  g.addColorStop(0, 'rgba(255,255,255,1)')
+  g.addColorStop(0.45, 'rgba(255,255,255,0.7)')
+  g.addColorStop(1, 'rgba(255,255,255,0)')
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, size, size)
+  return new THREE.CanvasTexture(canvas)
 }
 
 interface FinishCelebrationEffectProps {
@@ -64,6 +122,8 @@ export function FinishCelebrationEffect({ position, onComplete }: FinishCelebrat
   const ring2Ref = useRef<Mesh>(null)
   const flashRef = useRef<Mesh>(null)
   const sparklesRef = useRef<InstancedMesh>(null)
+  const starsRef = useRef<InstancedMesh>(null)
+  const dotsRef = useRef<InstancedMesh>(null)
 
   const sparkles = useMemo<Sparkle[]>(
     () =>
@@ -77,8 +137,65 @@ export function FinishCelebrationEffect({ position, onComplete }: FinishCelebrat
     [],
   )
 
+  // Rises a bit higher/wider than the gems and drifts rather than arcs - reads as light sparkle
+  // dust catching the air, not more of the same falling/rising debris the gems already cover.
+  const makeSparks = (count: number, sizeMin: number, sizeRange: number): Spark[] =>
+    Array.from({ length: count }, (_, i) => ({
+      angle: (i / count) * Math.PI * 2 + Math.random() * 0.5,
+      radius: PIECE_BASE_RADIUS * (0.5 + Math.random() * 3),
+      riseSpeed: 0.5 + Math.random() * 0.5,
+      size: sizeMin + Math.random() * sizeRange,
+      twinkleSpeed: 5 + Math.random() * 6,
+      twinklePhase: Math.random() * Math.PI * 2,
+    }))
+  const starSparks = useMemo(() => makeSparks(STAR_COUNT, PIECE_BASE_RADIUS * 0.22, PIECE_BASE_RADIUS * 0.16), [])
+  const dotSparks = useMemo(() => makeSparks(DOT_COUNT, PIECE_BASE_RADIUS * 0.13, PIECE_BASE_RADIUS * 0.12), [])
+
   const dummy = useMemo(() => new THREE.Object3D(), [])
   const dummyColor = useMemo(() => new THREE.Color(), [])
+  const starGeometry = useMemo(() => createStarGeometry(), [])
+  const dotTexture = useMemo(() => createSoftDotTexture(), [])
+  const starMaterial = useMemo(
+    () =>
+      new THREE.MeshBasicMaterial({
+        color: '#fff4d6',
+        transparent: true,
+        opacity: 1,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      }),
+    [],
+  )
+  const dotMaterial = useMemo(
+    () =>
+      new THREE.MeshBasicMaterial({
+        map: dotTexture,
+        color: '#ffd98a',
+        transparent: true,
+        opacity: 1,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      }),
+    [dotTexture],
+  )
+
+  const updateSparkInstances = (mesh: InstancedMesh | null, sparks: Spark[], life: number) => {
+    if (!mesh) return
+    const elapsed = life * SPARK_LIFETIME
+    sparks.forEach((s, i) => {
+      const rise = Math.min(1, elapsed * s.riseSpeed)
+      const height = rise * SPARKLE_RISE_HEIGHT * 1.15
+      const outward = s.radius * (0.4 + rise * 1.1)
+      dummy.position.set(Math.cos(s.angle) * outward, height, Math.sin(s.angle) * outward)
+      dummy.rotation.set(0, 0, s.twinklePhase + elapsed * s.twinkleSpeed * 0.3)
+      const twinkle = 0.55 + 0.45 * Math.sin(elapsed * s.twinkleSpeed + s.twinklePhase)
+      const fade = life < 0.08 ? life / 0.08 : 1 - life
+      dummy.scale.setScalar(s.size * Math.max(0, fade) * Math.max(0.15, twinkle))
+      dummy.updateMatrix()
+      mesh.setMatrixAt(i, dummy.matrix)
+    })
+    mesh.instanceMatrix.needsUpdate = true
+  }
 
   // Per-instance color, set once on mount - sparkles don't change color over their lifetime, only
   // opacity/scale (driven every frame below), so this doesn't belong in the useFrame loop.
@@ -134,7 +251,13 @@ export function FinishCelebrationEffect({ position, onComplete }: FinishCelebrat
       sparklesRef.current.instanceMatrix.needsUpdate = true
     }
 
-    if (t >= 1) {
+    const st = Math.min(1, elapsedRef.current / SPARK_LIFETIME)
+    updateSparkInstances(starsRef.current, starSparks, st)
+    updateSparkInstances(dotsRef.current, dotSparks, st)
+    starMaterial.opacity = 1 - st
+    dotMaterial.opacity = 1 - st
+
+    if (t >= 1 && st >= 1) {
       doneRef.current = true
       onComplete()
     }
@@ -157,6 +280,10 @@ export function FinishCelebrationEffect({ position, onComplete }: FinishCelebrat
       <instancedMesh ref={sparklesRef} args={[undefined, undefined, SPARKLE_COUNT]}>
         <octahedronGeometry args={[1, 0]} />
         <meshBasicMaterial transparent opacity={0.95} depthWrite={false} />
+      </instancedMesh>
+      <instancedMesh ref={starsRef} args={[starGeometry, starMaterial, STAR_COUNT]} />
+      <instancedMesh ref={dotsRef} args={[undefined, undefined, DOT_COUNT]} material={dotMaterial}>
+        <planeGeometry args={[1, 1]} />
       </instancedMesh>
     </group>
   )

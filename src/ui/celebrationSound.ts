@@ -78,8 +78,59 @@ export function playCaptureFanfare(): void {
   playCaptureChime()
 }
 
+// Requested directly, alongside the capture fanfare above ("alert를 띄워주는 형식이 멋이없다... 좀
+// 생큼하게" - the current finish moment reads like a plain alert, make it feel fresher/livelier):
+// finish.mp3 (ported the same way as capture.mp3/game-won.mp3 - see this file's own opening
+// comment) is, like those two were, a bare stinger with no build. Same Web Audio technique as
+// playCaptureChime/playWinChime, but its own distinct character: a soft ascending bell arpeggio on
+// sine waves (airier than the capture chime's brighter triangle "ding") settling into one held,
+// slowly-decaying note - reads as a piece gently arriving and settling home, between the capture
+// chime's quick "got it!" and the win chime's much bigger "ta-daa!" build.
+function playFinishChime(): void {
+  try {
+    const AudioContextCtor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    if (!AudioContextCtor) return
+    const ctx = new AudioContextCtor()
+    const now = ctx.currentTime
+    // C5-E5-G5, the same plain major triad the other two chimes both use, but a step lower and on
+    // sine waves - a warmer, softer arpeggio to fit an "arrival" rather than a "hit" or a "fanfare".
+    const notes = [523.25, 659.25, 783.99]
+    notes.forEach((freq, i) => {
+      const start = now + i * 0.12
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      gain.gain.setValueAtTime(0, start)
+      gain.gain.linearRampToValueAtTime(0.2, start + 0.02)
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.35)
+      osc.connect(gain).connect(ctx.destination)
+      osc.start(start)
+      osc.stop(start + 0.37)
+    })
+    // The settling note - held an octave up, fading slowly, so the arpeggio has somewhere to land
+    // rather than just stopping the instant its last note decays.
+    const settleStart = now + notes.length * 0.12
+    const settleOsc = ctx.createOscillator()
+    const settleGain = ctx.createGain()
+    settleOsc.type = 'sine'
+    settleOsc.frequency.value = 1046.5
+    settleGain.gain.setValueAtTime(0, settleStart)
+    settleGain.gain.linearRampToValueAtTime(0.16, settleStart + 0.05)
+    settleGain.gain.exponentialRampToValueAtTime(0.0001, settleStart + 0.7)
+    settleOsc.connect(settleGain).connect(ctx.destination)
+    settleOsc.start(settleStart)
+    settleOsc.stop(settleStart + 0.75)
+    setTimeout(() => ctx.close(), 1200)
+  } catch {
+    // Same reasoning as playCaptureChime/playWinChime's own catch - Web Audio unavailable/blocked
+    // must never stop the plain play(FINISH_SOUND_URL) call below from still landing on its own.
+  }
+}
+
 export function playFinishSound(): void {
   play(FINISH_SOUND_URL)
+  playFinishChime()
 }
 
 // Requested again alongside the capture fanfare above ("우승했을때... 멋진 3D효과와 음악효과" - a
