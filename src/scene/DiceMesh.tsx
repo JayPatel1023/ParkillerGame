@@ -147,8 +147,31 @@ declare global {
 // on all five boards at 16:9, 1.5:1, 4:3 and phone-portrait windows - still no window-edge crop at
 // this larger row, since (per the sixth round's own finding) the crop ceiling for a given row eases
 // substantially at this column's own -1.6, not the tighter ceiling that applies closer to 0.
-export const CORNER_X = 1.898 * DICE_SCALE
-export const CORNER_Z = 2.28 * DICE_SCALE
+//
+// Reported again, with a marked screenshot and a direct target this time: center all three dice on
+// the board art's own "Parkiller" badge (the round logo the tray already sits beside), not just
+// "closer to the corner". Measured the badge's real center directly from the board texture itself
+// (public/boards/board_4p.jpg, pixel bbox ~(800,852)-(940,990) of a 1024x1024 image) rather than
+// eyeballing it through the camera's own perspective distortion, and converted through
+// toWorldPosition the same way every real track waypoint already is. Moving CORNER_X/CORNER_Z
+// (not just the black die's own anchor) was necessary here since the ask is about the whole
+// three-die cluster's position, and doing it this way keeps every die's own *relative* offset from
+// the others exactly as already tuned - only re-verifying track clearance for the white dice was
+// new (they'd never moved before; the black die's own clearance and every dice-overlap distance
+// are unaffected by a uniform shift).
+//
+// The full shift to the badge's own exact center clears every other board/window combination but
+// crops board_4p's own window edge at several window shapes - re-verified directly, not assumed,
+// after the very first attempt read as cropped by eye: a partial shift (30% of the way from the
+// original spot to the badge) is the largest fraction that stays clear of board_4p's own window
+// edge at every window shape checked (16:9, 1.5:1, 4:3, phone-portrait), while still landing
+// noticeably closer to the badge than before. board_4p is also the tightest for track clearance at
+// this new spot for the *white* dice specifically (1.07 world units for the left one - clearly
+// visible daylight in every screenshot checked, well past what "0.78 read as touching" established
+// two rounds ago for the black die) - see diceTrayTrackClearance.test.ts's own updated comment for
+// why that test now checks all three dice, not just the black one.
+export const CORNER_X = 2.0019 * DICE_SCALE
+export const CORNER_Z = 2.2857 * DICE_SCALE
 export const DIE_SPACING = 0.409 * DICE_SCALE
 // The black die sits a real step closer to the camera than the white pair (`row=0.85` in
 // BoardScene - see CORNER_X/CORNER_Z's own comment for why this needed to be paired with a
