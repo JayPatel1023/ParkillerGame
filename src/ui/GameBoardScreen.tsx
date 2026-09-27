@@ -1061,6 +1061,7 @@ export function GameBoardScreen({
         pieceChoice={pieceChoice ? { piece: pieceChoice.piece, amounts: pieceChoice.options.map((o) => o.amount) } : null}
         onChoosePieceAmount={confirmPieceChoice}
         botHighlightedPiece={botHighlightedPiece}
+        winnerColor={winner?.color ?? null}
       />
 
       <div style={frameOverlayStyle} />

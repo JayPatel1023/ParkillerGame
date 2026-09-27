@@ -19,6 +19,7 @@ import { PieceChoiceMarkers } from './PieceChoiceMarkers'
 import { TrackTile } from './TrackTile'
 import { CaptureImpactEffect } from './CaptureImpactEffect'
 import { FinishCelebrationEffect } from './FinishCelebrationEffect'
+import { WinCelebrationEffect } from './WinCelebrationEffect'
 import { BarrierIndicator } from './BarrierIndicator'
 import { useBoardColorSampler } from './useBoardColorSampler'
 import {
@@ -636,6 +637,10 @@ interface BoardSceneProps {
    * to move, run through the same indicator a human's own choosable piece gets (PieceMesh's own
    * `highlighted` prop), null otherwise. */
   botHighlightedPiece: Piece | null
+  /** The winning player's own color once the whole game has been won, null otherwise - see the
+   * winCelebrations state below for why this is watched for a null -> non-null transition rather
+   * than rendered directly. */
+  winnerColor: PieceColor | null
 }
 
 // The 200ms a simultaneous pair's slower piece gets to report its own landing after the first one
@@ -697,6 +702,7 @@ export function BoardScene({
   pieceChoice,
   onChoosePieceAmount,
   botHighlightedPiece,
+  winnerColor,
 }: BoardSceneProps) {
   // See useCanvasRemountOnStuckContext's own doc comment (webglContextRecovery.ts) - forces a fresh
   // <Canvas>/WebGLRenderer if a context loss doesn't self-restore in time, rather than trusting the
@@ -918,6 +924,25 @@ export function BoardScene({
   // FinishCelebrationEffect's own comment for why this looks nothing like a capture's impact.
   const [finishCelebrations, setFinishCelebrations] = useState<CaptureImpact[]>([])
   const nextFinishIdRef = useRef(0)
+
+  // The grand board-center burst for actually winning the whole game (see WinCelebrationEffect's
+  // own doc comment) - same trailing-effect array pattern as impacts/finishCelebrations above, kept
+  // as its own array rather than a single nullable slot so a fast remount (e.g. the context-recovery
+  // canvasKey remount just above) can never lose a still-playing celebration mid-burst, the same
+  // reasoning those two arrays already established.
+  const [winCelebrations, setWinCelebrations] = useState<CaptureImpact[]>([])
+  const nextWinIdRef = useRef(0)
+  const prevWinnerColorRef = useRef<PieceColor | null>(null)
+
+  useEffect(() => {
+    if (winnerColor && !prevWinnerColorRef.current) {
+      setWinCelebrations((prev) => [
+        ...prev,
+        { id: nextWinIdRef.current++, position: toWorldPosition([0.5, 0.5], BASE_HEIGHT), color: getColor(winnerColor) },
+      ])
+    }
+    prevWinnerColorRef.current = winnerColor
+  }, [winnerColor])
 
   useEffect(() => {
     const prevRequest = prevMoveAnimationRef.current
@@ -1180,6 +1205,15 @@ export function BoardScene({
           key={celebration.id}
           position={celebration.position}
           onComplete={() => setFinishCelebrations((prev) => prev.filter((c) => c.id !== celebration.id))}
+        />
+      ))}
+
+      {winCelebrations.map((celebration) => (
+        <WinCelebrationEffect
+          key={celebration.id}
+          position={celebration.position}
+          color={celebration.color}
+          onComplete={() => setWinCelebrations((prev) => prev.filter((c) => c.id !== celebration.id))}
         />
       ))}
 

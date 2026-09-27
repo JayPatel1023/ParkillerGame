@@ -82,6 +82,61 @@ export function playFinishSound(): void {
   play(FINISH_SOUND_URL)
 }
 
+// Requested again alongside the capture fanfare above ("우승했을때... 멋진 3D효과와 음악효과" - a
+// cooler 3D effect and sound effect for winning too): game-won.mp3, ported the same way as
+// capture.mp3/finish.mp3 from the original prototype (sound_partida_finalizada), is a single bare
+// stinger with no build to it - winning the whole game is the biggest moment in a match and it was
+// getting the same one-shot treatment as every smaller pickup. Same technique as playCaptureChime
+// above (Web Audio, no new asset needed), but bigger: a four-note ascending run across two octaves
+// leading into a sustained three-oscillator chord swell, so it reads as a "ta-daa!" build-and-land
+// rather than the chime's quick "ding-ding-ding".
+function playWinChime(): void {
+  try {
+    const AudioContextCtor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    if (!AudioContextCtor) return
+    const ctx = new AudioContextCtor()
+    const now = ctx.currentTime
+    // C5-E5-G5-C6: the same bright major-triad character as the capture chime, extended up to the
+    // octave so the run itself feels like it's climbing somewhere, not just repeating the chord.
+    const runNotes = [523.25, 659.25, 783.99, 1046.5]
+    runNotes.forEach((freq, i) => {
+      const start = now + i * 0.1
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'triangle'
+      osc.frequency.value = freq
+      gain.gain.setValueAtTime(0, start)
+      gain.gain.linearRampToValueAtTime(0.24, start + 0.015)
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.28)
+      osc.connect(gain).connect(ctx.destination)
+      osc.start(start)
+      osc.stop(start + 0.3)
+    })
+    // The landing chord - C6+E6+G6 together, not in sequence - swelling in just as the run's last
+    // note fades, then held and faded out slowly so the win moment has something to sit in rather
+    // than ending the instant the last note of the run stops.
+    const chordStart = now + runNotes.length * 0.1
+    const chordFreqs = [1046.5, 1318.51, 1567.98]
+    chordFreqs.forEach((freq) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'triangle'
+      osc.frequency.value = freq
+      gain.gain.setValueAtTime(0, chordStart)
+      gain.gain.linearRampToValueAtTime(0.18, chordStart + 0.08)
+      gain.gain.exponentialRampToValueAtTime(0.0001, chordStart + 1.1)
+      osc.connect(gain).connect(ctx.destination)
+      osc.start(chordStart)
+      osc.stop(chordStart + 1.15)
+    })
+    setTimeout(() => ctx.close(), 1600)
+  } catch {
+    // Same reasoning as playCaptureChime's own catch - Web Audio unavailable/blocked must never
+    // stop the plain play(GAME_WON_SOUND_URL) call below from still landing on its own.
+  }
+}
+
 export function playGameWonSound(): void {
   play(GAME_WON_SOUND_URL)
+  playWinChime()
 }
