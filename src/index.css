@@ -208,6 +208,25 @@ button {
   }
 }
 
+/* GameBoardScreen's own icon row (pause/sound/help/exit) - reported directly, with a screenshot,
+   after the rule just above shipped: on anything wider than the phone breakpoint it's meant for,
+   this row had drifted down below the turn card and away from its own corner, instead of the
+   independent top-right placement it always had there. Pulls it back out of topBarStyle's own
+   column flow above that same breakpoint - `position: absolute` removes it from normal flow
+   entirely, so the turn card next to it stops accounting for its height too. `top: 0; right: 0`
+   rather than another real inset - topBarStyle itself (this row's own nearest positioned
+   ancestor, since it's already `position: absolute`) already sits 16px/safe-area off the actual
+   viewport corner, so a second matching inset here would double it up. Below the breakpoint,
+   .turn-card's own inline styles (position: static, in the column flow) are what keep this row
+   sitting under the card instead. */
+@media (min-width: 521px) {
+  .icon-row {
+    position: absolute !important;
+    top: 0 !important;
+    right: 0 !important;
+  }
+}
+
 /* StartScreen's background photo - firstbag.jpg (supplied directly): a candlelit wood desk with
    the physical board laid flat and centered, "PARKILLER"/"RULES" books framing it. Unlike the
    earlier start.png/start-mobile.png pair, this one photo's own composition is already centered

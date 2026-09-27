@@ -1104,7 +1104,7 @@ export function GameBoardScreen({
           </button>
         </div>
 
-        <div style={topRightButtonRowStyle}>
+        <div className="icon-row" style={topRightButtonRowStyle}>
           {isLocalGame && (
             <button className="chunky-btn" onClick={togglePause} title={paused ? 'Reanudar' : 'Pausa'} style={medallionButtonStyle}>
               {paused ? '▶' : '⏸'}
@@ -1503,10 +1503,15 @@ const secondaryButtonStyle: React.CSSProperties = {
 // the turn card's own avatar already uses - shrinks together on a narrow phone instead of one
 // fixed pixel size fighting the viewport.
 //
-// Now a plain flex row inside topBarStyle's own column stack, directly below the turn card rather
-// than beside it (see that style's own comment) - `justifyContent: flex-end` keeps these lined up
-// with the card's own right edge, the same side they always sat on, now that they're no longer
-// independently positioned against the viewport's own corner.
+// A plain flex row inside topBarStyle's own column stack, directly below the turn card rather
+// than beside it, on a narrow phone - `justifyContent: flex-end` keeps these lined up with the
+// card's own right edge, the same side they always sat on. Reported directly, with a screenshot,
+// once this also affected a *wide* window: below the card was only ever meant for a phone too
+// narrow to fit both side by side; on anything wider this read as the icon row drifting down and
+// away from its own corner for no reason. The `.icon-row` media query in index.css restores the
+// original independent `position: absolute` top-right placement above that same 520px breakpoint
+// `.turn-card`'s own width rule uses - this inline style is the narrow-phone default, that query
+// is what makes it revert on anything wider.
 const topRightButtonRowStyle: React.CSSProperties = {
   display: 'flex',
   justifyContent: 'flex-end',
