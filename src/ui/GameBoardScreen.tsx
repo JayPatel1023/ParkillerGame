@@ -1407,16 +1407,34 @@ const turnSubtitleStyle: React.CSSProperties = {
 }
 
 // One row of player pills along the table's bottom edge (see PlayerPill below), matching the
-// reference's row of player badges - wraps on narrow phones instead of overflowing.
+// reference's row of player badges - wraps onto more than one line on a narrow phone with enough
+// players, rather than overflowing.
+//
+// Reported directly, with two screenshots (6 players on a narrow phone landing one-per-line - six
+// separate rows - and the same row forced back onto one line by unchecking flex-wrap in DevTools):
+// looked like a flex-wrap problem, but flex-wrap was never the cause. This box's own `left: 50%` +
+// `transform: translateX(-50%)` centering trick has a well-known CSS pitfall for an absolutely
+// positioned box with `width` left at its default `auto`: per the CSS2.1 shrink-to-fit rule for a
+// box with only ONE inset property set (`left` here, no matching `right`), the browser computes
+// its *available* width as "containing block width minus the left offset" - 50% of the viewport,
+// not the full width - entirely ignoring that the transform will re-center it visually afterward
+// (transforms apply after layout, so they can't rescue a width already computed too small).
+// Confirmed directly: this row's own resolved width was exactly 195px on a 390px phone (390 - 50%
+// = 195), so only the single widest pill (up to ~116px) ever fit per line, wrapping the rest one
+// at a time instead of packing several per line within the real ~366px maxWidth budget. `width:
+// max-content` sidesteps that rule entirely - it sizes the box to its own content's natural width
+// (still capped by maxWidth below) instead of asking the browser to run the auto-width algorithm
+// this pitfall lives in.
 const playerRowStyle: React.CSSProperties = {
   position: 'absolute',
   bottom: 'max(16px, env(safe-area-inset-bottom))',
   left: '50%',
   transform: 'translateX(-50%)',
+  width: 'max-content',
   display: 'flex',
   flexWrap: 'wrap',
   justifyContent: 'center',
-  gap: 'clamp(6px, 1.8vw, 10px)',
+  gap: 'clamp(4px, 1.2vw, 10px)',
   maxWidth: 'calc(100vw - 24px)',
   padding: '0 8px',
 }
