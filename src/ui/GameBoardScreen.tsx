@@ -1085,48 +1085,50 @@ export function GameBoardScreen({
       <PlayerLeftToast notice={session.departedPlayerNotice ?? null} />
       <InteractiveCursorOverlay />
 
-      <div style={turnCardStyle}>
-        <div style={turnCardHeaderStyle}>
-          <span style={{ ...avatarStyle, background: getColor(currentPlayer.color) }}>♟</span>
-          <div style={{ minWidth: 0 }}>
-            <div style={turnTitleStyle}>TURNO DE {currentPlayer.color.toUpperCase()}</div>
-            <div style={turnSubtitleStyle}>{statusLine}</div>
+      <div style={topBarStyle}>
+        <div style={turnCardStyle}>
+          <div style={turnCardHeaderStyle}>
+            <span style={{ ...avatarStyle, background: getColor(currentPlayer.color) }}>♟</span>
+            <div style={{ minWidth: 0 }}>
+              <div style={turnTitleStyle}>TURNO DE {currentPlayer.color.toUpperCase()}</div>
+              <div style={turnSubtitleStyle}>{statusLine}</div>
+            </div>
           </div>
+          <button
+            className="chunky-btn"
+            onClick={() => canRoll && rollDice()}
+            disabled={!canRoll}
+            style={cardRollButtonStyle(canRoll, getColor(currentPlayer.color))}
+          >
+            {rolling ? 'RODANDO...' : 'TIRAR DADOS'}
+          </button>
         </div>
-        <button
-          className="chunky-btn"
-          onClick={() => canRoll && rollDice()}
-          disabled={!canRoll}
-          style={cardRollButtonStyle(canRoll, getColor(currentPlayer.color))}
-        >
-          {rolling ? 'RODANDO...' : 'TIRAR DADOS'}
-        </button>
+
+        <div style={topRightButtonRowStyle}>
+          {isLocalGame && (
+            <button className="chunky-btn" onClick={togglePause} title={paused ? 'Reanudar' : 'Pausa'} style={medallionButtonStyle}>
+              {paused ? '▶' : '⏸'}
+            </button>
+          )}
+
+          <button className="chunky-btn" onClick={() => setShowingSoundSettings(true)} title="Sonido" style={medallionButtonStyle}>
+            ♪
+          </button>
+
+          <button className="chunky-btn" onClick={() => setShowingHelp(true)} title="Cómo se juega" style={medallionButtonStyle}>
+            ?
+          </button>
+
+          <button className="chunky-btn" onClick={() => setConfirmingExit(true)} title="Salir del juego" style={medallionButtonStyle}>
+            ✕
+          </button>
+        </div>
       </div>
 
       <div style={playerRowStyle}>
         {session.players.map((p) => (
           <PlayerPill key={p.color} player={p} isCurrentTurn={p.color === currentPlayer.color} isLocal={p.color === localColor} />
         ))}
-      </div>
-
-      <div style={topRightButtonRowStyle}>
-        {isLocalGame && (
-          <button className="chunky-btn" onClick={togglePause} title={paused ? 'Reanudar' : 'Pausa'} style={medallionButtonStyle}>
-            {paused ? '▶' : '⏸'}
-          </button>
-        )}
-
-        <button className="chunky-btn" onClick={() => setShowingSoundSettings(true)} title="Sonido" style={medallionButtonStyle}>
-          ♪
-        </button>
-
-        <button className="chunky-btn" onClick={() => setShowingHelp(true)} title="Cómo se juega" style={medallionButtonStyle}>
-          ?
-        </button>
-
-        <button className="chunky-btn" onClick={() => setConfirmingExit(true)} title="Salir del juego" style={medallionButtonStyle}>
-          ✕
-        </button>
       </div>
 
       {showingHelp && <HelpModal onClose={() => setShowingHelp(false)} />}
@@ -1324,25 +1326,29 @@ const frameOverlayStyle: React.CSSProperties = {
 }
 
 // Reported directly, with a screenshot on a 390px-wide phone: the turn card's own title ("TURNO DE
-// GOLD") ran directly into the top-right medallion row (pause/sound/help/exit), the two visibly
-// overlapping. Root cause: this card's own `width` and topRightButtonRowStyle's own footprint
-// (medallionButtonStyle's width * the button count, plus its own gaps) are both independently
-// vw-scaled with no shared budget - on a wide phone/tablet each fits with room to spare, but on a
-// narrow one (roughly under ~480px, where both clamp()s are still in their vw-scaling range rather
-// than pinned to their max) their combined width alone already exceeds 100vw before the two 16px
-// side margins are even counted. `maxWidth` below caps this card at whatever's actually left after
-// reserving the icon row's own real footprint (4 medallions - the local-play worst case, sound/
-// help/exit plus Pause - is assumed unconditionally rather than only when isLocalGame, so this
-// stays correct even though online's own 3-icon row would have a little room to spare) plus a small
-// breathing gap between the two, rather than the two elements' widths being tuned independently and
-// left to silently drift back out of sync with each other. turnTitleStyle's own text-overflow:
-// ellipsis already handles a title that no longer fits at whatever width results.
-const ICON_ROW_RESERVED_WIDTH = 'calc(4 * clamp(38px, 10vw, 46px) + 3 * clamp(6px, 2vw, 10px))'
-
-const turnCardStyle: React.CSSProperties = {
+// GOLD") ran directly into the top-right medallion row (pause/sound/help/exit) sitting beside it,
+// the two visibly overlapping - both were independently vw-scaled absolute-positioned elements
+// with no shared width budget. First fixed by capping the card's own width against the icon row's
+// real footprint; reported again, directly, with a marked screenshot: put the icon row on its own
+// row *below* the card instead, full width, rather than living with a card that has to shrink (and
+// truncate its own title) to make room beside it.
+//
+// One wrapper (topBarStyle) now owns the actual screen position/safe-area inset just once; the
+// card and the icon row are its own two flex children stacked in normal document flow, so the icon
+// row always sits directly under however tall the card's own content actually renders - no
+// hand-computed height offset to keep in sync as the card's own text wraps differently across
+// player colors/screen widths.
+const topBarStyle: React.CSSProperties = {
   position: 'absolute',
   top: 'max(16px, env(safe-area-inset-top))',
   left: 'max(16px, env(safe-area-inset-left))',
+  right: 'max(16px, env(safe-area-inset-right))',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 10,
+}
+
+const turnCardStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: 12,
@@ -1352,8 +1358,7 @@ const turnCardStyle: React.CSSProperties = {
     'linear-gradient(180deg, rgba(255,255,255,0.07), transparent 30%), linear-gradient(165deg, rgba(48, 30, 20, 0.94), rgba(22, 13, 9, 0.96))',
   border: `2px solid ${BRAND_GOLD}`,
   boxShadow: `0 8px 22px rgba(0,0,0,0.5), inset 0 0 0 3px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.12)`,
-  width: 'clamp(200px, 62vw, 300px)',
-  maxWidth: `calc(100vw - 32px - ${ICON_ROW_RESERVED_WIDTH} - 10px)`,
+  width: '100%',
   boxSizing: 'border-box',
   fontFamily: 'system-ui, sans-serif',
   color: '#f2ede0',
@@ -1483,24 +1488,21 @@ const secondaryButtonStyle: React.CSSProperties = {
   cursor: 'pointer',
 }
 
-// The three corner medallions (sound/help/exit) used to each carry their own absolute top/right,
+// The four medallions (pause/sound/help/exit) used to each carry their own absolute top/right,
 // hand-added up from a fixed 46px + 10px gap - correct on the wide phones it was built against,
 // but on an iPhone-width screen (390px, and narrower still on an SE) that fixed math reads as
 // cramped: the badges keep their desktop-sized 46px footprint right up against a real notch/
-// Dynamic Island with no give at all. One flex row now owns the position (with a safe-area-aware
-// inset so a notch/rounded corner never eats into a tap target), and each medallion sizes itself
-// off the same vw-based clamp() the turn card's own avatar already uses - shrinks together on a
-// narrow phone instead of one fixed pixel size fighting the viewport.
+// Dynamic Island with no give at all. Each medallion sizes itself off the same vw-based clamp()
+// the turn card's own avatar already uses - shrinks together on a narrow phone instead of one
+// fixed pixel size fighting the viewport.
 //
-// This row's own real width (button size/gap/count) is also what turnCardStyle's own
-// ICON_ROW_RESERVED_WIDTH mirrors, to keep that card from overlapping this row on a narrow phone -
-// change medallionButtonStyle's width, this row's own gap, or the button count here without
-// updating that constant to match, and the two drift back out of sync.
+// Now a plain flex row inside topBarStyle's own column stack, directly below the turn card rather
+// than beside it (see that style's own comment) - `justifyContent: flex-end` keeps these lined up
+// with the card's own right edge, the same side they always sat on, now that they're no longer
+// independently positioned against the viewport's own corner.
 const topRightButtonRowStyle: React.CSSProperties = {
-  position: 'absolute',
-  top: 'max(16px, env(safe-area-inset-top))',
-  right: 'max(16px, env(safe-area-inset-right))',
   display: 'flex',
+  justifyContent: 'flex-end',
   gap: 'clamp(6px, 2vw, 10px)',
 }
 
