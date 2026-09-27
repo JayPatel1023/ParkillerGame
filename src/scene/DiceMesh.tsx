@@ -166,8 +166,41 @@ export const DIE_SIZE = 0.32 * DICE_SCALE
 // noticeably bigger than the two white dice, so it was scaled up 30% to match. Reported directly
 // since, in the shipped game itself rather than those reference photos: make it the same size as
 // the white pair instead - reverted to 1.
+//
+// Reported an eighth time, with a marked screenshot: column -1.6 reads as "off to the side", not
+// "underneath the two white dice" - the ask, again, was for the black die sitting centered under
+// the pair, not beside them. Tried column=0 (dead center, same CORNER_X/CORNER_Z the white dice
+// share) directly first - making it clear overlap needs row >= ~0.78 (DIE_SIZE/ROW_SPACING) no
+// matter the column, since a shared-column offset alone never reaches a full DIE_SIZE of
+// separation - but re-tuning BLACK_DIE_SCALE down as far as 0.4x still cropped the window edge on
+// the tightest board/window pair (2-player, 1024x768): shrinking the die barely helped because the
+// crop boundary sits close to CORNER_X/CORNER_Z's own corner-anchored *position* at any row large
+// enough to clear, not close because of the die's own radius.
+//
+// Fixed by giving the black die its own small pull further from that corner - toward the board's
+// own center - on top of the shared column/row math, rather than moving CORNER_X/CORNER_Z
+// themselves (which the white dice also anchor off, and would need every board's own track
+// clearance re-verified for them too, not just the black die). Landed on column=0/row=0.85 with
+// this pull, BLACK_DIE_SCALE left at 1 (no size change needed once the pull itself did the real
+// work): it bought back both the window-edge clearance the corner anchor couldn't spare and the
+// track clearance a small pull alone gives up (re-swept row against the real per-board data the
+// same as every round above - 0.85 clears every board by >= 1.4 world units again). Re-verified by
+// screenshot on all five boards at 16:9, 1.5:1, 4:3 and phone-portrait windows - clear of the
+// window edge and of the white pair (see BLACK_ANCHOR_DX/DZ's own comment just below for why "clear
+// of the white pair" here isn't the same single-axis-only check earlier rounds used).
 const BLACK_DIE_SCALE = 1
 const BLACK_DIE_SIZE = DIE_SIZE * BLACK_DIE_SCALE
+// A rounded box's own corner radius (`size * 0.16` - see the geometry args further down) cuts
+// visibly into a *diagonal* approach between two dice, so two dice offset diagonally (this pull
+// moves the black die both left of AND closer to the camera than CORNER_X/CORNER_Z, unlike every
+// previous round's own single-axis-only offset) can read as cleanly separated on screen well before
+// either individual axis alone reaches a full DIE_SIZE of separation - confirmed directly, zoomed
+// tight against real screenshots at several candidate pulls, not assumed from the geometry alone:
+// dx=1.625/dz=1.687 (Euclidean ~2.34, ~0.8x DIE_SIZE) still read as touching; dx=2.625/dz=2.687
+// (Euclidean ~3.76, ~1.28x DIE_SIZE) read as a clean, comfortable gap in every screenshot checked -
+// see diceTrayDiceOverlap.test.ts's own comment for why that test's own model changed to match.
+export const BLACK_ANCHOR_DX = 0.491 * DICE_SCALE
+export const BLACK_ANCHOR_DZ = 0.055 * DICE_SCALE
 
 // Found via frame-by-frame review of a real local-play recording (b1_0250.jpg, mid-spin): all
 // three dice - both white ones and the black Parkiller die - showed byte-for-byte identical pip
@@ -444,7 +477,13 @@ export function DiceMesh({
   }, [rolling])
 
   return (
-    <group position={[CORNER_X + column * DIE_SPACING, restY, CORNER_Z + row * ROW_SPACING]}>
+    <group
+      position={[
+        CORNER_X + column * DIE_SPACING - (black ? BLACK_ANCHOR_DX : 0),
+        restY,
+        CORNER_Z + row * ROW_SPACING - (black ? BLACK_ANCHOR_DZ : 0),
+      ]}
+    >
       <mesh
         ref={meshRef}
         castShadow

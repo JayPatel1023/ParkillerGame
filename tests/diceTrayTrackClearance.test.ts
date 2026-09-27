@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { BOARD_DEFINITIONS } from '../src/data/boards'
 import { estimateSquareSize, toWorldPosition } from '../src/scene/boardGeometry'
 import { SAFE_TILE_WIDTH_MULTIPLIER } from '../src/scene/BoardScene'
-import { CORNER_X, CORNER_Z, DIE_SIZE, DIE_SPACING, ROW_SPACING } from '../src/scene/DiceMesh'
+import { BLACK_ANCHOR_DX, BLACK_ANCHOR_DZ, CORNER_X, CORNER_Z, DIE_SIZE, DIE_SPACING, ROW_SPACING } from '../src/scene/DiceMesh'
 
 // Reported directly, over several rounds, about the dice tray sitting in the board's bottom-right
 // corner (the closest gap to a track square): first that it overlapped the track outright, then -
@@ -17,17 +17,24 @@ import { CORNER_X, CORNER_Z, DIE_SIZE, DIE_SPACING, ROW_SPACING } from '../src/s
 // protected squares at their full SAFE_TILE_WIDTH_MULTIPLIER width, same as the tile mesh itself
 // renders - on every board, with a real margin, not just barely.
 //
-// column/row mirror the exact <DiceMesh black column={...} row={...}> props in BoardScene.tsx -
-// keep these in sync if that JSX ever changes, or this test is checking a stale position.
-const BLACK_DIE_COLUMN = -1.6
+// column/row mirror the exact <DiceMesh black column={...} row={...}> props in BoardScene.tsx, and
+// BLACK_ANCHOR_DX/DZ mirror DiceMesh.tsx's own black-die-only pull off CORNER_X/CORNER_Z (see that
+// file's own doc comment for why the black die needs a separate anchor from the white pair's) -
+// keep all four in sync if that JSX or DiceMesh.tsx's own constants ever change, or this test is
+// checking a stale position.
+const BLACK_DIE_COLUMN = 0
 const BLACK_DIE_ROW = 0.85
 // A comfortable floor, not the bare minimum that would technically clear - see this file's own
 // doc comment above for why "technically positive" (0.78 world units, measured directly against
-// the very column/row this replaced) still read as touching once actually rendered.
+// an earlier column/row this replaced) still read as touching once actually rendered. Real
+// measured clearance at this exact position is 1.670 world units on board_4p, the tightest board.
 const MIN_COMFORTABLE_CLEARANCE = 1.5
 
 function blackDieWorldPosition(): [number, number] {
-  return [CORNER_X + BLACK_DIE_COLUMN * DIE_SPACING, CORNER_Z + BLACK_DIE_ROW * ROW_SPACING]
+  return [
+    CORNER_X + BLACK_DIE_COLUMN * DIE_SPACING - BLACK_ANCHOR_DX,
+    CORNER_Z + BLACK_DIE_ROW * ROW_SPACING - BLACK_ANCHOR_DZ,
+  ]
 }
 
 describe('the black die tray position clears every track tile on every board', () => {
