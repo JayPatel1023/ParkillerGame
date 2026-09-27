@@ -230,7 +230,20 @@ const BLACK_DIE_SIZE = DIE_SIZE * BLACK_DIE_SCALE
 // tightest, actually improved - moving right increases it) and the overlap clearance above (0.44
 // still clears by 0.51, comfortably above the 0.3 floor), and re-verified clear of the window edge
 // by screenshot on the tightest board/window pair.
-export const BLACK_ANCHOR_DX = 0.44 * DICE_SCALE
+//
+// Reported a third time, directly, after CORNER_X/CORNER_Z themselves moved toward the board's own
+// Parkiller badge (see their own doc comment above): still read as sitting to the left rather than
+// centered - "왜 아직 검은 주사위가 왼쪽에 그대로 있니?" (why is the black die still on the left?).
+// Root cause: DX's whole reason for existing was never overlap clearance in the first place - at
+// row=0.85, dz alone (0.85 * ROW_SPACING ~= 3.19) already exceeds DIE_SIZE (~2.93), so the Z axis
+// alone was always enough to clear both white dice regardless of DX. DX 0.44/0.491 were both
+// tuned back when column=0 alone still cropped the window edge (see CORNER_X/CORNER_Z's own
+// eighth-round comment) - once the anchor itself moved toward the badge, that original crop
+// pressure eased enough that DX could just drop to 0 outright: re-verified directly (not assumed)
+// that column=0 - true dead center under the pair - still clears every window edge at every board/
+// window shape checked, now that the anchor sits further from the corner than it did back then.
+// DZ stays as it was; it was never the axis under scrutiny in any of these three rounds.
+export const BLACK_ANCHOR_DX = 0 * DICE_SCALE
 export const BLACK_ANCHOR_DZ = 0.055 * DICE_SCALE
 
 // Found via frame-by-frame review of a real local-play recording (b1_0250.jpg, mid-spin): all
