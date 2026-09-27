@@ -1323,9 +1323,22 @@ const frameOverlayStyle: React.CSSProperties = {
   boxShadow: `inset 0 0 0 3px ${BRAND_GOLD}55, inset 0 0 90px 30px rgba(0,0,0,0.55)`,
 }
 
-// Reported directly, with a photoreal reference: turn info lives in one card top-left (avatar +
-// title + status + the roll action all together), not spread across a separate banner and a
-// floating button - echoes the reference's single "RED'S TURN / Roll the dice" card exactly.
+// Reported directly, with a screenshot on a 390px-wide phone: the turn card's own title ("TURNO DE
+// GOLD") ran directly into the top-right medallion row (pause/sound/help/exit), the two visibly
+// overlapping. Root cause: this card's own `width` and topRightButtonRowStyle's own footprint
+// (medallionButtonStyle's width * the button count, plus its own gaps) are both independently
+// vw-scaled with no shared budget - on a wide phone/tablet each fits with room to spare, but on a
+// narrow one (roughly under ~480px, where both clamp()s are still in their vw-scaling range rather
+// than pinned to their max) their combined width alone already exceeds 100vw before the two 16px
+// side margins are even counted. `maxWidth` below caps this card at whatever's actually left after
+// reserving the icon row's own real footprint (4 medallions - the local-play worst case, sound/
+// help/exit plus Pause - is assumed unconditionally rather than only when isLocalGame, so this
+// stays correct even though online's own 3-icon row would have a little room to spare) plus a small
+// breathing gap between the two, rather than the two elements' widths being tuned independently and
+// left to silently drift back out of sync with each other. turnTitleStyle's own text-overflow:
+// ellipsis already handles a title that no longer fits at whatever width results.
+const ICON_ROW_RESERVED_WIDTH = 'calc(4 * clamp(38px, 10vw, 46px) + 3 * clamp(6px, 2vw, 10px))'
+
 const turnCardStyle: React.CSSProperties = {
   position: 'absolute',
   top: 'max(16px, env(safe-area-inset-top))',
@@ -1340,6 +1353,7 @@ const turnCardStyle: React.CSSProperties = {
   border: `2px solid ${BRAND_GOLD}`,
   boxShadow: `0 8px 22px rgba(0,0,0,0.5), inset 0 0 0 3px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.12)`,
   width: 'clamp(200px, 62vw, 300px)',
+  maxWidth: `calc(100vw - 32px - ${ICON_ROW_RESERVED_WIDTH} - 10px)`,
   boxSizing: 'border-box',
   fontFamily: 'system-ui, sans-serif',
   color: '#f2ede0',
@@ -1477,6 +1491,11 @@ const secondaryButtonStyle: React.CSSProperties = {
 // inset so a notch/rounded corner never eats into a tap target), and each medallion sizes itself
 // off the same vw-based clamp() the turn card's own avatar already uses - shrinks together on a
 // narrow phone instead of one fixed pixel size fighting the viewport.
+//
+// This row's own real width (button size/gap/count) is also what turnCardStyle's own
+// ICON_ROW_RESERVED_WIDTH mirrors, to keep that card from overlapping this row on a narrow phone -
+// change medallionButtonStyle's width, this row's own gap, or the button count here without
+// updating that constant to match, and the two drift back out of sync.
 const topRightButtonRowStyle: React.CSSProperties = {
   position: 'absolute',
   top: 'max(16px, env(safe-area-inset-top))',
