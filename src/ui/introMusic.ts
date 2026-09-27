@@ -24,6 +24,11 @@
 // 185-190kbps, an inconsistency rather than a deliberate quality choice. Re-encoded to 160kbps (well
 // above what background game music needs to sound clean, still a bit more conservative than its
 // siblings' own bitrate) - 3.6MB, exactly half, with no other change.
+//
+// intro.mp3 itself ("Melodía 1") was swapped for a different track entirely, replacing the
+// GameMaker-ported original rather than sitting alongside it - re-encoded down from the swapped-in
+// file's own 256kbps to 160kbps immediately after, the same consistency fix music-3.mp3 got above
+// (2.5MB -> 1.6MB, no audible change at this bitrate for background music).
 const TRACKS: { url: string; label: string }[] = [
   { url: '/music/intro.mp3', label: 'Melodía 1' },
   { url: '/music/music-2.mp3', label: 'Melodía 2' },
