@@ -196,6 +196,18 @@ button {
   }
 }
 
+/* GameBoardScreen's own turn card (top-left, "TURNO DE X" + TIRAR DADOS) - requested directly:
+   on a narrow phone, stretch it to the full width now that the pause/sound/help/exit icon row
+   sits below it instead of beside it (see topBarStyle's own comment there), but leave it at its
+   original compact clamp() width on a wider window/desktop, where that spare width was never the
+   point. Same class + breakpoint pattern as .menu-doodle/.menu-card-subtitle just above, not a
+   width computed in JS. */
+@media (max-width: 520px) {
+  .turn-card {
+    width: 100% !important;
+  }
+}
+
 /* StartScreen's background photo - firstbag.jpg (supplied directly): a candlelit wood desk with
    the physical board laid flat and centered, "PARKILLER"/"RULES" books framing it. Unlike the
    earlier start.png/start-mobile.png pair, this one photo's own composition is already centered

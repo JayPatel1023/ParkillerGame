@@ -1086,7 +1086,7 @@ export function GameBoardScreen({
       <InteractiveCursorOverlay />
 
       <div style={topBarStyle}>
-        <div style={turnCardStyle}>
+        <div className="turn-card" style={turnCardStyle}>
           <div style={turnCardHeaderStyle}>
             <span style={{ ...avatarStyle, background: getColor(currentPlayer.color) }}>♟</span>
             <div style={{ minWidth: 0 }}>
@@ -1358,7 +1358,14 @@ const turnCardStyle: React.CSSProperties = {
     'linear-gradient(180deg, rgba(255,255,255,0.07), transparent 30%), linear-gradient(165deg, rgba(48, 30, 20, 0.94), rgba(22, 13, 9, 0.96))',
   border: `2px solid ${BRAND_GOLD}`,
   boxShadow: `0 8px 22px rgba(0,0,0,0.5), inset 0 0 0 3px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.12)`,
-  width: '100%',
+  // Reported directly, again, right after the icon row moved below this card (see topBarStyle's
+  // own comment): a flat 100% width was only ever meant for a narrow phone, where the icon row now
+  // sitting underneath instead of beside it leaves plenty of spare width to use - not an
+  // unconditional change for every screen size, desktop included. Stays at the original compact
+  // clamp() here; the index.css `.turn-card` media query below is what actually widens it, the
+  // same class + `@media (max-width: ...)` pattern this project's own index.css already uses for
+  // OnlineLobbyScreen's narrow-window rules, rather than a size computed in JS.
+  width: 'clamp(200px, 62vw, 300px)',
   boxSizing: 'border-box',
   fontFamily: 'system-ui, sans-serif',
   color: '#f2ede0',
