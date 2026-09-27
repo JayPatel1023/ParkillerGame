@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { extend, useFrame, type BufferGeometryNode } from '@react-three/fiber'
 import * as THREE from 'three'
-import type { Group, Mesh } from 'three'
+import type { Mesh } from 'three'
 import { RoundedBoxGeometry } from 'three-stdlib'
 import { BOARD_SIZE } from './boardGeometry'
 import { setInteractiveCursorActive } from './interactiveCursorState'
@@ -202,29 +202,6 @@ const BLACK_DIE_SIZE = DIE_SIZE * BLACK_DIE_SCALE
 export const BLACK_ANCHOR_DX = 0.491 * DICE_SCALE
 export const BLACK_ANCHOR_DZ = 0.055 * DICE_SCALE
 
-// Requested directly, with a reference image, over two rounds: the dice used to just spin in
-// place at their small on-board tray position - "주사위가 화면에 뜨면서 금색의... 회오리바람을
-// 일으키는것처럼" (the dice should float up on screen, like they're kicking up a golden whirlwind),
-// then, once they stop, show the result back on the same small dice sitting on the board. Rather
-// than a second set of dice models for the float, this repositions/enlarges these exact three
-// meshes in front of the camera for as long as `rolling` is true, then snaps them straight back to
-// their own normal tray position/scale the instant it isn't - the same objects carry the actual
-// pip result either way, so "the board dice show the result" falls out for free instead of needing
-// two dice states kept in sync.
-//
-// A camera-relative offset (not a world-space one) so this reads as "floating in front of you"
-// regardless of viewport aspect/window size, the same reason FitBoardCamera itself frames off
-// aspect ratio rather than raw pixels - a fixed world-space float position would drift on/off
-// center as the camera's own distance changes across window shapes.
-// Exported so DiceRollGlow can center its own ring/star swirl on the exact same camera-relative
-// point these three dice float to, rather than a second, independently-tuned distance drifting
-// out of sync with this one.
-export const FLOAT_DISTANCE = 2.2 * DICE_SCALE
-const FLOAT_SCALE = 1.15
-// Eases toward the float position/scale (a real "휙" swirl-in) rather than snapping there instantly
-// - see the reset-on-settle effect further down for why the *return* trip is instant instead.
-export const FLOAT_LERP_SPEED = 7
-
 // Found via frame-by-frame review of a real local-play recording (b1_0250.jpg, mid-spin): all
 // three dice - both white ones and the black Parkiller die - showed byte-for-byte identical pip
 // orientation at the same instant, because every <DiceMesh> receives the exact same `rolling`
@@ -365,8 +342,6 @@ export function DiceMesh({
   column,
   row = 0,
   black = false,
-  floatRight = 0,
-  floatUp = 0,
 }: {
   value: number | null
   rolling: boolean
@@ -393,26 +368,11 @@ export function DiceMesh({
   /** PK2's own die - a black body with white dots, rolled and resolved separately from the two
    * white dice. */
   black?: boolean
-  /** This die's own slot (camera-relative right/up, in world units) within the floating cluster
-   * shown while `rolling` - see FLOAT_DISTANCE's own comment. Independent of column/row, which
-   * only ever describe the *rest* (on-board) position; a floating cluster fans the three dice out
-   * around the camera's own view axis instead, unrelated to how they sit on the board. */
-  floatRight?: number
-  floatUp?: number
 }) {
-  const groupRef = useRef<Group>(null)
   const meshRef = useRef<Mesh>(null)
   const flashRef = useRef<Mesh>(null)
   const wasRolling = useRef(rolling)
   const settleElapsedRef = useRef(Infinity)
-  // Scratch vectors reused every frame while floating, rather than allocated fresh each time -
-  // this project's own established pattern for anything driven through useFrame at 60fps.
-  const scratchRef = useRef({
-    forward: new THREE.Vector3(),
-    right: new THREE.Vector3(),
-    up: new THREE.Vector3(),
-    target: new THREE.Vector3(),
-  })
 
   const size = black ? BLACK_DIE_SIZE : DIE_SIZE
   // The die's own geometry is centered on its local origin, so resting it on the flat board plane
@@ -465,19 +425,6 @@ export function DiceMesh({
   // lockstep during a nudge - reads as more alive, less like one rigid block moving together.
   const phaseOffset = useMemo(() => (column + row * 2) * 0.4, [column, row])
 
-  // This die's own normal tray position - computed once (it only depends on props that don't
-  // change frame to frame) so the reset-on-settle effect below can snap straight back to it
-  // without re-deriving the formula a second time.
-  const restPosition = useMemo<[number, number, number]>(
-    () => [
-      CORNER_X + column * DIE_SPACING - (black ? BLACK_ANCHOR_DX : 0),
-      restY,
-      CORNER_Z + row * ROW_SPACING - (black ? BLACK_ANCHOR_DZ : 0),
-    ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [column, row, black],
-  )
-
   useFrame((state, delta) => {
     const mesh = meshRef.current
     if (!mesh) return
@@ -485,23 +432,6 @@ export function DiceMesh({
       const { x, y } = rollingRotationDelta(delta, phaseOffset)
       mesh.rotation.x += x
       mesh.rotation.y += y
-
-      const group = groupRef.current
-      if (group) {
-        const { forward, right, up, target } = scratchRef.current
-        const camera = state.camera
-        forward.set(0, 0, -1).applyQuaternion(camera.quaternion)
-        right.set(1, 0, 0).applyQuaternion(camera.quaternion)
-        up.set(0, 1, 0).applyQuaternion(camera.quaternion)
-        target
-          .copy(camera.position)
-          .addScaledVector(forward, FLOAT_DISTANCE)
-          .addScaledVector(right, floatRight)
-          .addScaledVector(up, floatUp)
-        const lerpAmount = Math.min(1, delta * FLOAT_LERP_SPEED)
-        group.position.lerp(target, lerpAmount)
-        group.scale.setScalar(group.scale.x + (FLOAT_SCALE - group.scale.x) * lerpAmount)
-      }
       return
     }
     if (nudge) {
@@ -543,18 +473,17 @@ export function DiceMesh({
       meshRef.current.rotation.set(0, 0, 0)
       settleElapsedRef.current = 0
     }
-    // Snaps straight back to the board instead of easing out the way the float-in eases in - the
-    // settle bounce/flash just above already carries the "the result just landed" moment, so this
-    // reads as "the result appears" rather than a second, competing animation drawing it out.
-    if (wasRolling.current && !rolling && groupRef.current) {
-      groupRef.current.position.set(...restPosition)
-      groupRef.current.scale.setScalar(1)
-    }
     wasRolling.current = rolling
-  }, [rolling, restPosition])
+  }, [rolling])
 
   return (
-    <group ref={groupRef} position={restPosition}>
+    <group
+      position={[
+        CORNER_X + column * DIE_SPACING - (black ? BLACK_ANCHOR_DX : 0),
+        restY,
+        CORNER_Z + row * ROW_SPACING - (black ? BLACK_ANCHOR_DZ : 0),
+      ]}
+    >
       <mesh
         ref={meshRef}
         castShadow

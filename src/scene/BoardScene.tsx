@@ -13,7 +13,7 @@ import { BoardMesh, BOARD_THICKNESS } from './BoardMesh'
 import { PieceMesh, PAWN_FOOTPRINT_RADIUS } from './PieceMesh'
 import { screenStackOffset } from './stackLayout'
 import { ParkillerMesh, PARKILLER_FOOTPRINT_RADIUS } from './ParkillerMesh'
-import { DIE_SPACING, DiceMesh } from './DiceMesh'
+import { BLACK_ANCHOR_DX, BLACK_ANCHOR_DZ, CORNER_X, CORNER_Z, DIE_SPACING, DiceMesh, ROW_SPACING } from './DiceMesh'
 import { DiceRollGlow } from './DiceRollGlow'
 import { PieceChoiceMarkers } from './PieceChoiceMarkers'
 import { TrackTile } from './TrackTile'
@@ -1270,46 +1270,26 @@ export function BoardScene({
           return <PieceChoiceMarkers anchor={anchor} amounts={pieceChoice.amounts} onChoose={onChoosePieceAmount} />
         })()}
 
-      <DiceMesh
-        value={diceValues[0]}
-        rolling={rolling}
-        nudge={nudgeDice}
-        onClick={onRollDice}
-        interactive={canRollDice}
-        column={-0.5}
-        floatRight={-1.9}
-        floatUp={0.8}
-      />
-      <DiceMesh
-        value={diceValues[1]}
-        rolling={rolling}
-        nudge={nudgeDice}
-        onClick={onRollDice}
-        interactive={canRollDice}
-        column={0.5}
-        floatRight={1.7}
-        floatUp={1.0}
-      />
-      <DiceMesh
-        value={diceValues[2]}
-        rolling={rolling}
-        nudge={nudgeDice}
-        onClick={onRollDice}
-        interactive={canRollDice}
-        column={0}
-        row={0.85}
-        black
-        floatRight={0.2}
-        floatUp={-1.1}
-      />
+      <DiceMesh value={diceValues[0]} rolling={rolling} nudge={nudgeDice} onClick={onRollDice} interactive={canRollDice} column={-0.5} />
+      <DiceMesh value={diceValues[1]} rolling={rolling} nudge={nudgeDice} onClick={onRollDice} interactive={canRollDice} column={0.5} />
+      <DiceMesh value={diceValues[2]} rolling={rolling} nudge={nudgeDice} onClick={onRollDice} interactive={canRollDice} column={0} row={0.85} black />
       {/* Requested directly, with a reference image: a gold ring/star swirl around the three dice
-          while they roll - see DiceRollGlow's own comment for why it now floats to the exact same
-          camera-relative point the dice themselves float to (DiceMesh.tsx's own FLOAT_DISTANCE),
-          rather than the tray's own on-board centroid. Radius keyed off DIE_SPACING (the white
-          pair's own spacing, the tray's real horizontal footprint) rather than a fixed world-unit
-          guess, for the same reason every other tray constant in DiceMesh.tsx scales off
-          DICE_SCALE instead of a bare number. */}
-      <DiceRollGlow radius={DIE_SPACING * 1.15} visible={rolling} />
+          while they roll - see DiceRollGlow's own comment. Centered on the real centroid of the
+          three dice's own world positions (white columns -0.5/0.5 at row 0, the black die's own
+          column=0/row=0.85 minus its anchor pull - see DiceMesh.tsx), not eyeballed, so this stays
+          correct if any of those tray constants are ever re-tuned again. Radius keyed off
+          DIE_SPACING (the white pair's own spacing, the tray's real horizontal footprint) rather
+          than a fixed world-unit guess, for the same reason every other tray constant in
+          DiceMesh.tsx scales off DICE_SCALE instead of a bare number. */}
+      <DiceRollGlow
+        position={[
+          CORNER_X - BLACK_ANCHOR_DX / 3,
+          BASE_HEIGHT,
+          CORNER_Z + (0.85 * ROW_SPACING - BLACK_ANCHOR_DZ) / 3,
+        ]}
+        radius={DIE_SPACING * 0.95}
+        visible={rolling}
+      />
       {TRACK_DEBUG_PLAYER_COUNTS.has(definition.playerCount) && (
         <TrackDebugPath trackWaypoints={definition.trackWaypoints} safeTrackIndices={definition.safeTrackIndices} />
       )}

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { Group, Mesh } from 'three'
-import { FLOAT_DISTANCE, FLOAT_LERP_SPEED } from './DiceMesh'
 
 // Requested directly, with a reference image: a glowing gold ring/swirl of light around the three
 // dice while they're actually rolling - "휙 3D효과를 넣어줘" (add a 3D whoosh effect). Reuses
@@ -12,14 +11,6 @@ import { FLOAT_DISTANCE, FLOAT_LERP_SPEED } from './DiceMesh'
 // square's own rising double helix to a single ring of stars orbiting at a constant height around
 // the dice trio instead (a barrier sits still for multiple turns; a roll lasts under two seconds,
 // so there's no room for a multi-turn rise to read as anything but a flat spin here).
-//
-// Reported again, with a second reference image, once the dice themselves also started floating
-// up in front of the camera during a roll (see DiceMesh.tsx's own FLOAT_DISTANCE comment) rather
-// than staying on the board: this ring needs to float with them, centered on the exact same
-// camera-relative point (FLOAT_DISTANCE, imported directly rather than a second guessed distance),
-// and face the camera like a halo held up in front of you instead of lying flat like a mark drawn
-// on the table - BarrierIndicator.tsx's own ring genuinely sits on a board square, this one no
-// longer does.
 //
 // Mounted once in BoardScene (not per-die) since the reference shows one shared halo encircling
 // all three dice together, not three separate effects - `visible` is BoardScene's own `rolling`
@@ -62,7 +53,7 @@ function createStarGeometry(): THREE.ShapeGeometry {
   return new THREE.ShapeGeometry(shape)
 }
 
-export function DiceRollGlow({ radius, visible }: { radius: number; visible: boolean }) {
+export function DiceRollGlow({ position, radius, visible }: { position: [number, number, number]; radius: number; visible: boolean }) {
   const groupRef = useRef<Group>(null)
   const ringRef = useRef<Mesh>(null)
   const glowRef = useRef<Mesh>(null)
@@ -74,9 +65,6 @@ export function DiceRollGlow({ radius, visible }: { radius: number; visible: boo
   // fade rather than resetting (which would read as a stutter, not a whoosh).
   const sinceTransitionRef = useRef(0)
   const wasVisibleRef = useRef(visible)
-  // Reused every frame instead of allocated fresh - same reasoning as DiceMesh.tsx's own
-  // scratchRef for the exact same camera-relative math.
-  const scratchRef = useRef({ forward: new THREE.Vector3(), target: new THREE.Vector3() })
 
   const orbitRadius = radius * 0.78
 
@@ -97,8 +85,7 @@ export function DiceRollGlow({ radius, visible }: { radius: number; visible: boo
     [radius],
   )
 
-  useFrame((state, rawDelta) => {
-    const camera = state.camera
+  useFrame(({ camera }, rawDelta) => {
     const delta = Math.min(rawDelta, 0.1)
     elapsedRef.current += delta
     const t = elapsedRef.current
@@ -116,20 +103,7 @@ export function DiceRollGlow({ radius, visible }: { radius: number; visible: boo
       if (groupRef.current) groupRef.current.visible = false
       return
     }
-    const group = groupRef.current
-    if (!group) return
-    group.visible = true
-
-    // Floats to the exact same camera-relative point DiceMesh.tsx's own three dice float to (no
-    // per-die offset here - this ring is centered on the whole cluster), eased at the same speed
-    // so the halo and the dice arrive together rather than one visibly lagging the other.
-    const { forward, target } = scratchRef.current
-    forward.set(0, 0, -1).applyQuaternion(camera.quaternion)
-    target.copy(camera.position).addScaledVector(forward, FLOAT_DISTANCE)
-    group.position.lerp(target, Math.min(1, delta * FLOAT_LERP_SPEED))
-    // Faces the camera directly, like a halo held up in front of you, rather than the flat-on-
-    // the-table orientation BarrierIndicator.tsx's own ring uses for an actual board square.
-    group.quaternion.copy(camera.quaternion)
+    if (groupRef.current) groupRef.current.visible = true
 
     if (ringRef.current) {
       ringRef.current.rotation.z += delta * RING_SPIN_SPEED
@@ -147,10 +121,12 @@ export function DiceRollGlow({ radius, visible }: { radius: number; visible: boo
       if (!mesh) return
       const angle = s.baseAngle + t * ORBIT_SPEED
       const bob = Math.sin(t * 1.8 + s.bobPhase) * radius * 0.08
-      // Orbits in the group's own local XY plane now (the group itself faces the camera via the
-      // quaternion copy above), not a world-space X/Z table plane - a face-on halo instead of a
-      // flat mark lying on a surface.
-      mesh.position.set(Math.cos(angle) * orbitRadius, Math.sin(angle) * orbitRadius + bob, 0)
+      mesh.position.set(Math.cos(angle) * orbitRadius, radius * 0.32 + bob, Math.sin(angle) * orbitRadius)
+      // Billboarded so a flat star polygon reads clearly from the game's own shallow default
+      // camera angle instead of foreshortening into a sliver - same reasoning as
+      // BarrierIndicator.tsx's own star billboarding.
+      mesh.quaternion.copy(camera.quaternion)
+
       const twinkle = Math.sin(t * s.twinkleSpeed + s.twinklePhase) * 0.5 + 0.5
       mesh.scale.setScalar(s.size * (0.75 + twinkle * 0.45))
       const mat = mesh.material as THREE.MeshBasicMaterial
@@ -159,12 +135,12 @@ export function DiceRollGlow({ radius, visible }: { radius: number; visible: boo
   })
 
   return (
-    <group ref={groupRef}>
-      <mesh ref={glowRef}>
+    <group ref={groupRef} position={position}>
+      <mesh ref={glowRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.004, 0]}>
         <circleGeometry args={[radius * 1.15, 32]} />
         <meshBasicMaterial color={GLOW_COLOR} transparent opacity={0} depthWrite={false} />
       </mesh>
-      <mesh ref={ringRef} position={[0, 0, 0.002]}>
+      <mesh ref={ringRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.006, 0]}>
         <ringGeometry args={[radius * 0.94, radius, 48]} />
         <meshBasicMaterial color={RING_COLOR} transparent opacity={0} side={THREE.DoubleSide} depthWrite={false} />
       </mesh>
