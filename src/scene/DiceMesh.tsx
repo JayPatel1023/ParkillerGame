@@ -199,7 +199,15 @@ const BLACK_DIE_SIZE = DIE_SIZE * BLACK_DIE_SCALE
 // dx=1.625/dz=1.687 (Euclidean ~2.34, ~0.8x DIE_SIZE) still read as touching; dx=2.625/dz=2.687
 // (Euclidean ~3.76, ~1.28x DIE_SIZE) read as a clean, comfortable gap in every screenshot checked -
 // see diceTrayDiceOverlap.test.ts's own comment for why that test's own model changed to match.
-export const BLACK_ANCHOR_DX = 0.491 * DICE_SCALE
+//
+// Reported again, directly, with a marked screenshot: still read as sitting under the *left*
+// white die specifically, not centered under the pair - "오른쪽으로 좀 이동해줘" (move it right a
+// bit) from that exact spot. Trimmed DX from 0.491 to 0.44 (a smaller leftward pull, so a smaller
+// rightward shift overall) - re-checked track clearance (still >= 1.9 world units on board_4p, the
+// tightest, actually improved - moving right increases it) and the overlap clearance above (0.44
+// still clears by 0.51, comfortably above the 0.3 floor), and re-verified clear of the window edge
+// by screenshot on the tightest board/window pair.
+export const BLACK_ANCHOR_DX = 0.44 * DICE_SCALE
 export const BLACK_ANCHOR_DZ = 0.055 * DICE_SCALE
 
 // Found via frame-by-frame review of a real local-play recording (b1_0250.jpg, mid-spin): all
