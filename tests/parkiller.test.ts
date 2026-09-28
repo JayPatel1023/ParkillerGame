@@ -803,8 +803,14 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
   // Client's own "Special Situations" guide, page 7: two Parkis already paired on the entry
   // square, neither belonging to the shelter owner, are never a protected pairing (only a
   // same-color pair is - getValidMoves' own foreignBarrier agrees, two different colors never
-  // block this exit at all) - a single 5 eliminates one, "the last Parki to arrive" being the same
-  // arrival-order tie-break resolveBarrierElimination already uses for two exposed opposing pawns.
+  // block this exit at all). Confirmed directly with the client: only a genuine double 5
+  // eliminates one ("the last Parki to arrive", the same arrival-order tie-break
+  // resolveBarrierElimination already uses for two exposed opposing pawns) - the rulebook's own
+  // "double 5" wording here is a real requirement, not just this example's own illustration. A
+  // plain single 5 instead sends the exiting *pawn* itself back to the yard ("Muere el peón al
+  // salir") - the same PK5 bounce-back an unprotected lone Parkiller already gives, since this
+  // square (already fully occupied by the two Parkis before this exit) no longer shields the
+  // arrival even though it's nominally a safe square.
   describe('two foreign Parkis (neither the shelter owner\'s own) already paired on the entry square (client\'s guide, page 7)', () => {
     function buildBoard(): BoardData {
       return {
@@ -818,7 +824,7 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
       }
     }
 
-    it('single 5 eliminates whichever of the two arrived later', () => {
+    it('single 5 bounces the exiting pawn back to the yard - neither Parki is eliminated', () => {
       const board = buildBoard()
       const red = createPlayerState('Red', board)
       const blue = createPlayerState('Blue', board)
@@ -828,7 +834,7 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
       blue.parkiller.arrivedAt = 1
       green.parkiller.corridorPosition = green.parkiller.corridorLength
       green.parkiller.trackPosition = 0
-      green.parkiller.arrivedAt = 2 // arrived later - this is the one that should go
+      green.parkiller.arrivedAt = 2
 
       const dice = new ScriptedDice([5, 2, 1])
       const manager = new TurnManager(board, [red, blue, green], defaultRuleSettings(), dice)
@@ -836,17 +842,18 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
       manager.requestRoll()
       const result = manager.submitMove(red.pieces[0])
 
-      expect(result?.capturedParkillerColor).toBe('Green')
-      expect(green.parkiller.state).toBe('Eliminated')
-      expect(blue.parkiller.state).toBe('InPlay') // arrived first - protected by the tie-break
-      expect(red.pieces[0].state).toBe('OnTrack')
-      expect(red.pieces[0].trackPosition).toBe(0)
+      expect(result?.capturedParkillerColor).toBeFalsy()
+      expect(result?.eliminatedByParkiller).toBe(true)
+      expect(blue.parkiller.state).toBe('InPlay')
+      expect(green.parkiller.state).toBe('InPlay')
+      expect(red.pieces[0].state).toBe('InYard') // the exiting pawn itself dies, not either Parki
+      expect(red.pieces[0].trackPosition).toBe(-1)
     })
 
-    // The page's own first illustration is specifically a *double* 5 with only one shelter pawn
-    // left, not a plain single 5 (the sibling test above) - same resolution either way (this exit
-    // was never blocked to begin with, single or double), but worth locking in precisely as shown.
-    it('double 5, only one shelter pawn: still eliminates whichever of the two arrived later', () => {
+    // The rulebook's own "double 5" wording for this exact case is a real requirement (confirmed
+    // directly with the client) - a plain single 5 (the sibling test above) never eliminates
+    // either Parki, only bounces the exiting pawn itself back to the yard.
+    it('double 5, only one shelter pawn: eliminates whichever of the two arrived later', () => {
       const board = buildBoard()
       const red = createPlayerState('Red', board)
       const blue = createPlayerState('Blue', board)

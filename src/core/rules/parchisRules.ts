@@ -549,16 +549,27 @@ export function applyMove(
         }
       }
       // Client's own "Special Situations" guide, page 7: two Parkis already paired on the entry
-      // square, *neither* belonging to the shelter owner, are exposed exactly like the mixed
-      // pawn+Parkiller pair above - a single 5 (this exit never blocked on them in the first place,
-      // only a pawn+own-Parkiller pairing ever blocks an exit) eliminates one, "the last Parki to
-      // arrive" (the same arrival-order
-      // tie-break resolveBarrierElimination already uses for two pawns, generalized to a Parkiller's
-      // own arrivedAt). A double's second exit, joining whichever one is left (now a lone Parkiller
-      // - opposingParkillerAtDestination, length back down to 1), falls straight into the ordinary
-      // "second exit onto the tracked square" branch above and eliminates that one too - no separate
-      // handling needed here for that half.
-      if (!result.capturedPiece && !capturedOpposingParkillerColor && opposingParkillersAtDestination.length === 2 && opposingAtDestination.length === 0) {
+      // square, *neither* belonging to the shelter owner. Confirmed directly with the client (a
+      // single 5 was originally implemented as already eliminating one - the rulebook's own literal
+      // "double 5" wording for this exact case was first read as just this example's own
+      // illustration, not a real requirement, since exiting itself is never blocked on this pairing
+      // either way): "Muere el peón al salir" - on a plain single 5 the exiting *pawn* is what dies
+      // instead, same PK5 bounce-back an unprotected lone Parkiller already gives (this square's own
+      // "already full" exception to the safe-zone shield, unprotectedOpposingParkillerColorAt's own
+      // comment, already fires correctly here with no further change needed once this branch itself
+      // stops eliminating on a single 5) - only a genuine double 5 eliminates "the last Parki to
+      // arrive" (the same arrival-order tie-break resolveBarrierElimination already uses for two
+      // pawns, generalized to a Parkiller's own arrivedAt). A double's second exit, joining whichever
+      // one is left (now a lone Parkiller - opposingParkillerAtDestination, length back down to 1),
+      // falls straight into the ordinary "second exit onto the tracked square" branch above and
+      // eliminates that one too - no separate handling needed here for that half.
+      if (
+        isDoubleRoll &&
+        !result.capturedPiece &&
+        !capturedOpposingParkillerColor &&
+        opposingParkillersAtDestination.length === 2 &&
+        opposingAtDestination.length === 0
+      ) {
         const [a, b] = opposingParkillersAtDestination
         const target = a.parkiller.arrivedAt >= b.parkiller.arrivedAt ? a : b
         target.parkiller.state = 'Eliminated'
