@@ -172,7 +172,28 @@ export function getValidMoves(
         const pawnPlusOwnParkillerBarrier =
           opposingAtEntry.length === 1 && opposingParkillerColorsAtEntry.length === 1 && opposingAtEntry[0].color === opposingParkillerColorsAtEntry[0]
         const pawnPlusOwnParkillerBarrierOpenedByDouble = isDoubleRoll && pawnPlusOwnParkillerBarrier
-        const blockedByOccupancy = ownOnEntry >= 2 || (pawnPlusOwnParkillerBarrier && !pawnPlusOwnParkillerBarrierOpenedByDouble)
+        // Found via the large-scale randomized full-game stress test (tests/
+        // ruleEngineFullGameSimulation.test.ts, run with several STRESS_SEED_OFFSET values beyond
+        // its own default), not from a client screenshot: an opponent's own *already-formed* 2-pawn
+        // barrier can have that same opponent's own Parkiller join it too (a real, legal 3-occupant
+        // stack - see this file's own "a Parkiller occupying a square counts toward the 2-piece cap"
+        // tests) sitting on a *third* player's entry square. Nothing above blocked this exit on it -
+        // pawnPlusOwnParkillerBarrier only ever recognized a *single* opposing pawn paired with a
+        // matching Parkiller (2 occupants), not this 3-occupant shape - so the exit went through,
+        // and applyMove's own "two opposing pawns already share this square" resolution captured
+        // exactly one of the two pawns (correct for a genuine 2-pawn foreign pair) with no idea a
+        // third, co-located opposing Parkiller needed its own resolution too, leaving 3 occupants of
+        // two different colors behind - not the same-color-only shape this file's own invariant
+        // allows, and not resolvable by any documented capture rule (nothing in the client's own
+        // guide authorizes eliminating either of the *other* two). Blocked outright, unconditionally
+        // (not even openable by a double the way pawnPlusOwnParkillerBarrier is) - there's no
+        // rulebook text to say what a double *would* resolve it to, so the safe default is the same
+        // one PC2.4's own barriers already use everywhere else: an unresolvable 3-occupant foreign
+        // stack simply blocks rather than guessing at an unauthorized resolution.
+        const opposingPawnBarrierColor =
+          opposingAtEntry.length === 2 && opposingAtEntry[0].color === opposingAtEntry[1].color ? opposingAtEntry[0].color : null
+        const opposingPawnPlusParkillerTrio = !!opposingPawnBarrierColor && opposingParkillerColorsAtEntry.includes(opposingPawnBarrierColor)
+        const blockedByOccupancy = ownOnEntry >= 2 || (pawnPlusOwnParkillerBarrier && !pawnPlusOwnParkillerBarrierOpenedByDouble) || opposingPawnPlusParkillerTrio
         if (!blockedByOccupancy) {
           moves.push({
             piece,

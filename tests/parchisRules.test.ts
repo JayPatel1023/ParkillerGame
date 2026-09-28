@@ -700,6 +700,40 @@ describe('parchisRules', () => {
       expect(red.parkiller.trackPosition).toBe(0) // untouched
       // Exactly 2 occupants remain (Red's new pawn + Red's own Parkiller) - never three.
     })
+
+    // Found via the large-scale randomized full-game stress test (tests/ruleEngineFullGameSimulation
+    // .test.ts, run with several STRESS_SEED_OFFSET values beyond its own default - seed=36016186,
+    // playerCount=3, trial=123, roll=9), not from a specific client screenshot: an opponent's own
+    // legitimate 3-occupant stack (two of their own pawns *plus* their own Parkiller, all one color -
+    // exactly the "own barrier + own Parkiller joining it" shape the sibling describe block above
+    // already allows as a real state) can sit on a *third* player's own entry square. That third
+    // player's own exit was never blocked on it - getValidMoves' own foreign-barrier check only ever
+    // recognized a single opposing pawn paired with a single matching Parkiller (2 occupants), not
+    // this 3-occupant shape - so the exit went through, and applyMove's own "two opposing pawns
+        // already share this square" resolution (exposedForeignPair) captured exactly one of the two
+    // pawns, same as it already correctly does for a genuine 2-pawn foreign pair, with no idea a
+    // third, co-located opposing Parkiller was also sitting right there needing its own resolution.
+    // Left 3 occupants of two different colors (the exiting piece + the surviving opponent pawn +
+    // that same opponent's own Parkiller) - not the same-color-only shape the sibling describe block
+    // exempts, and not resolvable by any single documented capture rule (removing either of the
+    // *other* two isn't authorized by anything in the client's own guide), so the exit itself should
+    // never have been offered in the first place - the same treatment a lone pawn+Parkiller foreign
+    // pairing already gets one square's worth smaller.
+    it('an opponent\'s own 2-pawn-plus-Parkiller stack on the entry square blocks this exit outright, never a mixed 3-stack', () => {
+      const board = buildTestBoard()
+      const red = createPlayerState('Red', board)
+      const blue = createPlayerState('Blue', board)
+      red.pieces[0].state = 'OnTrack'
+      red.pieces[0].trackPosition = 10 // Blue's own entry square...
+      red.pieces[1].state = 'OnTrack'
+      red.pieces[1].trackPosition = 10 // ...already holding a full Red barrier (2 of Red's own pawns)...
+      red.parkiller.corridorPosition = red.parkiller.corridorLength
+      red.parkiller.trackPosition = 10 // ...plus Red's own Parkiller joining it (legal - PK4/PC2.4)
+
+      const settings = defaultRuleSettings()
+      const moves = getValidMoves(board, blue, [red, blue], 5, settings)
+      expect(moves.find((m) => m.kind === 'ExitYard')).toBeUndefined()
+    })
   })
 
   // Reported directly ("LAS BARRERAS SEAN LAS QUE SEAN FORMADAS POR QUIEN SEA DEBEN DE ABRIRSE SI
