@@ -1101,10 +1101,21 @@ export class TurnManager {
     // doc comment for why this no longer excludes the piece that just moved. Checked before
     // queueing any *new* reward below, so a capture-during-a-reward-chain still stacks on top of
     // this remainder rather than ahead of it (pendingRewardQueue is drained front-to-back).
+    //
+    // Reported directly ("SI EN UNO DE LOS SALTOS DE 10 POR UNA RECOMPENSA CAE SOBRE UN PARKI...EL
+    // PEON QUEDA ELIMINADO. NO PUEDE CONTAR LOS OTROS DIEZ" - if one of the 10-square reward hops
+    // lands on a Parki, the pawn is eliminated and the other ten can't be counted): PK5 already
+    // sends this piece straight home (result.eliminatedByParkiller, used the same way just above
+    // for doubleExitPairable) whenever a reward-split half lands it on an unprotected opposing
+    // Parkiller - this remainder re-queue used to fire unconditionally on any split-off amount,
+    // handing the other 10 to whichever piece the player picked next as if the first half had
+    // landed safely. Landing on the enemy Parki forfeits the rest of this specific grant instead
+    // of just costing the piece that carried it - the other, wholly unrelated die (if either is
+    // still unspent) is untouched by this and stays free, same as any other forfeited reward.
     if (isRewardMove && this.currentRewardGrant) {
       const grant = this.currentRewardGrant
       this.currentRewardGrant = null
-      if (move.amount < grant.amount) {
+      if (move.amount < grant.amount && !result.eliminatedByParkiller) {
         this.pendingRewardQueue.push({ reason: grant.reason, amount: grant.amount - move.amount })
       }
     }

@@ -953,6 +953,46 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     expect(grants).toHaveLength(1)
   })
 
+  // Reported directly ("SI EN UNO DE LOS SALTOS DE 10 POR UNA RECOMPENSA CAE SOBRE UN PARKI...EL
+  // PEON QUEDA ELIMINADO. NO PUEDE CONTAR LOS OTROS DIEZ" - if one of the 10-square reward hops
+  // lands on a Parki, the pawn is eliminated and the other ten can't be counted): taking the split
+  // 10 half of a capture's own 20-reward used to always re-queue the other 10 for a further piece
+  // to pick up, with no check for whether this half's own landing square was actually safe to be
+  // on - PK5 sends an unprotected reward-mover straight home exactly like it would for any other
+  // move, and that elimination has to forfeit the rest of this same grant instead of quietly
+  // handing it to someone else.
+  it('forfeits the leftover half of a split reward when that half lands the pawn on an unprotected Parki', () => {
+    const board = buildBigTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5 // 10 away from blue's own unprotected Parkiller, at 15
+    red.pieces[2].state = 'OnTrack'
+    red.pieces[2].trackPosition = 0
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 3
+    blue.parkiller.corridorPosition = blue.parkiller.corridorLength // fully out of its own corridor
+    blue.parkiller.trackPosition = 15 // not a safe square on this test board (only 0/20 are)
+
+    const dice = new ScriptedDice([3, 1, 1])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    const grants: RewardGrant[] = []
+    manager.rewardOffered.on((g) => grants.push(g))
+
+    manager.requestRoll()
+    manager.submitMove(red.pieces[2]) // 0 -> 3, captures blue.pieces[0], grants 20
+    expect(grants).toEqual([{ amount: 20, reason: 'capture' }])
+
+    const result = manager.submitMove(red.pieces[0], 10) // takes the split half: 5 -> 15, lands on blue's Parki
+
+    expect(result?.eliminatedByParkiller).toBe(true)
+    expect(red.pieces[0].state).toBe('InYard')
+    expect(blue.parkiller.state).toBe('InPlay') // PK5: the Parki itself is untouched
+    // No second grant for the leftover 10 - it's forfeited along with the pawn that was carrying it.
+    expect(grants).toHaveLength(1)
+  })
+
   // Reported directly, twice: first ("장벽이 형성되였을때 주사위가 더블이 되지도않앗는데 장벽에서
   // 나오는경황이있었다" - a piece came out of a barrier even though the dice weren't a double) led to
   // a reward move unconditionally excluding any piece sitting in the player's own barrier, on the
