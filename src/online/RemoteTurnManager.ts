@@ -195,7 +195,27 @@ export class RemoteTurnManager implements TurnManagerLike {
         this.draining = false
         return
       }
-      const nextWaitMs = this.applyMessage(msg)
+      // Reported directly ("SE PLANTA Y NO RESPONDE... A LOS OTROS JUGADORES" - it freezes and
+      // stops responding for the other players): applyMessage() had no guard at all - if it threw
+      // (e.g. QueueDice.roll() throws outright on an empty queue, see its own doc comment, which a
+      // dropped/duplicated/out-of-order broadcast could trigger), the exception unwound straight
+      // through this setTimeout callback before `this.drainQueue(nextWaitMs)` ever ran, leaving
+      // `this.draining` stuck true forever (only the two paths that actually reach a further
+      // drainQueue()/early-return call ever reset it). Every later broadcast then just piled into
+      // pendingMessages via enqueue()'s own `if (!this.draining)` guard, never draining again -
+      // this one client's entire game state frozen for the rest of the match, exactly matching
+      // "runs on every non-master client" (this class's own doc comment) being "the other players"
+      // specifically. One bad message must never take down the rest of a match it's still
+      // possible to keep playing - logged, not silently swallowed, so a real repro still leaves a
+      // trace in that client's own console.
+      let nextWaitMs: number
+      try {
+        nextWaitMs = this.applyMessage(msg)
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('[RemoteTurnManager] failed to apply message, skipping it and continuing', msg, error)
+        nextWaitMs = REMOTE_MOVE_PACING_MS
+      }
       this.drainQueue(nextWaitMs)
     }, waitMs)
   }

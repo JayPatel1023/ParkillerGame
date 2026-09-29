@@ -535,9 +535,12 @@ export function DiceMesh({
         onPointerOver={() => {
           if (interactive) setInteractiveCursorActive(true)
         }}
-        onPointerOut={() => {
-          if (interactive) setInteractiveCursorActive(false)
-        }}
+        // See PieceMesh.tsx's own comment on this exact same fix - gating this deactivate call on
+        // the *current* `interactive` value let it flip false (this die's own roll gets used, or
+        // the turn ends) while the pointer was still resting on it, skipping the reset and
+        // stranding the real OS cursor invisible for the rest of the match on whichever client
+        // that was. Always safe to fire unconditionally either way.
+        onPointerOut={() => setInteractiveCursorActive(false)}
       >
         {/* Rounded corners/edges (not a sharp cardboard cube) to match the reference die photo -
             RoundedBoxGeometry extends BoxGeometry so it keeps the same 6 face-material groups. */}

@@ -385,6 +385,62 @@ describe('HostTurnManagerBridge + RemoteTurnManager convergence', () => {
     expect(waitMs).toBeGreaterThanOrEqual(REMOTE_MOVE_PACING_MS + PARKI_REVEAL_HOLD_MS + 3 * HOP_DURATION_MS + CAPTURE_RETURN_HOPS * HOP_DURATION_MS)
   })
 
+  // Reported directly ("SE PLANTA Y NO RESPONDE EL RATON DE LOS OTROS JUGADORES" - it freezes and
+  // stops responding for the other players): drainQueue() had no guard around applyMessage() at
+  // all - a single broadcast that failed to apply (a dropped/duplicated/out-of-order message
+  // making the replayed TurnManager throw, e.g. QueueDice.roll() called with nothing queued) left
+  // `draining` stuck true forever, since the only two paths that reset it are the empty-queue
+  // early return and a further drainQueue() call, both skipped when the callback throws instead.
+  // Every later broadcast then just piled into pendingMessages unprocessed - this one client's
+  // entire game frozen for the rest of the match. Forces the *first* replayed message to throw
+  // (a real, not overly specific, failure) and confirms a second, real message sent right after it
+  // still lands - proving the queue recovers instead of wedging.
+  it('a single broadcast that fails to apply does not permanently freeze the rest of the match', () => {
+    const board = buildTestBoard()
+    const network = new FakeRoomNetwork(MASTER_ACTOR)
+    const remote = buildRemote(board, network)
+
+    const remoteInternals = remote.bridge as unknown as { inner: TurnManager; diceQueue: { roll(): number } }
+    let calls = 0
+    const realRequestRoll = remoteInternals.inner.requestRoll.bind(remoteInternals.inner)
+    remoteInternals.inner.requestRoll = (...args: Parameters<TurnManager['requestRoll']>) => {
+      calls++
+      if (calls === 1) {
+        // Drains the 3 values applyMessage's own 'diceRolled' branch already pushed for *this*
+        // message before throwing - simulating a failure *after* a normal roll (some unexpected
+        // downstream exception), not a literal dice-queue exhaustion, so the queue is left exactly
+        // as balanced as it would be after any other single-message failure and the next message's
+        // own 3 fresh values are the ones actually consumed next.
+        remoteInternals.diceQueue.roll()
+        remoteInternals.diceQueue.roll()
+        remoteInternals.diceQueue.roll()
+        throw new Error('simulated broadcast-replay failure')
+      }
+      return realRequestRoll(...args)
+    }
+
+    let lastRoll: { dieA: number; dieB: number; blackDie: number } | null = null
+    remote.bridge.diceRolled.on((roll) => {
+      lastRoll = roll
+    })
+
+    const badMsg: GameMessage = { type: 'diceRolled', dieA: 5, dieB: 2, blackDie: 1 }
+    const goodMsg: GameMessage = { type: 'diceRolled', dieA: 6, dieB: 3, blackDie: 4 }
+    // Simulates the Master broadcasting both, same as network.broadcastFrom's own real callers
+    // (RoomTransport.broadcast()) do - delivers to every registered transport, this remote's own
+    // (built inside buildRemote) included.
+    network.broadcastFrom(badMsg, MASTER_ACTOR)
+    network.broadcastFrom(goodMsg, MASTER_ACTOR)
+
+    // Generous - well past however many REMOTE_MOVE_PACING_MS-floored steps two messages need.
+    vi.advanceTimersByTime(20000)
+
+    expect(calls).toBe(2) // the second message's requestRoll call actually happened...
+    // ...and it was a genuine, complete replay (diceRolled actually fired with its own real
+    // values), not just a call that itself silently failed some other way.
+    expect(lastRoll).toEqual({ dieA: 6, dieB: 3, blackDie: 4 })
+  })
+
   it("the Master rejects a roll intent from an actor whose seat isn't the current turn", () => {
     const board = buildTestBoard()
     const network = new FakeRoomNetwork(MASTER_ACTOR)

@@ -653,9 +653,22 @@ export function PieceMesh({
       onPointerOver={() => {
         if (selectable) setInteractiveCursorActive(true)
       }}
-      onPointerOut={() => {
-        if (selectable) setInteractiveCursorActive(false)
-      }}
+      // Reported directly ("SE PLANTA Y NO RESPONDE EL RATON DE LOS OTROS JUGADORES" - the mouse
+      // gets stuck/stops responding for the other players): gating this deactivate call on the
+      // *current* `selectable` value, the same way the activate call above deliberately does,
+      // meant that the instant this piece's own turn ends while the pointer is still resting on
+      // it (the ordinary case - you just clicked the piece you were interacting with) -
+      // `selectable` has already flipped false by the time onPointerOut finally fires, so the
+      // reset call never runs at all. interactiveCursorState's own `active` flag (a single
+      // module-level boolean, not per-mesh) then stays stuck true for the rest of the match -
+      // InteractiveCursorOverlay's own `document.body.style.cursor = active ? 'none' : 'auto'`
+      // leaves the real OS pointer invisible with no way back, since a waiting online player's
+      // pieces never become selectable again until their own next turn. Unlike activating it, a
+      // stray deactivate is always safe to fire unconditionally (setInteractiveCursorActive's own
+      // `if (active === next) return` guard already no-ops it if nothing was ever turned on) - so
+      // this one drops the guard entirely instead of trying to track "did *this* pointer-over
+      // actually turn it on" some other way.
+      onPointerOut={() => setInteractiveCursorActive(false)}
     >
       <mesh castShadow receiveShadow>
         <latheGeometry args={[profile, 24]} />
