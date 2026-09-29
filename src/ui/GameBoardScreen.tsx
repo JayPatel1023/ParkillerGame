@@ -643,6 +643,23 @@ export function GameBoardScreen({
   pendingMovesSettledRef.current = computeAnimationsSettledForPendingMoves(pendingMovesSettledRef.current, pendingMoves, animationsSettled)
   const animationsSettledForPendingMoves = pendingMovesSettledRef.current.settled
 
+  // Same bug, same fix, for the reward toast - confirmed by direct execution (forced a capture,
+  // then watched the flags: animationsSettled stayed false and the toast stayed hidden for several
+  // seconds after pendingReward was already granted, purely because this roll's own Parkiller
+  // (wholly unrelated to the capture) was still mid-walk - the toast only appeared once *that*
+  // separately finished. visiblePendingReward/visibleForfeitedReward below used to read the raw
+  // animationsSettled the exact same way visiblePendingMoves used to, before
+  // computeAnimationsSettledForPendingMoves existed to fix it there - this was the one place that
+  // fix never reached, so a reward "just missed" the celebration whenever it landed at the same
+  // moment as any other still-playing animation, not only a chained capture of its own.
+  const pendingRewardSettledRef = useRef<{ pendingMoves: typeof pendingReward; settled: boolean } | undefined>(undefined)
+  pendingRewardSettledRef.current = computeAnimationsSettledForPendingMoves(pendingRewardSettledRef.current, pendingReward, animationsSettled)
+  const animationsSettledForPendingReward = pendingRewardSettledRef.current.settled
+
+  const forfeitedRewardSettledRef = useRef<{ pendingMoves: typeof forfeitedReward; settled: boolean } | undefined>(undefined)
+  forfeitedRewardSettledRef.current = computeAnimationsSettledForPendingMoves(forfeitedRewardSettledRef.current, forfeitedReward, animationsSettled)
+  const animationsSettledForForfeitedReward = forfeitedRewardSettledRef.current.settled
+
   const canRoll = isMyTurn && pendingMoves.length === 0 && !winner && !rolling && !turnEndingSoon && animationsSettledForPendingMoves && !paused
   // Same conditions as canRoll, but for the *other* half of a human's own turn - already rolled,
   // still needs to pick which piece to move. canRoll alone (the only thing the idle timers below
@@ -854,9 +871,11 @@ export function GameBoardScreen({
     chooseMove(only.piece, only.amount)
   }, [visiblePendingMoves, chooseMove])
   // See ALERT_HOLD_MS's own doc comment above - held so a fast-following move can't clear these
-  // again before there's been real time to read them.
-  const visiblePendingReward = useHeldAlert(animationsSettled ? pendingReward : null, holdMsFor(ALERT_HOLD_MS, currentPlayer.color))
-  const visibleForfeitedReward = useHeldAlert(animationsSettled ? forfeitedReward : null, holdMsFor(ALERT_HOLD_MS, currentPlayer.color))
+  // again before there's been real time to read them. Reads the latched
+  // animationsSettledForPendingReward/ForForfeitedReward (not the raw animationsSettled) - see
+  // those refs' own doc comment just above for the bug this fixes.
+  const visiblePendingReward = useHeldAlert(animationsSettledForPendingReward ? pendingReward : null, holdMsFor(ALERT_HOLD_MS, currentPlayer.color))
+  const visibleForfeitedReward = useHeldAlert(animationsSettledForForfeitedReward ? forfeitedReward : null, holdMsFor(ALERT_HOLD_MS, currentPlayer.color))
   // Immediate, animation-gated - unlike visiblePendingReward just above (deliberately held via
   // useHeldAlert so RewardToast/RewardBurst get their own longer visibility window, see
   // useHeldAlert's own doc comment), the turn-status text below must stop saying "choose a piece
