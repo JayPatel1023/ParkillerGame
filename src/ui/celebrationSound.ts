@@ -40,6 +40,21 @@ function playCaptureChime(): void {
     const AudioContextCtor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
     if (!AudioContextCtor) return
     const ctx = new AudioContextCtor()
+    // Reported directly, repeatedly, across many separate sessions ("전에 내가 여러번
+    // 음악효과를 넣으라고말했고... 실지로 반영되지않았다" - I told you several times to add sound
+    // effects, but it was never actually reflected): the plain play(url) sample this function's
+    // own caller (playCaptureFanfare) also plays has worked the whole time (a bare
+    // HTMLAudioElement, far more permissive autoplay-wise almost everywhere) - only ever this
+    // file's own synthesized flourishes were missing, which points squarely at the one thing
+    // genuinely different about them: a fresh AudioContext isn't guaranteed to start "running"
+    // just because the page already has autoplay permission from an earlier gesture - some
+    // browsers (older Safari/WebKit especially) still create it "suspended" until something
+    // explicitly resumes it, and a suspended context schedules its oscillators silently, with no
+    // error at all - exactly a "the code runs, nothing throws, but nothing is ever actually heard"
+    // report. Safe to call unconditionally even where the context was already running (resume() on
+    // an already-running context is a harmless no-op) - the same call is repeated in this file's
+    // other two chimes below, for the same reason.
+    void ctx.resume().catch(() => {})
     const now = ctx.currentTime
     // A bright ascending major triad (E5-G#5-B5) - the classic arcade/combo "ding-ding-ding!" -
     // triangle waves read as a soft bell/xylophone rather than a harsh synth buzz, fitting a
@@ -91,6 +106,9 @@ function playFinishChime(): void {
     const AudioContextCtor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
     if (!AudioContextCtor) return
     const ctx = new AudioContextCtor()
+    // See playCaptureChime's own comment on this same call - a fresh AudioContext can start
+    // "suspended" on some browsers even with the page's autoplay permission already granted.
+    void ctx.resume().catch(() => {})
     const now = ctx.currentTime
     // C5-E5-G5, the same plain major triad the other two chimes both use, but a step lower and on
     // sine waves - a warmer, softer arpeggio to fit an "arrival" rather than a "hit" or a "fanfare".
@@ -146,6 +164,9 @@ function playWinChime(): void {
     const AudioContextCtor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
     if (!AudioContextCtor) return
     const ctx = new AudioContextCtor()
+    // See playCaptureChime's own comment on this same call - a fresh AudioContext can start
+    // "suspended" on some browsers even with the page's autoplay permission already granted.
+    void ctx.resume().catch(() => {})
     const now = ctx.currentTime
     // C5-E5-G5-C6: the same bright major-triad character as the capture chime, extended up to the
     // octave so the run itself feels like it's climbing somewhere, not just repeating the chord.

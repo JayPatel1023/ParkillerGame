@@ -11,7 +11,7 @@ import { BOARD_DEFINITIONS } from '../src/data/boards'
 import { toBoardData } from '../src/core/board/boardDefinition'
 import { createPlayerState, hasWon, type PlayerState } from '../src/core/gameFlow/playerState'
 import { TurnManager } from '../src/core/gameFlow/turnManager'
-import { isParkillerOnTrack } from '../src/core/rules/parchisRules'
+import { isParkillerOnTrack, ownBarrierTrackPosition, ownCorridorBarrierPosition, wouldCapture } from '../src/core/rules/parchisRules'
 import { defaultRuleSettings } from '../src/core/rules/ruleSettings'
 import type { DiceLike } from '../src/core/dice'
 import type { BoardData } from '../src/core/board/boardData'
@@ -244,8 +244,82 @@ function driveGame(board: BoardData, players: PlayerState[], rng: Rng, maxRolls:
   let turnStartedCount = 0
   let moveNotPossibleFiredThisRoll = false
 
+  // PK9.1 black-box check: reported directly, with a screenshot ("DOBLE 4 AMARILLA DEBE ABRIR
+  // BARRERA!!!! ARRIBA Y NO MOVER OTRO PEON ANTES" - a double 4 rolled with Gold's own barrier
+  // sitting there, and it let a different pawn move instead) - rather than trust
+  // turnManager.ts's own internal enforcement (offerMoves' own barrierLocation/applyObligations),
+  // this drives the exact same check *externally*, off the public events every real client
+  // actually sees: whenever a double is rolled and the current player already has (pre-roll) an
+  // own barrier, every move TurnManager itself then offers must either sit at that barrier or be a
+  // capture (PK9.1's own "unless movement is impossible" qualifier) - anything else would let a
+  // player dodge the obligation exactly the way this report describes.
+  // Mirrors turnManager.ts's own preRollBarrierCaptured/preRollBarrierTrackPosition/
+  // preRollBarrierCorridorPosition exactly (both snapshotted independently, never short-circuited
+  // on one another - see that field's own doc comment for the reachable "both at once" case this
+  // guards): captured lazily on the roll's *first* moveChoicesReady (not on diceRolled itself) so
+  // it lands after the same automatic Parkiller move and reward chain TurnManager's own snapshot
+  // already waits for - both still count as "before this roll's own white-dice choices." Capturing
+  // any earlier (in the diceRolled handler, an earlier version of this check did) sees the board
+  // *before* the Parkiller's own move has run, which can disagree with TurnManager's own,
+  // correctly-later snapshot about which barrier existed "pre-roll" whenever that automatic move
+  // itself forms one.
+  let barrierSnapshotCapturedThisRoll = false
+  let isDoubleThisRoll = false
+  let preRollTrack: number | null = null
+  let preRollCorridor: number | null = null
   manager.moveChoicesReady.on((moves) => {
     pendingMoves = moves
+    if (isDoubleThisRoll) {
+      // A pure reward-selection offering (PK7/PC6.2 - see this roll's own diceRolled/submitMove
+      // comments) can fire its own moveChoicesReady *before* the real dieA/dieB/sum moves are ever
+      // offered - waiting for at least one non-reward move mirrors turnManager.ts's own
+      // preRollBarrierCaptured timing (captured on offerMoves()'s own first real call, which a
+      // pure reward-picker's own separate offering path doesn't count as) rather than snapshotting
+      // mid-reward, one event too early.
+      if (!barrierSnapshotCapturedThisRoll && moves.some((m) => m.diceSource !== 'reward')) {
+        barrierSnapshotCapturedThisRoll = true
+        preRollTrack = ownBarrierTrackPosition(manager.currentPlayer)
+        preRollCorridor = ownCorridorBarrierPosition(manager.currentPlayer)
+      }
+      // Same fall-through as turnManager.ts's own barrierLocation: track takes priority *between
+      // two genuine obligations*, but a disqualified (not pre-roll) track barrier must fall
+      // through to the corridor one rather than reading as "no obligation at all."
+      const liveTrack = ownBarrierTrackPosition(manager.currentPlayer)
+      const liveCorridor = ownCorridorBarrierPosition(manager.currentPlayer)
+      const barrier: { kind: 'track' | 'corridor'; position: number } | null =
+        liveTrack !== null && liveTrack === preRollTrack
+          ? { kind: 'track', position: liveTrack }
+          : liveCorridor !== null && liveCorridor === preRollCorridor
+            ? { kind: 'corridor', position: liveCorridor }
+            : null
+      if (barrier) {
+        const atBarrier = (m: MoveOption) =>
+          barrier.kind === 'track'
+            ? m.piece.state === 'OnTrack' && m.piece.trackPosition === barrier.position
+            : m.piece.state === 'InHomeCorridor' && m.piece.corridorPosition === barrier.position
+        // PK9.2's own reward moves (diceSource 'reward') are a separate move-offering phase with
+        // their own rules, resolved before TurnManager ever returns to this obligation (see this
+        // check's own opening comment) - not amounts a double's own two dice could ever produce
+        // (a captured reward's own bonus distance), so they don't belong in this die-move-only
+        // obligation at all.
+        const dieMoves = moves.filter((m) => m.diceSource !== 'reward')
+        // "(unless movement is impossible)" - the obligation only applies when a barrier-break was
+        // actually offered at all this roll (e.g. neither die's amount reaches/clears the corridor
+        // barrier's own square without overshooting) - checked by whether *any* offered move is at
+        // the barrier, not by independently recomputing legality (that would just re-derive
+        // getValidMoves' own logic a second, easier-to-get-wrong way).
+        const aBarrierBreakWasOffered = dieMoves.some(atBarrier)
+        if (aBarrierBreakWasOffered) {
+          const violating = dieMoves.filter((m) => !atBarrier(m) && !wouldCapture(ctx.board, m, players, true))
+          if (violating.length > 0) {
+            fail(
+              ctx,
+              `double roll must break ${manager.currentPlayer.color}'s own ${barrier.kind} barrier at ${barrier.position}, but also offered a non-barrier, non-capturing move: ${violating.map((m) => `${m.piece.color}#${m.piece.pieceIndex}(${m.kind},amount=${m.amount})`).join(',')}`,
+            )
+          }
+        }
+      }
+    }
   })
   manager.moveNotPossible.on((reason) => {
     moveNotPossibleFiredThisRoll = true
@@ -260,6 +334,8 @@ function driveGame(board: BoardData, players: PlayerState[], rng: Rng, maxRolls:
   })
   manager.diceRolled.on((roll) => {
     log(ctx, `roll #${ctx.roll} [${manager.currentPlayer.color}]: dieA=${roll.dieA} dieB=${roll.dieB} blackDie=${roll.blackDie}`)
+    isDoubleThisRoll = roll.dieA === roll.dieB
+    barrierSnapshotCapturedThisRoll = false
   })
   manager.parkillerMoved.on((r) => {
     log(

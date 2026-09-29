@@ -266,7 +266,22 @@ export class TurnManager {
   // player's own white-dice choice: the existing "pawn+own-Parkiller barrier" test below relies on
   // exactly this (the black die walks the Parkiller onto a pawn's square *this same roll*, and that
   // pairing must still obligate the white dice, unlike a barrier the white dice create themselves).
-  private preRollBarrierLocation: BarrierLocation | null = null
+  // Reported directly, with a screenshot ("DOBLE 4 AMARILLA DEBE ABRIR BARRERA!!!! ARRIBA Y NO
+  // MOVER OTRO PEON ANTES" - a double 4 rolled with Gold's own barrier sitting there, and it let a
+  // different pawn move instead): a *single* BarrierLocation here could only ever remember
+  // whichever one of a track/corridor barrier the live check's own track-first priority happened
+  // to notice - genuinely having both simultaneously (the player's own automatic Parkiller move
+  // landing on one of their own pawns forms a *fresh* track barrier the same instant a wholly
+  // unrelated, genuinely pre-existing corridor barrier is already sitting elsewhere) is exactly
+  // this rare edge case actually happening, not just a hypothetical: dieA broke the (fresher) track
+  // barrier correctly, but dieB's own check then compared the *corridor* barrier that was ALSO
+  // there before this roll against a snapshot that only ever remembered the track one - the kinds
+  // didn't match, so a barrier that really was pre-existing read as "not an obligation" and let a
+  // second, unrelated pawn move instead. Tracking both kinds independently (each compared only
+  // against its own snapshot) is the direct fix - track and corridor positions live in separate
+  // numeric spaces anyway (BarrierLocation's own `kind` already exists for exactly that reason).
+  private preRollBarrierTrackPosition: number | null = null
+  private preRollBarrierCorridorPosition: number | null = null
   private preRollBarrierCaptured = false
   // PK9.1's own "IMPORTANT!" qualifier: breaking a barrier with one half of a double forbids using
   // the double's *other* half to put the barrier's other original pawn right back onto the same
@@ -343,9 +358,9 @@ export class TurnManager {
   }
 
   requestRoll() {
-    // See preRollBarrierLocation's own doc comment - captured lazily, the first time offerMoves()
-    // runs this roll (see there), not here: the automatic Parkiller move and any Parkiller-kill
-    // reward chain both still count as "before this roll's own white-dice choices," per the
+    // See preRollBarrierTrackPosition's own doc comment - captured lazily, the first time
+    // offerMoves() runs this roll (see there), not here: the automatic Parkiller move and any
+    // Parkiller-kill reward chain both still count as "before this roll's own white-dice choices," per the
     // existing pawn+own-Parkiller barrier test below.
     this.preRollBarrierCaptured = false
 
@@ -732,36 +747,40 @@ export class TurnManager {
     // the rulebook's own qualifier: if nothing can break it this roll, the restriction below comes
     // back empty and the obligation is waived rather than forcing a false moveNotPossible.
     //
-    // A track barrier and a corridor barrier existing *simultaneously* is a rare enough edge case
-    // (the player would need two separate own-pairs stacked in two different places at once) that
-    // this picks the track one first, matching this obligation's own pre-corridor-barrier
-    // precedent, rather than adding a rule the client's own text never actually addresses.
+    // A track barrier and a corridor barrier existing *simultaneously* is a real, reachable edge
+    // case (see preRollBarrierTrackPosition's own doc comment) - both are always computed
+    // independently (never short-circuited on one another) so neither can hide the other, whether
+    // for the pre-roll snapshot below or for deciding which one is a live obligation right now.
     const ownBarrierTrack = ownBarrierTrackPosition(this.currentPlayer)
-    const ownBarrierCorridor = ownBarrierTrack === null ? ownCorridorBarrierPosition(this.currentPlayer) : null
-    const liveBarrierLocation: BarrierLocation | null =
-      state.dieA !== state.dieB
-        ? null
-        : ownBarrierTrack !== null
-          ? { kind: 'track', position: ownBarrierTrack }
-          : ownBarrierCorridor !== null
-            ? { kind: 'corridor', position: ownBarrierCorridor }
-            : null
-    // See preRollBarrierLocation's own doc comment - captured from this exact same live check, but
-    // only on the *first* offerMoves() call this roll (before any white-dice move has touched
-    // anything), then reused unchanged on every later call this same roll.
+    const ownBarrierCorridor = ownCorridorBarrierPosition(this.currentPlayer)
+    // See preRollBarrierTrackPosition's own doc comment - captured from these same two independent
+    // checks, but only on the *first* offerMoves() call this roll (before any white-dice move has
+    // touched anything), then reused unchanged on every later call this same roll.
     if (!this.preRollBarrierCaptured) {
-      this.preRollBarrierLocation = liveBarrierLocation
+      this.preRollBarrierTrackPosition = ownBarrierTrack
+      this.preRollBarrierCorridorPosition = ownBarrierCorridor
       this.preRollBarrierCaptured = true
     }
     // Only a barrier that already existed before this roll's own white-dice choices is an
-    // obligation; one this roll's own earlier die just formed is not.
+    // obligation; one this roll's own earlier die just formed (or moved a piece into) is not.
+    // Track still takes priority *between two genuine obligations* (this obligation's own
+    // pre-corridor-barrier precedent), but a *disqualified* track barrier (currently there, but
+    // only because an earlier die this same roll put it there) must fall through to the corridor
+    // check rather than reading as "no obligation at all" and silently letting the corridor
+    // barrier - genuinely pre-existing, untouched by anything that's happened this roll - go
+    // unenforced. Reported directly, with a screenshot ("DOBLE 4 AMARILLA DEBE ABRIR BARRERA!!!!
+    // ARRIBA Y NO MOVER OTRO PEON ANTES"): the short-circuited version this replaced could not
+    // represent that fall-through at all - it picked one BarrierLocation up front and only ever
+    // asked "is this one legitimate", with no path back to the other kind once the first one
+    // turned out not to be.
     const barrierLocation: BarrierLocation | null =
-      liveBarrierLocation !== null &&
-      this.preRollBarrierLocation !== null &&
-      liveBarrierLocation.kind === this.preRollBarrierLocation.kind &&
-      liveBarrierLocation.position === this.preRollBarrierLocation.position
-        ? liveBarrierLocation
-        : null
+      state.dieA !== state.dieB
+        ? null
+        : ownBarrierTrack !== null && ownBarrierTrack === this.preRollBarrierTrackPosition
+          ? { kind: 'track', position: ownBarrierTrack }
+          : ownBarrierCorridor !== null && ownBarrierCorridor === this.preRollBarrierCorridorPosition
+            ? { kind: 'corridor', position: ownBarrierCorridor }
+            : null
     this.lastOfferedBarrierPosition = barrierLocation
     const pieceIsAtBarrier = (piece: Piece): boolean =>
       barrierLocation !== null &&
