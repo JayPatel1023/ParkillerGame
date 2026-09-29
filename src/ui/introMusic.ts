@@ -29,10 +29,19 @@
 // GameMaker-ported original rather than sitting alongside it - re-encoded down from the swapped-in
 // file's own 256kbps to 160kbps immediately after, the same consistency fix music-3.mp3 got above
 // (2.5MB -> 1.6MB, no audible change at this bitrate for background music).
+//
+// Requested directly ("현재 여기에 있는 5개음악을 모두다 추가해달라, 사람마다 개성이 다르므로 그들이
+// 선택하도록하는것도 좋다" - add all 5 music tracks that are here now, since everyone's taste
+// differs it's good to let them choose): music-1.mp3/music-4.mp3 already existed in public/music/
+// but were never added to this list. Both were sitting at 256kbps (6.0MB/4.7MB) - the same
+// inconsistency music-3.mp3 and intro.mp3 already got re-encoded away above - so re-encoded down to
+// the same 160kbps the rest of this list already uses (3.7MB/2.9MB) before adding them here.
 const TRACKS: { url: string; label: string }[] = [
   { url: '/music/intro.mp3', label: 'Melodía 1' },
   { url: '/music/music-2.mp3', label: 'Melodía 2' },
   { url: '/music/music-3.mp3', label: 'Melodía 3' },
+  { url: '/music/music-1.mp3', label: 'Melodía 4' },
+  { url: '/music/music-4.mp3', label: 'Melodía 5' },
 ]
 const INTRO_MUSIC_VOLUME = 0.35
 const MUTED_STORAGE_KEY = 'parkiller-music-muted'
