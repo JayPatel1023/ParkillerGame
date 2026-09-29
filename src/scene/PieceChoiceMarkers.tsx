@@ -45,10 +45,21 @@ function createNumberFaceTexture(text: string): THREE.CanvasTexture {
   ctx.fillStyle = bg
   ctx.fillRect(0, 0, size, size)
 
-  ctx.fillStyle = '#ffffff'
-  ctx.font = `800 ${size * 0.52}px system-ui, sans-serif`
+  // Reported directly, with a screenshot: at some viewing angles/positions the numeral read as
+  // faint or altogether invisible against the glossy blue face - the lit MeshPhysicalMaterial this
+  // face used (see below) let a grazing-angle specular highlight wash out the same white the digit
+  // itself is drawn in, and a marker positioned near the board's own edge (a more oblique angle to
+  // this scene's fixed camera than one near the center) hit that washout hardest. A dark outline
+  // gives the digit contrast against its own background independent of any lighting on top of it,
+  // the same reasoning a game HUD outlines light text over a busy scene for.
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
+  ctx.font = `800 ${size * 0.52}px system-ui, sans-serif`
+  ctx.lineJoin = 'round'
+  ctx.strokeStyle = 'rgba(10,20,50,0.9)'
+  ctx.lineWidth = size * 0.05
+  ctx.strokeText(text, size / 2, size / 2 + size * 0.015)
+  ctx.fillStyle = '#ffffff'
   ctx.shadowColor = 'rgba(0,0,0,0.45)'
   ctx.shadowBlur = size * 0.04
   ctx.fillText(text, size / 2, size / 2 + size * 0.015)
@@ -80,7 +91,11 @@ function SingleMarker({
   // top, same convention DiceMesh uses for its own pip face.
   const materials = useMemo(() => {
     const side = () => new THREE.MeshPhysicalMaterial({ color: '#2a5bc4', roughness: 0.3, clearcoat: 0.5 })
-    const face = () => new THREE.MeshPhysicalMaterial({ map: faceTexture, roughness: 0.25, clearcoat: 0.7, clearcoatRoughness: 0.2 })
+    // Unlit, unlike the glossy sides - see createNumberFaceTexture's own comment on the washout
+    // this fixes. The side faces stay glossy/lit since they carry no information a highlight could
+    // obscure; this one face's whole job is staying legible, so it always shows its texture's own
+    // colors as drawn, regardless of this scene's lighting or this marker's own viewing angle.
+    const face = () => new THREE.MeshBasicMaterial({ map: faceTexture })
     return [side(), side(), face(), side(), side(), side()]
   }, [faceTexture])
   // Same manual-dispose need as DiceMesh's own material array (see its comment) - imperatively
