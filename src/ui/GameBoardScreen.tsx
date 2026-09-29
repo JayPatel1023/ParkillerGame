@@ -831,6 +831,28 @@ export function GameBoardScreen({
   // still has to wait for a genuine settle here, same as always, but an already-revealed one no
   // longer gets re-masked by a later, unrelated captureFlightPending retrigger.
   const visiblePendingMoves = isMyTurn && !rolling && animationsSettledForPendingMoves && !paused ? pendingMoves : []
+  // Reported directly ("las jugadas obligatorias deberian de ser gestionadas por el juego, como
+  // por ejemplo salir con 5" - mandatory plays should be handled by the game itself, like exiting
+  // with a 5): whenever every rule-mandated restriction (the exit lock, mandatory capture, the
+  // double's own barrier-break obligation) has already narrowed this down to the one and only
+  // legal move, there's nothing left to decide - the player was still having to click that one
+  // piece anyway. Mirrors autoPlayIdleTurn's own identical chooseMove(first.piece, first.amount)
+  // call (this file's own established fallback for a stuck human's idle turn), just firing the
+  // instant the single option appears instead of waiting out the whole idle timer first.
+  //
+  // Gated on isMyTurn (already baked into visiblePendingMoves above) - localPlayerColor correctly
+  // excludes a bot-controlled color's own turn in vs-bots mode (LocalGameSession's own doc
+  // comment), and a classic hotseat game has no bot seats to race with at all, so this never
+  // fires for anyone but a genuine human turn. Excludes reward-sourced moves on purpose - a reward
+  // is a bonus the player is offered, never a rule-mandated obligation, so it keeps asking for a
+  // conscious choice (and letting RewardToast/RewardBurst actually be seen) even once only one
+  // piece can use it.
+  useEffect(() => {
+    if (visiblePendingMoves.length !== 1) return
+    const only = visiblePendingMoves[0]
+    if (only.diceSource === 'reward') return
+    chooseMove(only.piece, only.amount)
+  }, [visiblePendingMoves, chooseMove])
   // See ALERT_HOLD_MS's own doc comment above - held so a fast-following move can't clear these
   // again before there's been real time to read them.
   const visiblePendingReward = useHeldAlert(animationsSettled ? pendingReward : null, holdMsFor(ALERT_HOLD_MS, currentPlayer.color))
