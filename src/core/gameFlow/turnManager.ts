@@ -287,8 +287,21 @@ export class TurnManager {
   // the double's *other* half to put the barrier's other original pawn right back onto the same
   // square, recreating it - confirmed directly in the client's own rulebook ("you cannot recreate
   // the barrier using the same double"). Sized to the exact square the break landed on, not a
-  // boolean flag, since offerMoves() needs to exclude only *that* specific destination for *that*
-  // specific piece, not restrict the second die generally.
+  // boolean flag, since offerMoves()/offerReward() need to exclude only *that* specific destination
+  // for *that* specific piece, not restrict anything else generally.
+  //
+  // Reported directly ("NO PUEDEN AVANZAR CON UNA RECOMPENSA LOS DOS MIEMBROS DE UNA BARRERA Y
+  // CREAR OTRA BARRERA... SOLO PUEDE MOVER UNO CON LOS 20, O SOLO 10 SI NO PUEDE HACERLO"): the
+  // exact same recreate-the-barrier-you-just-broke shape, but reached through a reward's own
+  // *split* instead of a double's own two dice - a splittable grant (a capture's own 20) that gets
+  // taken as REWARD_UNIT re-queues the other REWARD_UNIT as a fresh grant (offerReward's own
+  // comment); if the *first* REWARD_UNIT moved one of a barrier's two pawns off it, offering that
+  // *second*, re-queued REWARD_UNIT to the barrier's other original occupant - same origin, same
+  // amount, so the same destination - recreates the exact pair one hop later, just as
+  // illegitimately as the double case this field already existed for. Sets from a reward move too
+  // now (playMove's own isRewardMove branch), not just a double's own barrier-break, since this
+  // isn't PK9.1's own double-specific rule at all - a distinct one that applies on any roll a
+  // reward can be granted on.
   private brokenBarrierThisRoll: (BarrierLocation & { resultingTrackPosition: number; resultingCorridorPosition: number }) | null = null
   // Client's own "Special Situations" guide: the entry track square this same roll's own earlier
   // exit already cleared an opposing pawn from, leaving that pawn's own Parkiller alone there
@@ -847,16 +860,7 @@ export class TurnManager {
     // ownCorridorBarrierPosition's own doc comment - the final slot is deliberately excluded from
     // barrier counting), so no FinishMove can ever actually recreate one; excluding this move kind
     // outright is correct, not just a narrow patch for the double-1 case.
-    if (this.brokenBarrierThisRoll) {
-      const broken = this.brokenBarrierThisRoll
-      options = options.filter((m) => {
-        const sameOrigin =
-          broken.kind === 'track'
-            ? m.piece.state === 'OnTrack' && m.piece.trackPosition === broken.position
-            : m.piece.state === 'InHomeCorridor' && m.piece.corridorPosition === broken.position
-        return !(m.kind !== 'FinishMove' && sameOrigin && m.resultingTrackPosition === broken.resultingTrackPosition && m.resultingCorridorPosition === broken.resultingCorridorPosition)
-      })
-    }
+    options = this.excludeRecreatedBarrier(options)
 
     // PC3/PK8: capturing is mandatory *per piece*, not across the whole roll - verified directly
     // against the reference implementation (activarFichasMovibles()/wouldComer() in
@@ -1010,6 +1014,34 @@ export class TurnManager {
         resultingCorridorPosition: move.resultingCorridorPosition,
       }
     }
+    // See brokenBarrierThisRoll's own doc comment ("NO PUEDEN AVANZAR CON UNA RECOMPENSA LOS DOS
+    // MIEMBROS DE UNA BARRERA Y CREAR OTRA BARRERA") - a distinct trigger from the double-break
+    // case just above (no lastOfferedBarrierPosition to check against here at all, since
+    // offerReward() never sets it - a reward can be granted on any roll, not just a double): this
+    // move's own origin, checked directly against this same player's *other* pieces (which haven't
+    // moved yet, so `before` still accurately describes what was there a moment ago), was a real
+    // barrier in its own right if this mover wasn't alone there.
+    if (isRewardMove) {
+      const barrierKind: BarrierLocation['kind'] | null =
+        before.state === 'OnTrack' ? 'track' : before.state === 'InHomeCorridor' ? 'corridor' : null
+      const hadOwnBarrierPartner =
+        barrierKind !== null &&
+        this.currentPlayer.pieces.some(
+          (p) =>
+            p !== chosenPiece &&
+            (barrierKind === 'track'
+              ? p.state === 'OnTrack' && p.trackPosition === before.trackPosition
+              : p.state === 'InHomeCorridor' && p.corridorPosition === before.corridorPosition),
+        )
+      if (barrierKind && hadOwnBarrierPartner) {
+        this.brokenBarrierThisRoll = {
+          kind: barrierKind,
+          position: barrierKind === 'track' ? before.trackPosition : before.corridorPosition,
+          resultingTrackPosition: move.resultingTrackPosition,
+          resultingCorridorPosition: move.resultingCorridorPosition,
+        }
+      }
+    }
     // PK6/PK8: reported directly ("Doble 6 del Parki: no lo eliminó" - double 6, it didn't
     // eliminate the Parki), reproduced precisely: a double gives two separate single-die
     // opportunities to eliminate the Parki (the rulebook's own "rolling the exact double... moves
@@ -1094,6 +1126,21 @@ export class TurnManager {
     return result
   }
 
+  // See brokenBarrierThisRoll's own doc comment - shared by offerMoves() (a double's own barrier-
+  // break) and offerReward() (a reward's own split re-queue), the two ways this roll can reach a
+  // "just broke a barrier, don't let its other original occupant recreate it" state.
+  private excludeRecreatedBarrier(moves: MoveOption[]): MoveOption[] {
+    const broken = this.brokenBarrierThisRoll
+    if (!broken) return moves
+    return moves.filter((m) => {
+      const sameOrigin =
+        broken.kind === 'track'
+          ? m.piece.state === 'OnTrack' && m.piece.trackPosition === broken.position
+          : m.piece.state === 'InHomeCorridor' && m.piece.corridorPosition === broken.position
+      return !(m.kind !== 'FinishMove' && sameOrigin && m.resultingTrackPosition === broken.resultingTrackPosition && m.resultingCorridorPosition === broken.resultingCorridorPosition)
+    })
+  }
+
   // Drains pendingRewardQueue one grant at a time - each grant gets its own independent
   // offerReward call (own mandatory-if-possible check, own forfeit if not), rather than resolving
   // the whole queue as one lump sum. Falls through to continueAfterMove once nothing's left owed,
@@ -1155,7 +1202,10 @@ export class TurnManager {
     }
     addMoves(fullMoves)
     addMoves(splitMoves)
-    const moves = [...byPieceAndAmount.values()]
+    // See brokenBarrierThisRoll's own doc comment - excludes the other original occupant of a
+    // barrier this same roll's own earlier reward-split move just broke from recreating it with
+    // this leftover half.
+    const moves = this.excludeRecreatedBarrier([...byPieceAndAmount.values()])
 
     if (moves.length === 0) {
       this.rewardForfeited.emit({ amount: grant.amount, reason: grant.reason })

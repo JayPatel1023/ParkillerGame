@@ -851,6 +851,48 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     expect(red.pieces[0].trackPosition).toBe(28)
   })
 
+  // Reported directly ("NO PUEDEN AVANZAR CON UNA RECOMPENSA LOS DOS MIEMBROS DE UNA BARRERA Y
+  // CREAR OTRA BARRERA!!!! SOLO PUEDE MOVER UNO CON LOS 20, O SOLO 10 SI NO PUEDE HACERLO. ESTO ES
+  // BASICO"): the sibling test just above confirms the *same* pawn can freely take both halves of
+  // a split reward - this is the other original barrier occupant specifically, still sitting right
+  // where the mover started, taking the leftover half to land on the exact square the mover's own
+  // first half already claimed. Same shape as the double-break case (PK9.1) already has its own
+  // test for, just reached through a reward's own split instead of a double's own two dice.
+  it('does not let a barrier\'s other original occupant recreate it by taking the leftover half of a split reward', () => {
+    const board = buildBigTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 5
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 5 // own barrier at 5, pieces[0] + pieces[1]
+    red.pieces[2].state = 'OnTrack'
+    red.pieces[2].trackPosition = 0
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 3
+
+    const dice = new ScriptedDice([3, 1, 1])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let latestMoves: MoveOption[] = []
+    manager.moveChoicesReady.on((m) => (latestMoves = m))
+
+    manager.requestRoll()
+    manager.submitMove(red.pieces[2]) // 0 -> 3, captures Blue's piece, grants 20 - the barrier at 5 is untouched
+    expect(red.pieces[0].trackPosition).toBe(5)
+    expect(red.pieces[1].trackPosition).toBe(5)
+
+    manager.submitMove(red.pieces[0], 10) // one barrier member takes the first half: track 5 -> 15
+    expect(red.pieces[0].trackPosition).toBe(15)
+
+    // pieces[1] is still sitting at 5, right where pieces[0] started - landing the leftover 10
+    // there would put it right back together with pieces[0] on 15, recreating the exact barrier.
+    expect(latestMoves.some((m) => m.piece === red.pieces[1] && m.resultingTrackPosition === 15)).toBe(false)
+    // pieces[0] itself ("even the same one") and the unrelated pieces[2] both stay completely free.
+    expect(latestMoves.some((m) => m.piece === red.pieces[0] && m.amount === 10)).toBe(true)
+    expect(latestMoves.some((m) => m.piece === red.pieces[2] && m.amount === 10)).toBe(true)
+  })
+
   it('offers only the usable half of a reward when the full amount has nowhere legal to land', () => {
     // Both Red pieces end up close enough to home that a full 20-square move overshoots the finish
     // for each of them individually (pieces[0] lands on 8 after the capture, 17 steps left to finish;
