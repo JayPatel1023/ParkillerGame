@@ -1842,6 +1842,47 @@ describe('TurnManager - a normal roll can voluntarily move a piece out of its ow
     expect(offered.some((m) => m.piece === red.pieces[1] && m.amount === 4)).toBe(true)
   })
 
+  // Reported directly ("salio 5 al azul. NO PUEDE MOVER CON OTRO PEON. TIENE UNO EN EL REFUGIO QUE
+  // MUERE AL SALIR" - a 5 came up for blue; you can't move with another pawn; blue has one in the
+  // shelter that dies on exiting): unlike the barrier case just above (where exiting is genuinely
+  // *impossible*, so PC2.1 has nothing left to obligate and the die correctly falls back to free),
+  // a lone unprotected opposing Parki sitting on the entry square doesn't block the exit at all -
+  // getValidMoves still generates the ExitYard move (PK5 resolves the danger only after the move
+  // actually lands, see parchisRules.ts's own applyMove) - so the exit-lock still sees a real
+  // ExitYard option for this die and keeps it obligated, exactly like any other mandatory exit.
+  // The pawn dies as the outcome, not as a reason to excuse the obligation.
+  it('a lone unprotected opposing Parki on the entry square still forces the exit - the pawn dies, but the die stays locked', () => {
+    const board = { ...buildTestBoard(), safeTrackIndices: new Set<number>() } // entry not safe here
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    // pieces[0] stays InYard (createPlayerState's own default) - the one that must exit on the 5
+    blue.pieces[1].state = 'OnTrack'
+    blue.pieces[1].trackPosition = 2 // unrelated already-out piece - would also reach 7 with the 5
+    red.parkiller.corridorPosition = red.parkiller.corridorLength
+    red.parkiller.trackPosition = 10 // blue's own entry square, per buildTestBoard - unprotected
+
+    // Blue goes first (index 0) - red's own black die only moves red's own Parkiller on red's own
+    // turn, so putting red first would drift it off this exact square before blue ever rolls.
+    const dice = new ScriptedDice([5, 3, 1]) // not a double
+    const manager = new TurnManager(board, [blue, red], defaultRuleSettings(), dice)
+
+    let offered: MoveOption[] = []
+    manager.moveChoicesReady.on((moves) => (offered = moves))
+
+    manager.requestRoll()
+
+    // The 5 stays locked to the exit - pieces[1] can't dodge the obligation by using it instead,
+    // even though the exit is a losing move.
+    expect(offered.some((m) => m.piece === blue.pieces[0] && m.amount === 5)).toBe(true)
+    expect(offered.some((m) => m.piece === blue.pieces[1] && m.amount === 5)).toBe(false)
+    expect(offered.some((m) => m.piece === blue.pieces[1] && m.amount === 3)).toBe(true) // the other die stays free
+
+    const result = manager.submitMove(blue.pieces[0])
+    expect(result?.eliminatedByParkiller).toBe(true)
+    expect(blue.pieces[0].state).toBe('InYard')
+    expect(red.parkiller.state).toBe('InPlay')
+  })
+
   // Reported directly, via a systematic rules audit Carlos himself requested: the double-forces-
   // open obligation's own track/corridor barrier detection used to only ever compute a corridor
   // barrier when there was *no* track barrier at all (`ownBarrierTrack === null ?
