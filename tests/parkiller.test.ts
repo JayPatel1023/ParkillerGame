@@ -931,6 +931,10 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     const blue = createPlayerState('Blue', board)
     red.pieces[0].state = 'OnTrack'
     red.pieces[0].trackPosition = 2
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 15 // unrelated - keeps pieces[0] from being this roll's only
+    // eligible piece, so the "must maximize" rule doesn't force it onto the sum (7) instead of
+    // dieA=3, which is what actually walks it onto the Parkiller.
     blue.parkiller.corridorPosition = blue.parkiller.corridorLength
     blue.parkiller.trackPosition = 5 // not a safe square on this test board
 

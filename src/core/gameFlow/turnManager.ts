@@ -829,16 +829,57 @@ export class TurnManager {
         if (!byPieceAndAmount.has(key)) byPieceAndAmount.set(key, move)
       }
     }
-    if (dieAMoves) addMoves(applyObligations(dieAMoves, dieAHasExit))
-    if (dieBMoves) addMoves(applyObligations(dieBMoves, dieBHasExit))
-    // The sum can only combine both dice into one board-piece move once neither individual die is
-    // still obligated to a mandatory exit or barrier-break - otherwise it would let a player dodge
-    // either obligation by spending both dice on a single already-in-play piece instead. Still
-    // routed through applyObligations even here (dieHasExit=false, but sumHasExit is checked inside
-    // it too) so a sum-only exit obligation restricts the sum's own other move options exactly like
-    // it now restricts dieA/dieB's.
-    if (dieAMoves && dieBMoves && !dieAHasExit && !dieBHasExit && barrierLocation === null && sumMoves) {
-      addMoves(applyObligations(sumMoves, false))
+    // Reported directly, then narrowed down after two rounds of clarification ("sale 1 y 2...
+    // debes mover 2 y no lo puedes eliminar con 1... si no puedes mover el total se mueve el valor
+    // más alto..." / "3 y 4...mueves 4 obligatoriamente..."): the FIRST reading of this - a
+    // roll-wide "always spend the maximum possible distance, however many pieces are in play" -
+    // was wrong and broke the confirmed escape hatch below (PC3/PK8's own "puedes mover otro peón
+    // con el número igual" text) along with dozens of already-confirmed free-choice tests. The
+    // client's own correction, explicit and final: "LA OPCION DEL MAXIMO VALOR ES CUANDO SOLO SE
+    // PUEDE MOVER UNA FICHA CONCRETA. EL VALOR DE LOS DADOS SE PUEDE REPARTIR ENTRE DIFERENTES
+    // PEONES" (the maximum-value option only applies when exactly one specific piece can move at
+    // all - the dice's own value can [otherwise] be split across different pawns, i.e. plain free
+    // choice). So this only ever kicks in when dieA-alone and dieB-alone between them reach exactly
+    // one distinct piece - the roll has no other move to make regardless of which die is used, so
+    // that one piece must spend its own full capacity (sum, then whichever single die is larger,
+    // only the smaller one if neither bigger option is legal for it) rather than the player being
+    // free to "waste" the roll's other die by picking a smaller amount. The instant a *second*
+    // piece has any option of its own, the whole roll is back to ordinary free choice for everyone
+    // - "el valor de los dados se puede repartir entre diferentes peones".
+    //
+    // Deliberately scoped to a non-double roll only (state.dieA !== state.dieB) - a double's own
+    // sum is a different die used twice on one piece, not a combination of two different numbers,
+    // and already has its own separately-confirmed rules (PK9.1's barrier-break obligation, PK6's
+    // own "not mandatory to eliminate the Parki" choice, excludeDoubleSumPastUnprotectedParki
+    // above) this doesn't touch. Only ever considered when dieAMoves/dieBMoves/sumMoves are all
+    // non-null (neither die already spent this roll) - a roll's second, already-partially-spent
+    // offerMoves() call always falls through to the plain per-die branch below, where there's only
+    // one remaining source to offer anyway, nothing left to rank.
+    const soleEligiblePiece = (() => {
+      if (state.dieA === state.dieB || dieAHasExit || dieBHasExit || sumHasExit || barrierLocation !== null || !dieAMoves || !dieBMoves) return null
+      const pieces = new Set([...dieAMoves.map((m) => m.piece), ...dieBMoves.map((m) => m.piece)])
+      return pieces.size === 1 ? [...pieces][0] : null
+    })()
+    if (soleEligiblePiece && dieAMoves && dieBMoves && sumMoves) {
+      const forPiece = (moves: MoveOption[]) => moves.filter((m) => m.piece === soleEligiblePiece)
+      const sumForPiece = forPiece(sumMoves)
+      const biggerForPiece = forPiece(state.dieA > state.dieB ? dieAMoves : dieBMoves)
+      const smallerForPiece = forPiece(state.dieA > state.dieB ? dieBMoves : dieAMoves)
+      if (sumForPiece.length > 0) addMoves(sumForPiece)
+      else if (biggerForPiece.length > 0) addMoves(biggerForPiece)
+      else addMoves(smallerForPiece)
+    } else {
+      if (dieAMoves) addMoves(applyObligations(dieAMoves, dieAHasExit))
+      if (dieBMoves) addMoves(applyObligations(dieBMoves, dieBHasExit))
+      // The sum can only combine both dice into one board-piece move once neither individual die is
+      // still obligated to a mandatory exit or barrier-break - otherwise it would let a player dodge
+      // either obligation by spending both dice on a single already-in-play piece instead. Still
+      // routed through applyObligations even here (dieHasExit=false, but sumHasExit is checked
+      // inside it too) so a sum-only exit obligation restricts the sum's own other move options
+      // exactly like it now restricts dieA/dieB's.
+      if (dieAMoves && dieBMoves && !dieAHasExit && !dieBHasExit && barrierLocation === null && sumMoves) {
+        addMoves(applyObligations(sumMoves, false))
+      }
     }
 
     let options = [...byPieceAndAmount.values()]

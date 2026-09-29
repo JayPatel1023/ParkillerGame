@@ -972,7 +972,10 @@ describe('BotController', () => {
     // board's own exit roll, which would otherwise force a mandatory exit instead of the capturing
     // move this test actually means to exercise (see the exit-priority test above, and PC2.1's own
     // applyObligations in turnManager.ts). Not what this test is about.
-    red.pieces[1].state = 'Finished'
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 15 // unrelated - a second eligible piece keeps pieces[0] from
+    // being this roll's only one, so the "must maximize" rule doesn't force it onto the sum (5)
+    // instead of the dieA=2 capture this test actually means to exercise.
     red.pieces[2].state = 'Finished'
     red.pieces[3].state = 'Finished'
 

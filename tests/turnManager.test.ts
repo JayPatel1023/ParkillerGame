@@ -94,11 +94,17 @@ describe('TurnManager - two-dice rulebook flow', () => {
     expect(red.pieces[1].state).toBe('Finished')
   })
 
-  it('offers both dice as separate choices for a piece reachable by either, and moves by whichever one is picked', () => {
-    // Reported directly ("SE DEBE PODER ELEGIR CON CUAL DE LOS DOS DADOS SE MUEVE EL PEON QUE SE
-    // DESEE"): the player never got an actual choice here before - dieA's own move for this piece
-    // silently won, dieB's own (different-destination) option for the exact same piece was dropped
-    // outright instead of being offered alongside it.
+  // Originally written to confirm free choice between dieA/dieB/sum for a piece reachable by all
+  // three ("SE DEBE PODER ELEGIR CON CUAL DE LOS DOS DADOS SE MUEVE EL PEON QUE SE DESEE") - that
+  // confirmation itself was later narrowed: superseded whenever this piece is the roll's *only*
+  // eligible one (see the "must maximize" cascade in offerMoves(), and its own doc comment there
+  // for the exact client wording this rewrite is built on: "LA OPCION DEL MAXIMO VALOR ES CUANDO
+  // SOLO SE PUEDE MOVER UNA FICHA CONCRETA"). This test's own board - a single red piece, nothing
+  // else in play - is exactly that "only one eligible piece" case, so free choice no longer
+  // applies here; it must take the sum. The sibling test right after this one exercises the
+  // *other* half of that same client correction - "EL VALOR DE LOS DADOS SE PUEDE REPARTIR ENTRE
+  // DIFERENTES PEONES" - free choice returns in full the instant a second piece has any option.
+  it('forces the sum on a piece that is this roll\'s only eligible one, instead of a free choice between dieA/dieB/sum', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)
     const blue = createPlayerState('Blue', board)
@@ -113,8 +119,41 @@ describe('TurnManager - two-dice rulebook flow', () => {
 
     manager.requestRoll()
 
-    // dieA alone (3), dieB alone (4), and their sum (7, since neither die is exit-locked and this
-    // is the only piece in play to spend it on) are all distinct, legitimately offered choices.
+    // Only the sum (7) - not dieA=3 or dieB=4 individually - since this piece is the only one in
+    // play at all and the bigger option (the sum) genuinely has somewhere legal to go.
+    const forPiece0 = latestMoves.filter((m) => m.piece === red.pieces[0])
+    expect(forPiece0.map((m) => m.amount)).toEqual([7])
+
+    manager.submitMove(red.pieces[0], 7)
+    expect(red.pieces[0].trackPosition).toBe(7)
+  })
+
+  // The other half of the same client correction this file's own doc comment above quotes: "EL
+  // VALOR DE LOS DADOS SE PUEDE REPARTIR ENTRE DIFERENTES PEONES" - the moment a *second* piece
+  // has any option of its own, the "must maximize" cascade doesn't apply to anyone this roll, and
+  // free choice between dieA/dieB/sum is back for the piece reachable by all three, exactly as
+  // originally confirmed ("SE DEBE PODER ELEGIR CON CUAL DE LOS DOS DADOS SE MUEVE EL PEON QUE SE
+  // DESEE").
+  it('offers both dice as separate choices for a piece reachable by either, when a different piece also has its own option', () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 0
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 10 // unrelated - a second eligible piece keeps this roll from
+    // ever being the "only one piece can move" case, so pieces[0] stays fully free to choose.
+
+    const dice = new ScriptedDice([3, 4, 1]) // neither die is the exit roll (5) - no exit-lock in play
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let latestMoves: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((m) => (latestMoves = m))
+
+    manager.requestRoll()
+
+    // dieA alone (3), dieB alone (4), and their sum (7) are all distinct, legitimately offered
+    // choices for pieces[0] - free choice, since pieces[1] is also eligible this roll.
     const forPiece0 = latestMoves.filter((m) => m.piece === red.pieces[0])
     expect(forPiece0.map((m) => m.amount).sort((a, b) => a - b)).toEqual([3, 4, 7])
 
@@ -123,6 +162,41 @@ describe('TurnManager - two-dice rulebook flow', () => {
     // whichever one .find() would have hit first.
     manager.submitMove(red.pieces[0], 4)
     expect(red.pieces[0].trackPosition).toBe(4)
+  })
+
+  // The client's own canonical worked example for the "must maximize" rule, verbatim: "SI SALE 2 Y
+  // 1: TIENES UN PEON DE OTRO JUGADOR A UNO. NO PUEDES MOVER NADA MAS QUE CON ESE PEON Y HAY DOS
+  // ESPACIOS. DEBES MOVER LOS DOS Y NO PUEDES ELIMINAR AL ADVERSARIO QUE ESTABA A UNO... LA REGLA
+  // DICE QUE SI PUEDES DEBES MOVER CON EL DADO DE MAXIMO VALOR" (if 2 and 1 come up: you have
+  // another player's pawn one square away. You can't move anything but that pawn, and it has two
+  // more squares [the other die]. You must move both, and you can't eliminate the opponent that
+  // was one square away... the rule says if you can, you must move with the die of maximum
+  // value) - the capture die (1) is legal but smaller than the sum (3), and this pawn is the only
+  // one that can move at all, so the sum wins and the capture is never actually offered.
+  it("forces the sum over a smaller die that would have captured, when the capturing piece is this roll's only eligible one", () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 0 // dieA=1 -> 1, captures blue.pieces[0]; sum=3 -> 3, empty
+    blue.pieces[0].state = 'OnTrack'
+    blue.pieces[0].trackPosition = 1
+
+    const dice = new ScriptedDice([1, 2, 1]) // neither die is the exit roll (5)
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let latestMoves: MoveOption[] = []
+    manager.moveChoicesReady.on((m) => (latestMoves = m))
+    manager.requestRoll()
+
+    // Only the sum (3) is offered - not dieA=1, even though it would capture.
+    const forPiece0 = latestMoves.filter((m) => m.piece === red.pieces[0])
+    expect(forPiece0.map((m) => m.amount)).toEqual([3])
+
+    const result = manager.submitMove(red.pieces[0], 3)
+    expect(result?.capturedPiece).toBeNull()
+    expect(blue.pieces[0].state).toBe('OnTrack') // untouched - never actually reachable this roll
+    expect(red.pieces[0].trackPosition).toBe(3)
   })
 
   it('exits the yard on a single die showing the exit roll', () => {
@@ -829,6 +903,10 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     const blue = createPlayerState('Blue', board)
     red.pieces[0].state = 'OnTrack'
     red.pieces[0].trackPosition = 5
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 20 // unrelated - keeps pieces[0] from being this roll's only
+    // eligible piece, so it stays free to pick dieA=3 (the capture) instead of being forced onto
+    // the sum by the "only one piece can move" rule.
     blue.pieces[0].state = 'OnTrack'
     blue.pieces[0].trackPosition = 8
 
@@ -839,7 +917,7 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     manager.moveChoicesReady.on((m) => (latestMoves = m))
 
     manager.requestRoll()
-    manager.submitMove(red.pieces[0]) // 5 -> 8, captures Blue's piece, grants 20
+    manager.submitMove(red.pieces[0], 3) // 5 -> 8, captures Blue's piece, grants 20
 
     manager.submitMove(red.pieces[0], 10) // takes the first half itself: track 8 -> 18
     expect(red.pieces[0].trackPosition).toBe(18)
@@ -934,6 +1012,10 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     const blue = createPlayerState('Blue', board)
     red.pieces[0].state = 'OnTrack'
     red.pieces[0].trackPosition = 5
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 20 // unrelated - keeps pieces[0] from being this roll's only
+    // eligible piece, so it stays free to pick dieA=3 (the capture) instead of being forced onto
+    // the sum by the "only one piece can move" rule.
     blue.pieces[0].state = 'OnTrack'
     blue.pieces[0].trackPosition = 8
 
@@ -944,7 +1026,7 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     manager.rewardOffered.on((g) => grants.push(g))
 
     manager.requestRoll()
-    manager.submitMove(red.pieces[0]) // 5 -> 8, captures blue.pieces[0]
+    manager.submitMove(red.pieces[0], 3) // 5 -> 8, captures blue.pieces[0]
     expect(grants).toEqual([{ amount: 20, reason: 'capture' }])
 
     manager.submitMove(red.pieces[0], 20) // takes the full grant in one move: 8 -> 28
@@ -1112,9 +1194,14 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     const blue = createPlayerState('Blue', board)
     red.pieces[0].state = 'OnTrack'
     red.pieces[0].trackPosition = 14
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 16 // keeps pieces[0] from being this roll's only eligible piece
+    // (so it stays free to pick dieA=3, the capture, instead of being forced onto the sum by the
+    // "only one piece can move" rule) without itself being able to use the reward either - 3 to
+    // its own home entrance + 6-square corridor = 9, less than either the full 20 or its split 10.
     blue.pieces[0].state = 'OnTrack'
     blue.pieces[0].trackPosition = 17
-    // red.pieces[1..3] stay InYard - a reward can never move a piece out of the shelter (PC 5), and
+    // red.pieces[2..3] stay InYard - a reward can never move a piece out of the shelter (PC 5), and
     // red.pieces[0] itself would overshoot its own finish (2 to its home entrance + 6-square
     // corridor = 8, less than either the full 20 or its split 10), so nothing qualifies for either
     // option and the whole grant is forfeited as one unit.
@@ -1127,7 +1214,7 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     manager.rewardOffered.on((g) => (offered = g))
 
     manager.requestRoll()
-    manager.submitMove(red.pieces[0]) // 14 -> 17, captures blue.pieces[0]
+    manager.submitMove(red.pieces[0], 3) // 14 -> 17, captures blue.pieces[0]
 
     expect(blue.pieces[0].state).toBe('InYard')
     expect(offered).toBeNull()
@@ -1157,6 +1244,11 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     const blue = createPlayerState('Blue', board)
     red.pieces[0].state = 'OnTrack'
     red.pieces[0].trackPosition = 14
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 16 // keeps pieces[0] from being this roll's only eligible piece
+    // (so it stays free to pick dieA=3, the capture, instead of being forced onto the sum by the
+    // "only one piece can move" rule) without itself being able to use the reward either - see the
+    // forfeit test just above this one for why 16 specifically.
     blue.pieces[0].state = 'OnTrack'
     blue.pieces[0].trackPosition = 17
     // Same setup as the forfeit test above: dieA=3 captures blue.pieces[0] (14 -> 17) and its own
@@ -1177,7 +1269,7 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
 
     manager.requestRoll()
     events.length = 0 // discard the initial roll's own diceRolled/moveChoicesReady - only the move's own aftermath matters below
-    manager.submitMove(red.pieces[0]) // 14 -> 17: captures, forfeits its own reward, offers dieB=1 next
+    manager.submitMove(red.pieces[0], 3) // 14 -> 17: captures, forfeits its own reward, offers dieB=1 next
 
     expect(events).toEqual(['moveApplied', 'rewardForfeited', 'moveChoicesReady'])
     expect(pendingMoves.length).toBeGreaterThan(0) // dieB=1's move really was offered, same call
@@ -1244,6 +1336,10 @@ describe('TurnManager - PC 3/PC 4/PC 5 rewards', () => {
     const blue = createPlayerState('Blue', board)
     red.pieces[0].state = 'OnTrack'
     red.pieces[0].trackPosition = 0 // dieA=3 -> 3, dieB=4 -> 4, sum=7 -> captures blue.pieces[0]
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 10 // unrelated - keeps pieces[0] from being this roll's only
+    // eligible piece, so the "must maximize" rule (only for a lone eligible piece) doesn't force
+    // it onto the sum, leaving dieA/dieB genuinely free choices too.
     blue.pieces[0].state = 'OnTrack'
     blue.pieces[0].trackPosition = 7
 
@@ -1938,6 +2034,10 @@ describe('TurnManager - a normal roll can voluntarily move a piece out of its ow
     const blue = createPlayerState('Blue', board)
     red.pieces[0].state = 'OnTrack'
     red.pieces[0].trackPosition = 6
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 15 // unrelated - keeps pieces[0] from being this roll's only
+    // eligible piece, so the "must maximize" rule doesn't force it onto the sum (10) instead of
+    // the die (4) this test actually means to exercise.
     blue.parkiller.corridorPosition = blue.parkiller.corridorLength
     blue.parkiller.trackPosition = 10 // a safe square on this test board - PK4 applies, not PK5
 
@@ -1945,7 +2045,7 @@ describe('TurnManager - a normal roll can voluntarily move a piece out of its ow
     const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
 
     manager.requestRoll()
-    const firstMove = manager.submitMove(red.pieces[0]) // 6 -> 10, lands on blue's protected Parkiller
+    const firstMove = manager.submitMove(red.pieces[0], 4) // 6 -> 10, lands on blue's protected Parkiller
 
     // PK4: coexists, no elimination either way - the pawn is still right there, on the same square.
     expect(firstMove?.eliminatedByParkiller).toBeFalsy()
@@ -1974,6 +2074,10 @@ describe('TurnManager - landing on an unprotected opposing Parkiller (PK5)', () 
     const blue = createPlayerState('Blue', board)
     red.pieces[0].state = 'OnTrack'
     red.pieces[0].trackPosition = 2
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 10 // unrelated - keeps pieces[0] from being this roll's *only*
+    // eligible piece, so the "must maximize" rule (only for a lone eligible piece) stays out of
+    // this test's own way and dieA=3 alone stays a real, freely-pickable option.
     blue.parkiller.corridorPosition = blue.parkiller.corridorLength
     blue.parkiller.trackPosition = 5 // not a safe square on this test board
 
