@@ -6,6 +6,7 @@ import {
   applyMove,
   getValidMoves,
   isParkillerOnTrack,
+  opposingParkillerBlocksDoubleSumAt,
   ownBarrierTrackPosition,
   ownCorridorBarrierPosition,
   resolveBarrierElimination,
@@ -862,6 +863,16 @@ export class TurnManager {
     // outright is correct, not just a narrow patch for the double-1 case.
     options = this.excludeRecreatedBarrier(options)
 
+    // Reported directly, then confirmed explicitly ("no se puede mover 8 y saltar por encima sin
+    // liquidar... con un solo peon en frente no hay otra opción" - you can't move 8 and jump over
+    // without resolving it; with only one pawn in front, there's no other option): a double's own
+    // combined value on a single piece is the same die's own face value used twice on that piece,
+    // not an unobstructed jump straight to the far square - see opposingParkillerBlocksDoubleSumAt's
+    // own doc comment (parchisRules.ts). Only the sum option for a piece that would actually pass
+    // an unprotected opposing Parki at the halfway point is dropped; the halfway (single-die) move
+    // itself, and every other piece's own use of either die, are untouched.
+    options = this.excludeDoubleSumPastUnprotectedParki(options, isDoubleRoll, state.dieA)
+
     // PC3/PK8: capturing is mandatory *per piece*, not across the whole roll - verified directly
     // against the reference implementation (activarFichasMovibles()/wouldComer() in
     // Parkiller_GameMaker-main), which locks a piece out of a die that *wouldn't* capture only when
@@ -1149,6 +1160,27 @@ export class TurnManager {
           ? m.piece.state === 'OnTrack' && m.piece.trackPosition === broken.position
           : m.piece.state === 'InHomeCorridor' && m.piece.corridorPosition === broken.position
       return !(m.kind !== 'FinishMove' && sameOrigin && m.resultingTrackPosition === broken.resultingTrackPosition && m.resultingCorridorPosition === broken.resultingCorridorPosition)
+    })
+  }
+
+  // See opposingParkillerBlocksDoubleSumAt's own doc comment (parchisRules.ts) for the report this
+  // fixes. Only ever touches a 'sum' move on a double roll, for a piece that's currently OnTrack
+  // and whose own halfway point (its current position plus the single die's own value) is still on
+  // the shared track rather than already past its home entrance - a piece close enough to finish
+  // that the halfway point would fall inside its own private corridor can never meet an opposing
+  // Parkiller there at all, so this only ever needs to ask parchisRules.ts's own check for a piece
+  // that could actually be in danger.
+  private excludeDoubleSumPastUnprotectedParki(moves: MoveOption[], isDoubleRoll: boolean, dieValue: number): MoveOption[] {
+    if (!isDoubleRoll) return moves
+    return moves.filter((m) => {
+      if (m.diceSource !== 'sum' || m.piece.state !== 'OnTrack') return true
+      const lane = this.board.lanes[m.piece.color]
+      if (!lane) return true
+      const trackLength = this.board.trackLength
+      const distanceToHomeEntrance = ((lane.homeEntranceTrackIndex - m.piece.trackPosition) % trackLength + trackLength) % trackLength
+      if (dieValue > distanceToHomeEntrance) return true
+      const halfway = (m.piece.trackPosition + dieValue) % trackLength
+      return !opposingParkillerBlocksDoubleSumAt(this.board, m.piece.color, halfway, this.players)
     })
   }
 

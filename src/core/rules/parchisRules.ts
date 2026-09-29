@@ -711,6 +711,41 @@ function unprotectedOpposingParkillerColorAt(
   return occupantsBeforeThisArrival < 2 ? null : dangerColor
 }
 
+// Reported directly ("azul sobre parki (doble 4) no puede ofrecer 4 u 8....es 4 x 2 = Parki
+// eliminado", then confirmed explicitly: "no se puede mover 8 y saltar por encima sin liquidar
+// (es una regla ya establecida)... con un solo peon en frente no hay otra opción"): a double's own
+// combined value applied to a single piece is the same die's own face value used twice in a row
+// on that one piece, not a clean, unobstructed jump to the far square - getValidMoves has no
+// concept of that (see its own doc comment - "no concept of two dice", just "what can move by this
+// many steps"), so the 'sum' MoveOption it builds for a double always treated the halfway point as
+// nothing more than scenery, landing the piece at the full amount regardless of what an unprotected
+// opposing Parkiller sitting exactly there would otherwise do to it. Unlike
+// unprotectedOpposingParkillerColorAt just above (which only ever cares about the *final* landing
+// square, and is called post-arrival - see its own doc comment on the "-1" adjustment that assumes
+// the mover is already counted), this is a plain pre-arrival occupancy read: nothing has moved yet,
+// this only ever answers "would stopping here right now be unprotected", which is what decides
+// whether a double's own sum move for this exact piece has to be excluded rather than offered
+// alongside the halfway (single-die) option. Only the piece that is itself reachable this way is
+// affected - a different piece, or a die that isn't a double, is untouched.
+export function opposingParkillerBlocksDoubleSumAt(
+  board: BoardData,
+  color: PieceColor,
+  halfwayTrackPosition: number,
+  allPlayers: readonly PlayerState[],
+): boolean {
+  let dangerColor: PieceColor | null = null
+  for (const opponent of allPlayers) {
+    if (opponent.color === color) continue
+    if (isParkillerOnTrack(opponent.parkiller) && opponent.parkiller.trackPosition === halfwayTrackPosition) {
+      dangerColor = opponent.color
+      break
+    }
+  }
+  if (!dangerColor) return false
+  if (!board.safeTrackIndices.has(halfwayTrackPosition)) return true
+  return occupantsOnTrackSquare(allPlayers, halfwayTrackPosition) >= 2
+}
+
 // PK5/PK10: a Parkiller landing on a square already held by a barrier (2 pawns, own or mixed)
 // never just coexists with both, and never gets blocked either - it always eliminates exactly
 // one of the two. Which one follows the rulebook's own PK10 worked examples: a pawn that shares

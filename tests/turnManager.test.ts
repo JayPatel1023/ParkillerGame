@@ -2000,14 +2000,27 @@ describe('TurnManager - landing on an unprotected opposing Parkiller (PK5)', () 
   // ordinary capture's own "debes comer obligadamente" (you MUST capture) vs. this specific case's
   // own "PUEDES mover fichas... si tienes posibilidad de comer al parkiller" (you CAN). Unlike an
   // ordinary pawn capture, a move that would eliminate the enemy Parki during its own capture
-  // window (a double, single die only) must never be the *only* option offered for that piece -
-  // any other legal move (even a non-capturing one) for the same piece stays a genuine choice.
-  it('does not force a piece into eliminating the enemy Parkiller - a non-capturing alternative stays offered (PK6/PK8)', () => {
+  // window (a double, single die only) must never be the *only* legal option this roll - some
+  // other piece always stays free to use the double's other half instead.
+  //
+  // Originally written with the *same* piece's own sum (amount 8) as that "genuine alternative" -
+  // corrected directly, right after ("azul sobre parki (doble 4) no puede ofrecer 4 u 8...es 4x2 =
+  // Parki eliminado", then explicitly: "no se puede mover 8 y saltar por encima sin liquidar...con
+  // un solo peon en frente no hay otra opción" - you can't move 8 and jump over it without
+  // resolving it; with only one pawn in front, there's no other option for THAT piece): a double's
+  // combined value on one piece is the same die used twice on it, not a clean jump past whatever
+  // sits at the halfway point - see opposingParkillerBlocksDoubleSumAt's own doc comment
+  // (parchisRules.ts). "Not mandatory" still holds, just via a genuinely different piece (pieces[1]
+  // below) rather than this same one's own amount-8 - see the sibling test right after this one for
+  // that same-piece exclusion itself.
+  it('does not force a piece into eliminating the enemy Parkiller - a different piece stays free to use the other half (PK6/PK8)', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)
     const blue = createPlayerState('Blue', board)
     red.pieces[0].state = 'OnTrack'
     red.pieces[0].trackPosition = 0
+    red.pieces[1].state = 'OnTrack'
+    red.pieces[1].trackPosition = 10 // unrelated - free to use the double's other half instead
     blue.parkiller.corridorPosition = blue.parkiller.corridorLength
     blue.parkiller.trackPosition = 4 // exactly reachable by either half of the double below
 
@@ -2018,10 +2031,38 @@ describe('TurnManager - landing on an unprotected opposing Parkiller (PK5)', () 
     manager.moveChoicesReady.on((moves) => (offered = moves))
     manager.requestRoll()
 
-    // The Parki-eliminating move (amount 4) is offered, but so is the sum (8, landing somewhere
-    // else entirely, no capture at all) - a real choice, not narrowed down to just the elimination.
+    // The Parki-eliminating move (amount 4) is offered, and so is a genuinely different piece's own
+    // use of the double's other half - a real choice, not narrowed down to just the elimination.
     expect(offered.some((m) => m.piece === red.pieces[0] && m.amount === 4)).toBe(true)
-    expect(offered.some((m) => m.piece === red.pieces[0] && m.amount === 8)).toBe(true)
+    expect(offered.some((m) => m.piece === red.pieces[1] && m.amount === 4)).toBe(true)
+  })
+
+  // Reported directly, then confirmed explicitly ("no se puede mover 8 y saltar por encima sin
+  // liquidar (es una regla ya establecida). Mover con otro peón puede ser posible, pero
+  // concretamente con el [piece] que está en frente del parki no es posible" - you can't move 8
+  // and jump over it without resolving it; moving with another pawn might be possible, but
+  // specifically with the one in front of the Parki, it isn't): the piece directly reachable by
+  // the double's own single-die value can't use the combined sum to skip past an unprotected
+  // opposing Parki sitting exactly at that halfway point - it either resolves there (this test) or
+  // doesn't move by the sum at all. A genuinely different piece (previous test) is untouched.
+  it("does not offer this same piece's own sum past an unprotected Parki it could eliminate at the halfway point (PK6/PK8)", () => {
+    const board = buildTestBoard()
+    const red = createPlayerState('Red', board)
+    const blue = createPlayerState('Blue', board)
+    red.pieces[0].state = 'OnTrack'
+    red.pieces[0].trackPosition = 0
+    blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+    blue.parkiller.trackPosition = 4 // exactly reachable by either half of the double below
+
+    const dice = new ScriptedDice([4, 4, 1])
+    const manager = new TurnManager(board, [red, blue], defaultRuleSettings(), dice)
+
+    let offered: import('../src/core/rules/moveOption').MoveOption[] = []
+    manager.moveChoicesReady.on((moves) => (offered = moves))
+    manager.requestRoll()
+
+    expect(offered.some((m) => m.piece === red.pieces[0] && m.amount === 4)).toBe(true)
+    expect(offered.some((m) => m.piece === red.pieces[0] && m.amount === 8)).toBe(false)
   })
 
   // Reported directly ("Doble 6 del Parki: no lo eliminó" - double 6, it didn't eliminate the
