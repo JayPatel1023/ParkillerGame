@@ -87,6 +87,25 @@ export function RewardToast({ pendingReward, forfeitedReward }: { pendingReward:
   return (
     <div key={toastKeyRef.current} style={wrapperStyle}>
       <div style={displayedForfeited ? forfeitedCardStyle : cardStyle} className={cardClassName}>
+        {!displayedForfeited && (
+          <>
+            {/* Requested directly ("현재 알림은 경고표시같은게 맘에들지않는다... 장식을 많이 넣어서" -
+                the current notification looks like a warning sign, add lots of decoration): a plain
+                flat gold rectangle with no border ornament at all reads exactly like a caution
+                banner, not a prize. A thin double-line inner border (the same "two parallel gold
+                lines just inside the edge" language the board art's own frame already uses) plus a
+                small diamond flourish at each corner turns it into a medallion instead. */}
+            <div style={innerBorderStyle} />
+            <span style={{ ...cornerFlourishStyle, top: 6, left: 6 }} />
+            <span style={{ ...cornerFlourishStyle, top: 6, right: 6 }} />
+            <span style={{ ...cornerFlourishStyle, bottom: 6, left: 6 }} />
+            <span style={{ ...cornerFlourishStyle, bottom: 6, right: 6 }} />
+            {/* Same warm shine sweep language the forfeited card already established below, just
+                gold-tinted instead of white, so a *win* also visibly "catches the light" rather
+                than sitting flat. */}
+            <div style={successShineSweepStyle} />
+          </>
+        )}
         {displayedForfeited && (
           <>
             {/* Cracked-glass overlay - a handful of jagged lines flashing bright on impact then
@@ -111,13 +130,22 @@ export function RewardToast({ pendingReward, forfeitedReward }: { pendingReward:
         </div>
       </div>
       <style>{`
+        /* Requested directly alongside the border/corner decoration above ("애니머션과 3D효과
+           넣어달라" - add animation and a 3D effect): the old entrance was a flat scale+translateY
+           pop, no rotation at all - the exact "just a notification" flatness that prompted this.
+           A real 3D coin-flip (rotateY, like a gold coin spinning face-up) fits a *reward* far
+           better than the forfeit card's own trapdoor rotateX below - distinct 3D language for a
+           distinct, more celebratory event, not the identical effect just relabeled. */
         @keyframes reward-toast-pop {
-          0% { transform: scale(0.4) translateY(14px); opacity: 0; }
-          55% { transform: scale(1.08) translateY(-4px); opacity: 1; }
-          75% { transform: scale(0.97) translateY(0); }
-          100% { transform: scale(1) translateY(0); }
+          0% { transform: perspective(700px) rotateY(-200deg) scale(0.5) translateY(10px); opacity: 0; }
+          50% { transform: perspective(700px) rotateY(20deg) scale(1.08) translateY(-6px); opacity: 1; }
+          72% { transform: perspective(700px) rotateY(-6deg) scale(0.98) translateY(0); }
+          100% { transform: perspective(700px) rotateY(0deg) scale(1) translateY(0); }
         }
-        .reward-toast-pop { animation: reward-toast-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+        .reward-toast-pop {
+          animation: reward-toast-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+          transform-style: preserve-3d;
+        }
 
         /* A real 3D flip-down (perspective + rotateX), like a trapdoor card landing face-up, rather
            than the success toast's flat scale/translate pop - distinct entrance for a distinct,
@@ -177,9 +205,52 @@ const cardStyle: React.CSSProperties = {
   gap: 2,
   padding: '14px 32px',
   borderRadius: 20,
-  background: 'linear-gradient(155deg, #ffe08a 0%, #ccb154 55%, #a9873a 100%)',
-  boxShadow: '0 8px 24px rgba(0,0,0,0.35), 0 0 0 2px rgba(255,255,255,0.35) inset',
+  background: 'linear-gradient(155deg, #ffe9ae 0%, #ccb154 45%, #9c7a2e 78%, #a9873a 100%)',
+  // A soft warm halo behind the card, on top of the same drop shadow/inner rim it already had -
+  // reads as "glowing medallion", not just a flat rectangle with a shadow under it.
+  boxShadow: '0 8px 24px rgba(0,0,0,0.35), 0 0 28px 6px rgba(255,214,120,0.45), 0 0 0 2px rgba(255,255,255,0.35) inset',
   fontFamily: 'system-ui, sans-serif',
+  // Anchors innerBorderStyle/cornerFlourishStyle/successShineSweepStyle below (all position:
+  // absolute) to the card itself, and clips the shine sweep to its own rounded shape.
+  position: 'relative',
+  overflow: 'hidden',
+}
+
+// A thin double-line inset border - the same "two parallel gold lines just inside the edge"
+// language the board art's own frame already uses everywhere else in this game - so the card
+// reads as consistent with the rest of the table, not a generic rounded rectangle.
+const innerBorderStyle: React.CSSProperties = {
+  position: 'absolute',
+  inset: 5,
+  borderRadius: 13,
+  border: '1px solid rgba(255,255,255,0.55)',
+  boxShadow: '0 0 0 3px rgba(120,84,20,0.25) inset',
+  pointerEvents: 'none',
+}
+
+// A small rotated-square flourish at each corner, sitting just inside innerBorderStyle - the
+// cheap CSS way to suggest an engraved medallion's own corner ornament without a real SVG asset.
+const cornerFlourishStyle: React.CSSProperties = {
+  position: 'absolute',
+  width: 7,
+  height: 7,
+  background: 'rgba(255,255,255,0.7)',
+  boxShadow: '0 0 4px rgba(120,84,20,0.4)',
+  transform: 'rotate(45deg)',
+  pointerEvents: 'none',
+}
+
+// Same reward-toast-shine keyframe the forfeited card already established, warmed to a golden-
+// white instead of plain white so it reads as this card's own light, not a reused effect.
+const successShineSweepStyle: React.CSSProperties = {
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  width: '40%',
+  height: '100%',
+  background: 'linear-gradient(90deg, rgba(255,244,214,0) 0%, rgba(255,244,214,0.55) 50%, rgba(255,244,214,0) 100%)',
+  animation: 'reward-toast-shine 0.9s ease-out 0.35s both',
+  pointerEvents: 'none',
 }
 
 const forfeitedCardStyle: React.CSSProperties = {
