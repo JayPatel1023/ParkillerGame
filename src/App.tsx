@@ -1,10 +1,11 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import { beginLocalGame } from './core/gameFlow/localGameSession'
 import { TURN_ORDER_BY_COUNT } from './core/turnOrder'
 import type { PieceColor } from './core/pieceColor'
 import { BOARD_DEFINITIONS } from './data/boards'
 import { ColorSelector } from './ui/ColorSelector'
+import { isSafeToApplyUpdate } from './hooks/appUpdateSafety'
 import { pauseIntroMusic, playIntroMusic, setRouteAllowsMusic } from './ui/introMusic'
 import { PlayerCountSelector } from './ui/PlayerCountSelector'
 import { StartScreen } from './ui/StartScreen'
@@ -141,6 +142,21 @@ function LazyScreenFallback() {
 const SW_UPDATE_CHECK_INTERVAL_MS = 2 * 60 * 1000
 
 export default function App() {
+  // Reported directly, and matching a real pattern in this session's own testing: several
+  // back-to-back deploys landing while a tester kept the tab open playing, "no carga el tablero"
+  // right after "renuevo cada vez antes de empezar" (I always refresh before starting) - the
+  // stale-cache workaround this exact phrase describes was needed for an *older*, already-fixed
+  // bug (see SW_UPDATE_CHECK_INTERVAL_MS's own comment for skipWaiting/clientsClaim landing
+  // correctly), but the auto-update this file already registers for still reloads the page the
+  // instant a new build activates - see registerSW's own "activated" handler in
+  // node_modules/vite-plugin-pwa/dist/client/build/react.js, confirmed directly - with zero regard
+  // for whether that's mid-game. A reload that lands exactly then re-navigates to a blank tab that
+  // must then reconnect/re-render everything from scratch, on whatever connection quality happens
+  // to exist at that exact moment - indistinguishable, from the player's side, from "the board
+  // just isn't loading." Deferring it until pendingReloadRef is checked isSafeToReload() below
+  // means a real update never interrupts an active game or a live online match - only the tab's own
+  // next visit to a menu screen actually applies it.
+  const pendingReloadRef = useRef(false)
   useRegisterSW({
     onRegisteredSW(_swUrl, registration) {
       if (!registration) return
@@ -152,6 +168,12 @@ export default function App() {
       setInterval(() => {
         registration.update()
       }, SW_UPDATE_CHECK_INTERVAL_MS)
+    },
+    // Called instead of the default immediate window.location.reload() (see this hook's own
+    // registerSW: `if (onNeedReload) onNeedReload(); else window.location.reload()`) - only ever
+    // flips this ref; isSafeToReload's own effect below is what actually reloads, once it's safe.
+    onNeedReload() {
+      pendingReloadRef.current = true
     },
   })
 
@@ -238,6 +260,16 @@ export default function App() {
     window.addEventListener('hashchange', onHashChange)
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
+
+  // See pendingReloadRef's own doc comment above - applies a deferred update the instant it's
+  // actually safe to (screen/hash just changed to something other than an active local game or
+  // online session), instead of on whatever arbitrary tick the update happened to be detected on.
+  // Re-checked on every screen/hash change (not just once) since a still-unsafe update just keeps
+  // waiting for the *next* one - a marathon game session never gets its update forced mid-play, it
+  // lands the moment that player next reaches a menu screen.
+  useEffect(() => {
+    if (pendingReloadRef.current && isSafeToApplyUpdate(screen, hash)) window.location.reload()
+  }, [screen, hash])
 
   // Requested directly ("habría que ponerle alguna música a la introducción del juego"): plays
   // while the player is still setting a game up (start/player-count/color screens). Requested
