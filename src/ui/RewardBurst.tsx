@@ -32,6 +32,76 @@ const STAR_CLIP_PATH = 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 
 // distinct from the star (magic) and circle (glow) shapes the two success reasons already use.
 const SHARD_CLIP_PATH = 'polygon(50% 0%, 100% 38%, 62% 100%, 15% 68%)'
 
+// Reported directly ("이것은 알림만을 의미한다... 꽃보라같은거나 3D효과를 넣어주면좋을것같다" - this
+// [the toast] is just a notification, what's wanted is something like confetti or a 3D effect):
+// the radiating sparks above already exist, but they're flat 2D shapes gone in 0.6s - exactly the
+// same complaint the win screen's own Confetti.tsx already had leveled at it once ("꽃보라량이
+// 많게... 3D효과로"), and already fixed there with real rotateX/Y/Z tumbling instead of a flat
+// rotate(). Reusing that exact, already-approved technique here (scaled down - this fires on
+// every capture/finish, not once at the very end of a match, so a full win-screen-sized 200-piece
+// blast would be exhausting) rather than inventing a new, unproven effect from scratch.
+const CONFETTI_COLORS = ['#4a78d8', '#2850a8', '#ffe08a', '#ecb84a', '#e05a4a', '#4ac86a', '#dce8ff']
+const CONFETTI_SHAPES = ['ribbon', 'ribbon', 'dot', 'dot', 'star'] as const
+type ConfettiShape = (typeof CONFETTI_SHAPES)[number]
+const CONFETTI_COUNT = 34
+const PARKILLER_CONFETTI_COUNT = 46
+
+function confettiShapeStyle(shape: ConfettiShape, size: number): React.CSSProperties {
+  if (shape === 'dot') return { width: size * 0.7, height: size * 0.7, borderRadius: '50%' }
+  if (shape === 'star') return { width: size * 1.6, height: size * 1.6, borderRadius: 0, clipPath: STAR_CLIP_PATH }
+  return { width: size, height: size * 0.42, borderRadius: 2 }
+}
+
+interface ConfettiPiece {
+  // Pre-resolved to plain screen-space px offsets (Confetti.tsx's own approach for its cannon
+  // pieces) rather than a rotate()+translateX() composition - that trick works fine for the
+  // sparks above (radiate-and-shrink, no separate "then fall" phase), but composing it with a
+  // *second*, later downward translate would rotate the fall too, since CSS transforms accumulate
+  // in the coordinate frame each prior function already established. Resolving burstX/burstY (and
+  // landX/landY, burst position plus a purely-vertical fall added on top) in JS keeps the fall
+  // visually vertical regardless of which direction each piece happened to burst toward.
+  burstX: number
+  burstY: number
+  landX: number
+  landY: number
+  delay: number
+  duration: number
+  color: string
+  size: number
+  shape: ConfettiShape
+  rx: number
+  ry: number
+  rz: number
+}
+
+function useConfettiPieces(count: number, seed: number): ConfettiPiece[] {
+  return useMemo(
+    () =>
+      Array.from({ length: count }, () => {
+        const angle = Math.random() * Math.PI * 2
+        const burstDistance = 40 + Math.random() * 90
+        const burstX = Math.cos(angle) * burstDistance
+        const burstY = Math.sin(angle) * burstDistance
+        return {
+          burstX,
+          burstY,
+          landX: burstX + (Math.random() - 0.5) * 30,
+          landY: burstY + 60 + Math.random() * 70, // always further down than the burst point
+          delay: Math.random() * 0.12,
+          duration: 1.0 + Math.random() * 0.5,
+          color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+          size: 6 + Math.random() * 6,
+          shape: CONFETTI_SHAPES[Math.floor(Math.random() * CONFETTI_SHAPES.length)],
+          rx: 360 + Math.random() * 360,
+          ry: 280 + Math.random() * 360,
+          rz: 360 + Math.random() * 360,
+        }
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [seed],
+  )
+}
+
 type BurstReason = 'capture' | 'parkillerCapture' | 'finish' | 'forfeit'
 
 interface Spark {
@@ -84,6 +154,7 @@ const RING_COLOR: Record<BurstReason, string> = { capture: '#ff6a4a', parkillerC
 
 function Burst({ reason, seed }: { reason: BurstReason; seed: number }) {
   const sparks = useSparks(reason, seed)
+  const confetti = useConfettiPieces(reason === 'parkillerCapture' ? PARKILLER_CONFETTI_COUNT : CONFETTI_COUNT, seed)
   const isForfeit = reason === 'forfeit'
   // A Parkiller elimination (PK6/PK7) reuses the plain capture's own star-shaped, orange-glow
   // sparks (isStar below) - the client's "something magical" language for a capture, not a
@@ -127,6 +198,31 @@ function Burst({ reason, seed }: { reason: BurstReason; seed: number }) {
           }
         />
       ))}
+      {!isForfeit &&
+        confetti.map((c, i) => (
+          <span
+            key={`confetti-${i}`}
+            style={
+              {
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                ...confettiShapeStyle(c.shape, c.size),
+                background: c.color,
+                opacity: 0.95,
+                transformStyle: 'preserve-3d',
+                animation: `reward-confetti ${c.duration}s cubic-bezier(0.25, 0.7, 0.4, 1) ${c.delay}s both`,
+                '--burst-x': `${c.burstX}px`,
+                '--burst-y': `${c.burstY}px`,
+                '--land-x': `${c.landX}px`,
+                '--land-y': `${c.landY}px`,
+                '--c-rx': `${c.rx}deg`,
+                '--c-ry': `${c.ry}deg`,
+                '--c-rz': `${c.rz}deg`,
+              } as React.CSSProperties
+            }
+          />
+        ))}
       <style>{`
         @keyframes reward-spark {
           0% { transform: translate(-50%, -50%) rotate(var(--angle)) translateX(0) scale(1); opacity: 1; }
@@ -135,6 +231,22 @@ function Burst({ reason, seed }: { reason: BurstReason; seed: number }) {
         @keyframes reward-shard-fall {
           0% { transform: translate(-50%, -50%) rotate(var(--angle)) translateX(0) rotate(0deg); opacity: 1; }
           100% { transform: translate(-50%, -50%) rotate(var(--angle)) translateX(var(--distance)) rotate(240deg); opacity: 0; }
+        }
+        @keyframes reward-confetti {
+          0% {
+            transform: translate(-50%, -50%) translate(0, 0) rotateX(0) rotateY(0) rotateZ(0);
+            opacity: 1;
+          }
+          45% {
+            transform: translate(-50%, -50%) translate(var(--burst-x), var(--burst-y))
+              rotateX(calc(var(--c-rx) * 0.5)) rotateY(calc(var(--c-ry) * 0.5)) rotateZ(calc(var(--c-rz) * 0.5));
+            opacity: 1;
+          }
+          100% {
+            transform: translate(-50%, -50%) translate(var(--land-x), var(--land-y))
+              rotateX(var(--c-rx)) rotateY(var(--c-ry)) rotateZ(var(--c-rz));
+            opacity: 0;
+          }
         }
         @keyframes reward-ring {
           0% { transform: scale(0.2); opacity: 0.8; border-width: 4px; }
@@ -195,6 +307,8 @@ const burstWrapperStyle: React.CSSProperties = {
   height: 0,
   pointerEvents: 'none',
   zIndex: 4, // just behind RewardToast's own z-index (5), so the sparks read as coming from it
+  perspective: 700, // so the confetti pieces' own rotateX/Y/Z below actually foreshorten in 3D
+  // instead of silently collapsing flat - same reasoning as Confetti.tsx's own wrapper.
 }
 
 const ringStyle: React.CSSProperties = {
