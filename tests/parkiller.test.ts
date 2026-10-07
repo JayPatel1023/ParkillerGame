@@ -204,6 +204,66 @@ describe('TurnManager - Parkiller (PK 1-8)', () => {
     expect(red.pieces[1].trackPosition).toBe(16)
   })
 
+  // PK4's own last bullet, found missing during a systematic rules-vs-code audit and confirmed by
+  // direct repro against this exact engine: a DIFFERENT Parkiller landing on [an opposing
+  // Parkiller + a pawn of that same color] used to eliminate the pre-existing Parkiller outright
+  // (the same resolution this file's own "case 5" comment documents for a *foreign*-color pawn
+  // alongside a Parkiller) - the rulebook instead says the pawn is eliminated and the two
+  // Parkillers form a new barrier together. On a safe square, that new mixed-color pairing is one
+  // this engine can actually leave standing (every other mixed pairing in this file requires the
+  // same); Blue's Parkiller survives, paired with Gold's.
+  it('a different Parkiller landing on an opposing [Parkiller + same-color pawn] pair on a safe square eliminates only the pawn, pairing the two Parkillers', () => {
+    const board = buildTestBoard()
+    const gold = createPlayerState('Gold', board)
+    const blue = createPlayerState('Blue', board)
+    gold.pieces[0].state = 'OnTrack'
+    gold.pieces[0].trackPosition = 15 // safe square
+    gold.parkiller.corridorPosition = gold.parkiller.corridorLength
+    gold.parkiller.trackPosition = 15 // Gold's own pawn+Parkiller barrier (PK4), on a safe square
+
+    blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+    blue.parkiller.trackPosition = 18 // reaches 15 with blackDie=3
+
+    const dice = new ScriptedDice([1, 1, 3])
+    const manager = new TurnManager(board, [blue, gold], defaultRuleSettings(), dice)
+
+    manager.requestRoll()
+
+    expect(gold.pieces[0].state).toBe('InYard')
+    expect(gold.parkiller.state).toBe('InPlay')
+    expect(gold.parkiller.trackPosition).toBe(15)
+    expect(blue.parkiller.state).toBe('InPlay')
+    expect(blue.parkiller.trackPosition).toBe(15)
+  })
+
+  // Same collision, but the pre-existing pairing sits on an UNSAFE square - a same-color pawn+
+  // Parkiller pairing (PK4) needs no safety to exist there, but the *resulting* two-Parkiller
+  // pairing a third Parkiller's arrival would create is a genuine mixed-color barrier, which (like
+  // every other mixed pairing this engine tracks) can't stand unprotected. The pawn still dies
+  // either way; only the pre-existing Parkiller's own fate depends on the square's safety.
+  it('the same collision on an unsafe square eliminates both the pawn and the pre-existing Parkiller', () => {
+    const board = buildTestBoard()
+    const gold = createPlayerState('Gold', board)
+    const blue = createPlayerState('Blue', board)
+    gold.pieces[0].state = 'OnTrack'
+    gold.pieces[0].trackPosition = 16 // not a safe square
+    gold.parkiller.corridorPosition = gold.parkiller.corridorLength
+    gold.parkiller.trackPosition = 16
+
+    blue.parkiller.corridorPosition = blue.parkiller.corridorLength
+    blue.parkiller.trackPosition = 19 // reaches 16 with blackDie=3
+
+    const dice = new ScriptedDice([1, 1, 3])
+    const manager = new TurnManager(board, [blue, gold], defaultRuleSettings(), dice)
+
+    manager.requestRoll()
+
+    expect(gold.pieces[0].state).toBe('InYard')
+    expect(gold.parkiller.state).toBe('Eliminated')
+    expect(blue.parkiller.state).toBe('InPlay')
+    expect(blue.parkiller.trackPosition).toBe(16)
+  })
+
   it('does not capture a pawn sitting on a protected square', () => {
     const board = buildTestBoard()
     const red = createPlayerState('Red', board)

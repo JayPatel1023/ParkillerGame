@@ -596,6 +596,12 @@ export class TurnManager {
         if (piece.state === 'OnTrack' && piece.trackPosition === after) piecesThere.push(piece)
       }
     }
+    // Computed before the pawn-elimination block below, not after, specifically so that block can
+    // tell a genuinely lone pawn apart from one already paired with an opposing Parkiller of its
+    // own color (PK4's own last bullet) - see its own safe-square comment just below.
+    const opposingParkillersThere = this.players.filter(
+      (opponent) => opponent.color !== player.color && isParkillerOnTrack(opponent.parkiller) && opponent.parkiller.trackPosition === after,
+    )
     {
       // PK4/PK5: a protected square only shields a *lone* pawn from the Parkiller - it lands and
       // the two simply form a barrier instead of a capture (PK5's own "except in protected zones,
@@ -620,11 +626,21 @@ export class TurnManager {
       // Parkiller joining its own 2-pawn barrier is exactly BARRIERS-page case 3 with an extra own
       // pawn along for the ride - harmless, no elimination, same as the ordinary lone-pawn case.
       const ownBarrier = piecesThere.length >= 2 && piecesThere.every((p) => p.color === player.color)
+      // PK4's own last bullet, found missing during a systematic rules-vs-code audit: a lone pawn
+      // already paired with an opposing Parkiller of its OWN color (an existing clause-4b barrier)
+      // isn't really "lone" the way a safe square's protection assumes - a third, different
+      // Parkiller landing here always eliminates that pawn, with no protected-square exception any
+      // more than the 2-pawn-barrier case just above gets one. A pawn safe-square-paired with a
+      // *foreign*-color Parkiller (the genuinely undocumented "case 5" the block below still
+      // handles on its own) is unaffected - this only strips protection from the pawn when the
+      // opposing Parkiller sharing its square is that pawn's own color.
+      const pairedWithOwnColorOpposingParkiller =
+        piecesThere.length === 1 && opposingParkillersThere.some((opp) => opp.color === piecesThere[0].color)
       const target = ownBarrier
         ? null
         : piecesThere.length >= 2
           ? resolveBarrierElimination(player.color, piecesThere)
-          : this.board.safeTrackIndices.has(after)
+          : this.board.safeTrackIndices.has(after) && !pairedWithOwnColorOpposingParkiller
             ? null
             : (piecesThere.find((p) => p.color !== player.color) ?? null)
       if (target) {
@@ -654,9 +670,6 @@ export class TurnManager {
     // eliminates it" priority, grants that same PK7 reward, and never needs to weigh the existing
     // pawn's own color against the mover's, which pawn-vs-pawn barrier elimination (above) can do
     // but this file has no equivalent "arrival order" concept for Parkillers to fall back on.
-    const opposingParkillersThere = this.players.filter(
-      (opponent) => opponent.color !== player.color && isParkillerOnTrack(opponent.parkiller) && opponent.parkiller.trackPosition === after,
-    )
 
     let capturedParkillerColor: PieceColor | null = null
     let secondCapturedParkillerColor: PieceColor | null = null
@@ -674,10 +687,29 @@ export class TurnManager {
       opposingParkillersThere[1].parkiller.state = 'Eliminated'
     } else if (opposingParkillersThere.length >= 1) {
       const opponent = opposingParkillersThere[0]
-      const alreadyPairedWithSomethingElse = piecesThere.length >= 1
-      if (alreadyPairedWithSomethingElse || !this.board.safeTrackIndices.has(after)) {
-        opponent.parkiller.state = 'Eliminated'
-        capturedParkillerColor = opponent.color
+      // PK4's own last bullet, found missing during a systematic rules-vs-code audit: a Parkiller
+      // landing on [an opposing Parkiller + a pawn of THAT SAME color] is the one three-way shape
+      // this file's rulebook citation actually documents, unlike the genuinely-undocumented "case
+      // 5" (a *foreign*-color pawn alongside the Parkiller) the comment above this block already
+      // covers - "the pawn is eliminated [already handled by the pawn-elimination block above,
+      // since it's an opposing-to-the-mover color] and the two Parkillers form a new barrier
+      // together." Only on a safe square, though - the two Parkillers "forming a new barrier" are
+      // a genuine *mixed*-color pairing (different colors), which this engine's own invariants
+      // (mirroring every other mixed pairing in this file) never leave standing unprotected; an
+      // unsafe square can't actually hold that pairing, so it falls back to the ordinary single-
+      // elimination resolution instead - the pawn still dies either way, only the Parkiller's own
+      // fate depends on the square. Only reaches this branch at all when the pawn block above
+      // didn't already resolve an *own-barrier* (two-pawn) case - a lone pawn sharing the
+      // pre-existing Parkiller's color is never also part of a two-pawn pairing, so there's no
+      // overlap to worry about.
+      const pairedWithOwnColorPawn = piecesThere.some((p) => p.color === opponent.color)
+      const formsNewSafeBarrier = pairedWithOwnColorPawn && this.board.safeTrackIndices.has(after)
+      if (!formsNewSafeBarrier) {
+        const alreadyPairedWithSomethingElse = piecesThere.length >= 1
+        if (alreadyPairedWithSomethingElse || !this.board.safeTrackIndices.has(after)) {
+          opponent.parkiller.state = 'Eliminated'
+          capturedParkillerColor = opponent.color
+        }
       }
     }
 

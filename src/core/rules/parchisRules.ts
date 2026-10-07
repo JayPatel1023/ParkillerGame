@@ -342,7 +342,22 @@ export function wouldCapture(
   const usesSingleDie = (move.diceSource === 'dieA' || move.diceSource === 'dieB') && !alreadyMovedThisRoll.has(move.piece)
   for (const opponent of allPlayers) {
     if (opponent.color === move.piece.color) continue
-    if (allowParkillerCapture && usesSingleDie && isParkillerOnTrack(opponent.parkiller) && opponent.parkiller.trackPosition === pos)
+    // PK6: "unless the Parkiller is in a protected zone" - a safe square shields the Parkiller
+    // from a pawn's own double-distance kill exactly the way it shields an ordinary pawn (PC2.2),
+    // reported directly, with a worked example, after a systematic rules-vs-code audit found this
+    // check missing entirely: a pawn could eliminate a Parkiller sitting on a safe square, which
+    // the client's own reference implementation (wouldComer()) never allowed. Scoped to TrackMove
+    // only, same as the ordinary-pawn safe-zone check further below (PC2.2's own comment there) -
+    // an ExitYard onto a lone foreign Parkiller sitting right on the mover's own entry square is
+    // the already-established, separately-confirmed exit-square exception (mirrors captureAt's own
+    // bypassSafeZone for a plain pawn there), not a case this new check should touch.
+    if (
+      allowParkillerCapture &&
+      usesSingleDie &&
+      isParkillerOnTrack(opponent.parkiller) &&
+      opponent.parkiller.trackPosition === pos &&
+      (move.kind === 'ExitYard' || !board.safeTrackIndices.has(pos))
+    )
       return true
   }
 
@@ -585,7 +600,7 @@ export function applyMove(
       result.capturedParkillerColor =
         capturedOpposingParkillerColor ??
         (!protectParkillerFromPK6ThisMove && allowParkillerCapture && usesSingleDie
-          ? captureParkillerAt(piece, move.resultingTrackPosition, allPlayers)
+          ? captureParkillerAt(piece, move.resultingTrackPosition, allPlayers, board, move.kind === 'ExitYard')
           : null)
       // PK5: landing on an unprotected opposing Parkiller without eliminating it (PK6, just
       // above) turns the tables instead - the arriving pawn is sent straight back to its own
@@ -658,11 +673,25 @@ function captureAt(
 }
 
 // PK6: landing exactly on an opposing color's Parkiller eliminates it permanently (unlike a
-// regular pawn, it doesn't go back to a yard - it's simply out for the rest of the game). Not
-// restricted by safeTrackIndices - the rulebook only protects a Parkiller's *target* pawn from
-// the Parkiller itself (PK5), not the Parkiller from being caught by a pawn. Callers already gate
-// this on allowParkillerCapture (PK6/PK8) before calling it.
-function captureParkillerAt(mover: Piece, trackPosition: number, allPlayers: readonly PlayerState[]): PieceColor | null {
+// regular pawn, it doesn't go back to a yard - it's simply out for the rest of the game).
+// PK6's own "unless the Parkiller is in a protected zone" exempts a Parkiller sitting on a safe
+// square from this - found missing entirely during a systematic rules-vs-code audit (this
+// function's own doc comment used to claim the opposite, unsupported by any client report and
+// contradicted by the client's own reference implementation's wouldComer()/ingresaFicha() gates).
+// Callers already gate this on allowParkillerCapture (PK6/PK8) before calling it; wouldCapture's
+// own matching check (just above in this file) keeps this capture from ever being offered as
+// mandatory on a safe square either, so this is purely defense in depth for a move submitted
+// anyway. `bypassSafeZone` mirrors captureAt's own param of the same name - true only for an
+// ExitYard landing on the mover's own entry square, the already-established exception where that
+// square's usual protection never applies to the owner's own legitimate exit.
+function captureParkillerAt(
+  mover: Piece,
+  trackPosition: number,
+  allPlayers: readonly PlayerState[],
+  board: BoardData,
+  bypassSafeZone: boolean,
+): PieceColor | null {
+  if (!bypassSafeZone && board.safeTrackIndices.has(trackPosition)) return null
   for (const opponent of allPlayers) {
     if (opponent.color === mover.color) continue
     if (isParkillerOnTrack(opponent.parkiller) && opponent.parkiller.trackPosition === trackPosition) {

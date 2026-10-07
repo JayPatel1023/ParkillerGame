@@ -867,6 +867,33 @@ describe('parchisRules', () => {
       expect(wouldCapture(board, parkillerMove, [attacker, defender], true)).toBe(true)
     })
 
+    // PK6: "the Parkiller eliminates it... unless the Parkiller is in a protected zone" - found
+    // missing during a systematic rules-vs-code audit: a safe square shields the Parkiller from a
+    // pawn's own double-distance kill exactly the way it already shields an ordinary pawn (PC2.2),
+    // but wouldCapture's own Parkiller branch never checked safeTrackIndices at all, so a double
+    // matching the distance to a Parkiller sitting on a safe square was wrongly offered (and
+    // treated as a mandatory capture) just like an unprotected one.
+    it('does not flag a Parkiller capture when the Parkiller sits on a safe square, even during the doubles window', () => {
+      const board = buildTestBoard()
+      const attacker = createPlayerState('Red', board)
+      const defender = createPlayerState('Blue', board)
+      attacker.pieces[0].state = 'OnTrack'
+      attacker.pieces[0].trackPosition = 7
+      defender.parkiller.corridorPosition = defender.parkiller.corridorLength
+      defender.parkiller.trackPosition = 10 // safe square
+
+      const settings = defaultRuleSettings()
+      const parkillerMove = getValidMoves(board, attacker, [attacker, defender], 3, settings, 'dieA').find(
+        (m) => m.piece === attacker.pieces[0],
+      )!
+
+      expect(wouldCapture(board, parkillerMove, [attacker, defender], true)).toBe(false)
+
+      const result = applyMove(board, parkillerMove, [attacker, defender], settings, true, 1, true)
+      expect(result.capturedParkillerColor).toBeNull()
+      expect(defender.parkiller.state).toBe('InPlay')
+    })
+
     it('does not flag a Parkiller capture when the move spends the sum of both dice, even during the doubles window', () => {
       // PK6: "Se mueve con la cifra de un dado el peón que elimina al Parkiller" - only a single
       // die's own face value counts, never the combined sum, even on the double that opens the window.
